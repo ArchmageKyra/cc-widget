@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>CC Monitor</title>
+
+        <!-- Fonts for styled themes — loaded once, applied via --font-ui/--font-num -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@500;700&family=VT323&family=Orbitron:wght@500;700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;600&family=Space+Mono:ital,wght@0,400;0,700&display=swap"
+            rel="stylesheet"
+        />
+
+        <!-- Active theme tokens — populated at runtime by applyTheme() in themes.js -->
+        <style id="theme-vars"></style>
+        <link rel="stylesheet" href="monitor.css" />
+    </head>
+    <body>
+        <div id="app">
+            <!-- ── Setup ─────────────────────────────────────────────────── -->
+            <div id="s-setup" class="screen">
+                <div class="setup-wrap">
+                    <h2>Connect to CoolerControl</h2>
+                    <p class="hint">
+                        Create a token in CC → Settings → Access Protection →
+                        Access Tokens. Config is saved in local storage.
+                    </p>
+                    <div class="field">
+                        <label>Daemon URL</label>
+                        <input
+                            id="i-url"
+                            type="text"
+                            value="http://localhost:11987"
+                        />
+                    </div>
+                    <div class="field">
+                        <label>Bearer Token</label>
+                        <input
+                            id="i-tok"
+                            type="text"
+                            placeholder="cc_…"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                    </div>
+                    <button class="btn btn-p" id="btn-connect">Connect</button>
+                    <button class="btn btn-p" id="btn-reset">
+                        Reset Widget
+                    </button>
+                    <div id="setup-err" class="errmsg hide"></div>
+                </div>
+            </div>
+
+            <!-- ── Picker overlay (absolute within #app) ─────────────────── -->
+            <div id="picker" class="picker-overlay hide">
+                <div class="picker-hdr">
+                    <span class="picker-title" id="picker-title">Assign</span>
+                    <button class="bb" id="picker-close" title="Cancel">
+                        <svg
+                            class="bb-icon"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.75"
+                            stroke-linecap="round"
+                        >
+                            <line x1="2" y1="2" x2="10" y2="10" />
+                            <line x1="10" y1="2" x2="2" y2="10" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="picker-body" id="picker-body"></div>
+            </div>
+
+            <!-- ── Flyout panel (slides up from status bar) ─────────────── -->
+            <div id="flyout">
+                <div class="flyout-handle"></div>
+                <div class="flyout-inner">
+                    <div class="th-sec" style="margin-top: 4px">Size</div>
+                    <div class="size-seg" id="size-btns"></div>
+
+                    <div class="th-sec">Theme</div>
+                    <div class="theme-grid" id="theme-grid"></div>
+
+                    <div class="th-sec">Custom CSS</div>
+                    <div class="theme-custom-area">
+                        <!-- ── Theme Builder ──────────────────────────── -->
+                        <div class="tb-toggle" id="tb-toggle">
+                            <span class="tb-toggle-label">Theme Builder</span>
+                            <span class="tb-toggle-arr">▼</span>
+                        </div>
+                        <div class="tb-body" id="tb-body">
+                            <!-- Accent pill bar -->
+                            <div class="tb-pill-bar">
+                                <div class="tb-pill" id="tbs-cpu">
+                                    <div class="tb-pill-stripe"></div>
+                                    <div class="tb-pill-content">
+                                        <span class="tb-pill-label">CPU</span>
+                                        <span
+                                            class="tb-pill-hex"
+                                            id="tbh-cpu"
+                                        ></span>
+                                    </div>
+                                    <input type="color" data-var="--cpu" />
+                                </div>
+                                <div class="tb-pill" id="tbs-gpu">
+                                    <div class="tb-pill-stripe"></div>
+                                    <div class="tb-pill-content">
+                                        <span class="tb-pill-label">GPU</span>
+                                        <span
+                                            class="tb-pill-hex"
+                                            id="tbh-gpu"
+                                        ></span>
+                                    </div>
+                                    <input type="color" data-var="--gpu" />
+                                </div>
+                                <div class="tb-pill" id="tbs-fan">
+                                    <div class="tb-pill-stripe"></div>
+                                    <div class="tb-pill-content">
+                                        <span class="tb-pill-label">FAN</span>
+                                        <span
+                                            class="tb-pill-hex"
+                                            id="tbh-fan"
+                                        ></span>
+                                    </div>
+                                    <input type="color" data-var="--fan" />
+                                </div>
+                                <div class="tb-pill" id="tbs-ssd">
+                                    <div class="tb-pill-stripe"></div>
+                                    <div class="tb-pill-content">
+                                        <span class="tb-pill-label">SSD</span>
+                                        <span
+                                            class="tb-pill-hex"
+                                            id="tbh-ssd"
+                                        ></span>
+                                    </div>
+                                    <input type="color" data-var="--ssd" />
+                                </div>
+                                <div class="tb-pill" id="tbs-ram">
+                                    <div class="tb-pill-stripe"></div>
+                                    <div class="tb-pill-content">
+                                        <span class="tb-pill-label">RAM</span>
+                                        <span
+                                            class="tb-pill-hex"
+                                            id="tbh-ram"
+                                        ></span>
+                                    </div>
+                                    <input type="color" data-var="--ram" />
+                                </div>
+                                <div class="tb-pill" id="tbs-net">
+                                    <div class="tb-pill-stripe"></div>
+                                    <div class="tb-pill-content">
+                                        <span class="tb-pill-label">NET</span>
+                                        <span
+                                            class="tb-pill-hex"
+                                            id="tbh-net"
+                                        ></span>
+                                    </div>
+                                    <input type="color" data-var="--net" />
+                                </div>
+                            </div>
+
+                            <!-- Background & Chrome -->
+                            <div class="tb-section">
+                                <div class="tb-sec-hdr">
+                                    Background &amp; Chrome
+                                </div>
+                                <div class="tb-row">
+                                    <div class="tb-swatch" id="tbs-bg">
+                                        <input type="color" data-var="--bg" />
+                                    </div>
+                                    <span class="tb-lbl">Background</span>
+                                    <span class="tb-hex" id="tbh-bg"></span>
+                                </div>
+                                <div class="tb-row">
+                                    <div class="tb-swatch" id="tbs-txt">
+                                        <input type="color" data-var="--txt" />
+                                    </div>
+                                    <span class="tb-lbl">Primary text</span>
+                                    <span class="tb-hex" id="tbh-txt"></span>
+                                </div>
+                                <div class="tb-row">
+                                    <div class="tb-swatch" id="tbs-txt-dim">
+                                        <input
+                                            type="color"
+                                            data-var="--txt-dim"
+                                        />
+                                    </div>
+                                    <span class="tb-lbl">Secondary text</span>
+                                    <span
+                                        class="tb-hex"
+                                        id="tbh-txt-dim"
+                                    ></span>
+                                </div>
+                                <div class="tb-row">
+                                    <div class="tb-swatch" id="tbs-hot">
+                                        <input type="color" data-var="--hot" />
+                                    </div>
+                                    <span class="tb-lbl">Danger / error</span>
+                                    <span class="tb-hex" id="tbh-hot"></span>
+                                </div>
+                                <div class="tb-radius-row">
+                                    <span class="tb-lbl">Corner radius</span>
+                                    <input
+                                        class="tb-radius-slider"
+                                        id="tb-radius"
+                                        type="range"
+                                        min="0"
+                                        max="18"
+                                        step="1"
+                                    />
+                                    <span
+                                        class="tb-radius-val"
+                                        id="tb-radius-val"
+                                        >10px</span
+                                    >
+                                </div>
+                            </div>
+
+                            <!-- Warning Ramp -->
+                            <div class="tb-section">
+                                <div class="tb-sec-hdr">
+                                    Warning Ramp (cool → critical)
+                                </div>
+                                <div class="tb-warn-row">
+                                    <div class="tb-warn-pips">
+                                        <div class="tb-warn-pip" id="tbs-w1">
+                                            <input
+                                                type="color"
+                                                data-var="--w1"
+                                            />
+                                        </div>
+                                        <div class="tb-warn-pip" id="tbs-w2">
+                                            <input
+                                                type="color"
+                                                data-var="--w2"
+                                            />
+                                        </div>
+                                        <div class="tb-warn-pip" id="tbs-w3">
+                                            <input
+                                                type="color"
+                                                data-var="--w3"
+                                            />
+                                        </div>
+                                        <div class="tb-warn-pip" id="tbs-w4">
+                                            <input
+                                                type="color"
+                                                data-var="--w4"
+                                            />
+                                        </div>
+                                        <div class="tb-warn-pip" id="tbs-w5">
+                                            <input
+                                                type="color"
+                                                data-var="--w5"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="tb-warn-gradient-wrap">
+                                    <div
+                                        class="tb-warn-gradient"
+                                        id="tb-warn-gradient"
+                                    ></div>
+                                </div>
+                            </div>
+
+                            <!-- Generate -->
+                            <div
+                                class="tb-section"
+                                style="padding-top: 6px; padding-bottom: 7px"
+                            >
+                                <button
+                                    class="btn-apply-custom"
+                                    id="tb-generate"
+                                    style="
+                                        border-radius: var(--rs);
+                                        border: 1px solid var(--bdr);
+                                    "
+                                >
+                                    → Generate CSS
+                                </button>
+                            </div>
+                        </div>
+
+                        <textarea
+                            id="custom-css"
+                            placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
+                        ></textarea>
+                        <button class="btn-apply-custom" id="btn-theme-apply">
+                            Apply
+                        </button>
+                    </div>
+
+                    <div class="th-sec">Connection</div>
+                    <div class="theme-conn" id="theme-conn-sec">
+                        <div class="field">
+                            <label>Daemon URL</label>
+                            <input id="tc-url" type="text" />
+                        </div>
+                        <div class="field">
+                            <label>Bearer Token</label>
+                            <input
+                                id="tc-tok"
+                                type="text"
+                                autocomplete="off"
+                                spellcheck="false"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Dashboard ─────────────────────────────────────────────── -->
+            <div id="s-dash" class="screen hide">
+                <div class="cards" id="cards"></div>
+            </div>
+
+            <div id="sbar">
+                <!-- Left: status + uptime — also serves as drag handle -->
+                <span class="sdot" id="sdot"></span>
+                <span id="stxt">—</span>
+                <span id="sbar-uptime" class="sbar-uptime"></span>
+                <!-- Right: controls -->
+                <div class="sbar-btns">
+                    <button class="bb" id="bb-pin" title="Always on top">
+                        <svg
+                            class="bb-icon"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                        >
+                            <circle cx="6" cy="4" r="2.5" />
+                            <line x1="6" y1="6.5" x2="6" y2="11" />
+                        </svg>
+                    </button>
+                    <button class="bb" id="bb-theme" title="Appearance">
+                        <svg
+                            class="bb-icon"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.4"
+                            stroke-linecap="round"
+                        >
+                            <line x1="1" y1="3" x2="11" y2="3" />
+                            <line x1="1" y1="6.5" x2="11" y2="6.5" />
+                            <line x1="1" y1="10" x2="11" y2="10" />
+                            <circle
+                                cx="3.5"
+                                cy="3"
+                                r="1.5"
+                                fill="currentColor"
+                                stroke="none"
+                            />
+                            <circle
+                                cx="8"
+                                cy="6.5"
+                                r="1.5"
+                                fill="currentColor"
+                                stroke="none"
+                            />
+                            <circle
+                                cx="5"
+                                cy="10"
+                                r="1.5"
+                                fill="currentColor"
+                                stroke="none"
+                            />
+                        </svg>
+                    </button>
+                    <button class="bb" id="bb-cfg" title="Edit sensor layout">
+                        <svg
+                            class="bb-icon"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <path d="M9 1.5l1.5 1.5-7 7L1 11l1-2.5 7-7z" />
+                            <line x1="8" y1="2.5" x2="9.5" y2="4" />
+                        </svg>
+                    </button>
+                    <button class="bb" id="bb-min" title="Minimize">
+                        <svg
+                            class="bb-icon"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.75"
+                            stroke-linecap="round"
+                        >
+                            <line x1="2" y1="6" x2="10" y2="6" />
+                        </svg>
+                    </button>
+                    <button class="bb danger" id="bb-x" title="Close">
+                        <svg
+                            class="bb-icon"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.75"
+                            stroke-linecap="round"
+                        >
+                            <line x1="2" y1="2" x2="10" y2="10" />
+                            <line x1="10" y1="2" x2="2" y2="10" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+        <!-- #app -->
+        <script src="themes.js"></script>
+        <script src="monitor.js"></script>
+    </body>
+</html>
