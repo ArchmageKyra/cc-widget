@@ -189,6 +189,90 @@ const THEMES = {
 }`,
   },
 
+  /* ── Solarized Dark ───────────────────────────────────────────────
+     Academic, low-contrast precision. Calm, deliberate readability.
+     Nothing shouts; everything is measured.                          */
+  "solarized-dark": {
+    name: "Solarized Dark",
+    swatches: ["#002b36", "#268bd2", "#2aa198", "#b58900", "#93a1a1"],
+    css: `:root{
+    --bg:#002b36;
+    --txt:#eee8d5;
+    --txt-dim:#93a1a1;
+    --txt-muted:#586e75;
+    --hot:#dc322f;
+
+    --bdr:rgba(147,161,161,.10);
+    --bhi:rgba(147,161,161,.18);
+
+    --r:8px; --rs:5px;
+
+    --cpu:#268bd2;
+    --gpu:#2aa198;
+    --fan:#b58900;
+    --ssd:#6c71c4;
+    --ram:#93a1a1;
+    --net:#859900;
+
+    --w1:#859900;
+    --w2:#2aa198;
+    --w3:#b58900;
+    --w4:#cb4b16;
+    --w5:#dc322f;
+
+    --meter:rgba(38,139,210,.45);
+    --dot-off-warn:rgba(147,161,161,.12);
+    --dot-off-meter:rgba(147,161,161,.08);
+    --spark-grid:rgba(147,161,161,.07);
+    --spark-vtick:rgba(147,161,161,.04);
+
+    --font-ui:"Inter",system-ui,sans-serif;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Dracula ───────────────────────────────────────────────────────
+     Neon night syntax. High contrast, high clarity, no ambiguity.
+     Feels like code glowing in a dark room.                          */
+  dracula: {
+    name: "Dracula",
+    swatches: ["#282a36", "#bd93f9", "#50fa7b", "#ffb86c", "#8be9fd"],
+    css: `:root{
+    --bg:#282a36;
+    --txt:#f8f8f2;
+    --txt-dim:#b6b6c1;
+    --txt-muted:#44475a;
+    --hot:#ff5555;
+
+    --bdr:rgba(248,248,242,.09);
+    --bhi:rgba(248,248,242,.18);
+
+    --r:8px; --rs:5px;
+
+    --cpu:#bd93f9;
+    --gpu:#50fa7b;
+    --fan:#ffb86c;
+    --ssd:#8be9fd;
+    --ram:#f8f8f2;
+    --net:#ff79c6;
+
+    --w1:#50fa7b;
+    --w2:#8be9fd;
+    --w3:#bd93f9;
+    --w4:#ffb86c;
+    --w5:#ff5555;
+
+    --meter:rgba(189,147,249,.55);
+    --dot-off-warn:rgba(248,248,242,.12);
+    --dot-off-meter:rgba(248,248,242,.08);
+    --spark-grid:rgba(248,248,242,.06);
+    --spark-vtick:rgba(248,248,242,.03);
+
+    --font-ui:"Inter",system-ui,sans-serif;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
+  }`,
+  },
   /* ── 5. Wandering Waters ───────────────────────────────────────────────
        Dawn light on a dark river. Organic, unhurried.
        Space Grotesk for UI gives it warmth without going precious.           */
@@ -467,6 +551,175 @@ const THEMES = {
   --font-num:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
   --font-code:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
 }`,
+  },
+  /* ── Matrix Terminal ───────────────────────────────────────────────
+     Monochrome phosphor display. Single-channel intensity logic.
+     Feels like talking directly to the machine.                      */
+  "mono-matrix": {
+    name: "Mono Matrix",
+    swatches: ["#050805", "#00ff66", "#00cc55", "#009944", "#66ff99"],
+    css: `:root{
+    --bg:#050805;
+    --txt:#b6ffcc;
+    --txt-dim:#5bbf7a;
+    --txt-muted:#1a3322;
+    --hot:#ff3b3b;
+
+    --bdr:rgba(0,255,102,.10);
+    --bhi:rgba(0,255,102,.20);
+
+    --r:2px; --rs:1px;
+
+    --cpu:#00ff66;
+    --gpu:#66ff99;
+    --fan:#00cc55;
+    --ssd:#99ffcc;
+    --ram:#33ff88;
+    --net:#00dd77;
+
+    --w1:#00ff66;
+    --w2:#00cc55;
+    --w3:#009944;
+    --w4:#66ff99;
+    --w5:#b6ffcc;
+
+    --meter:rgba(0,255,102,.40);
+    --dot-off-warn:rgba(0,255,102,.10);
+    --dot-off-meter:rgba(0,255,102,.06);
+    --spark-grid:rgba(0,255,102,.05);
+    --spark-vtick:rgba(0,255,102,.03);
+
+    --font-ui:"VT323",monospace;
+    --font-num:"VT323",monospace;
+    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Blueprint ─────────────────────────────────────────────────────
+     Engineering drawing aesthetic. Structured, annotated, precise.
+     Feels like instrumentation rather than UI.                      */
+  blueprint: {
+    name: "Bold Blueprint",
+    swatches: ["#0b1f3a", "#71c9ff", "#b3e5ff", "#ffe08a", "#e7f5ff"],
+    css: `:root{
+    --bg:#0b1f3a;
+    --txt:#e7f5ff;
+    --txt-dim:#9bb3c7;
+    --txt-muted:#2a3f57;
+    --hot:#ff6b6b;
+
+    --bdr:rgba(113,201,255,.12);
+    --bhi:rgba(113,201,255,.22);
+
+    --r:3px; --rs:2px;
+
+    --cpu:#71c9ff;
+    --gpu:#b3e5ff;
+    --fan:#ffe08a;
+    --ssd:#8fd3ff;
+    --ram:#cfe9ff;
+    --net:#a3d5ff;
+
+    --w1:#71c9ff;
+    --w2:#8fd3ff;
+    --w3:#b3e5ff;
+    --w4:#ffe08a;
+    --w5:#ff6b6b;
+
+    --meter:rgba(113,201,255,.50);
+    --dot-off-warn:rgba(231,245,255,.10);
+    --dot-off-meter:rgba(231,245,255,.06);
+    --spark-grid:rgba(113,201,255,.10);
+    --spark-vtick:rgba(113,201,255,.05);
+
+    --font-ui:"IBM Plex Mono",ui-monospace,monospace;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Midnight Emerald ──────────────────────────────────────────────
+     Quiet luxury. Dark glass, brass glow, controlled saturation.
+     Feels like a precision instrument in a museum.                   */
+  "midnight-malachite": {
+    name: "Midnight Malachite",
+    swatches: ["#07140f", "#2dd4bf", "#6ee7b7", "#d4af37", "#e5e7eb"],
+    css: `:root{
+    --bg:#07140f;
+    --txt:#e5e7eb;
+    --txt-dim:#9aa7a1;
+    --txt-muted:#1f2d28;
+    --hot:#fb7185;
+
+    --bdr:rgba(45,212,191,.10);
+    --bhi:rgba(45,212,191,.20);
+
+    --r:10px; --rs:6px;
+
+    --cpu:#2dd4bf;
+    --gpu:#6ee7b7;
+    --fan:#d4af37;
+    --ssd:#94a3b8;
+    --ram:#a7f3d0;
+    --net:#5eead4;
+
+    --w1:#2dd4bf;
+    --w2:#6ee7b7;
+    --w3:#d4af37;
+    --w4:#94a3b8;
+    --w5:#fb7185;
+
+    --meter:rgba(45,212,191,.45);
+    --dot-off-warn:rgba(229,231,235,.10);
+    --dot-off-meter:rgba(229,231,235,.06);
+    --spark-grid:rgba(45,212,191,.06);
+    --spark-vtick:rgba(45,212,191,.03);
+
+    --font-ui:"Space Grotesk",system-ui,sans-serif;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Industrial Amber Core ─────────────────────────────────────────
+     Analog control room instrumentation. CRT amber phosphor,
+     warning bias, and heavy utilitarian contrast.
+     Feels like a reactor panel that refuses to go dim.               */
+  "atomic-amber": {
+    name: "Atomic Amber",
+    swatches: ["#120b05", "#ffb000", "#ff7a18", "#ffd36a", "#3a2a1a"],
+    css: `:root{
+    --bg:#120b05;
+    --txt:#ffe6b3;
+    --txt-dim:#c7a36a;
+    --txt-muted:#3b2a16;
+    --hot:#ff3b30;
+
+    --bdr:rgba(255,176,0,.12);
+    --bhi:rgba(255,176,0,.22);
+
+    --r:4px; --rs:2px;
+
+    --cpu:#ffb000;
+    --gpu:#ff7a18;
+    --fan:#ffd36a;
+    --ssd:#ff9a3d;
+    --ram:#ffcf7a;
+    --net:#e6a04a;
+
+    --w1:#ffcf7a;
+    --w2:#ffd36a;
+    --w3:#ffb000;
+    --w4:#ff7a18;
+    --w5:#ff3b30;
+
+    --meter:rgba(255,176,0,.55);
+    --dot-off-warn:rgba(255,176,0,.12);
+    --dot-off-meter:rgba(255,176,0,.08);
+    --spark-grid:rgba(255,176,0,.06);
+    --spark-vtick:rgba(255,176,0,.03);
+
+    --font-ui:"IBM Plex Mono",ui-monospace,monospace;
+    --font-num:"Share Tech Mono",ui-monospace,monospace;
+    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  }`,
   },
 };
 

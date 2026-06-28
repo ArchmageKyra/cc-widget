@@ -192,29 +192,16 @@ const SLOTS = [
     cls: "fan",
     unit: "°C",
   },
-  {
-    id: "case_fan",
-    lbl: "Case Fan",
-    cls: "fan",
-    unit: "RPM",
-  },
-  {
-    id: "case_boardfan",
-    lbl: "Mobo Fan",
-    cls: "fan",
-    unit: "RPM",
-  },
 ];
 
 const WARN_T = {
-  cpu_temp: [40, 55, 70, 80, 90],
+  cpu_temp: [35, 55, 72, 82, 92],
   cpu_load: [0, 25, 50, 75, 100],
-  gpu_temp: [45, 60, 75, 85, 92],
+  gpu_temp: [35, 55, 72, 82, 92],
   gpu_load: [0, 25, 50, 75, 100],
-  ram_temp: [35, 45, 52, 58, 65],
-  ram_load: [0, 25, 50, 75, 100],
-  ssd_temp: [30, 38, 45, 52, 60],
-  case_temp: [28, 34, 40, 46, 52],
+  ram_temp: [30, 42, 50, 58, 65],
+  ssd_temp: [25, 40, 55, 65, 75],
+  case_temp: [20, 32, 38, 45, 55],
 };
 
 function warnLevel(slotId, val) {
@@ -1420,18 +1407,6 @@ const CARD_DEFS = [
         mode: "warn",
         typeFilter: ["temp"],
       },
-      {
-        sid: "case_fan",
-        lbl: "CASE FAN",
-        mode: "meter",
-        typeFilter: ["rpm"],
-      },
-      {
-        sid: "case_boardfan",
-        lbl: "SSD FAN",
-        mode: "meter",
-        typeFilter: ["rpm"],
-      },
     ],
     caseFans: true,
   },
@@ -2356,9 +2331,6 @@ class MultiSpark {
     cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
     cfg.theme === "custom" ? cfg.customThemeCSS : null,
   );
-  document.getElementById("bar-title").textContent =
-    `⬡ ${cfg.systemName || "CC Monitor"}`;
-
   if (cfg.token) {
     phase = "connecting";
     setStatus("spin", "Connecting…");
