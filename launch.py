@@ -69,8 +69,12 @@ manager = WebKit2.UserContentManager()
 win = None
 webview = None
 
+# Paths the user has explicitly requested to watch (sent via "watch:" messages)
+_watched_paths = []
+
 
 def on_message(mgr, result):
+    global _watched_paths
     try:
         msg = result.get_js_value().to_string()
     except Exception as e:
@@ -101,6 +105,17 @@ def on_message(mgr, result):
             GLib.idle_add(lambda w=w, h=h: win.resize(w, h) or False)
         except Exception as e:
             print("Resize error:", e)
+    elif msg.startswith("watch:"):
+        # JS sends the full watchedPaths array whenever it changes
+        try:
+            _watched_paths = json.loads(msg[6:])
+        except Exception as e:
+            print("Watch parse error:", e)
+    elif msg.startswith("dragstart"):
+        try:
+            win.begin_move_drag(1, *win.get_pointer()[1:3], Gtk.get_current_event_time())
+        except Exception:
+            pass
 
 
 manager.connect("script-message-received::ccm", on_message)
@@ -149,7 +164,7 @@ def push_stats():
         cpu_freq = psutil.cpu_freq()
         net = get_net_rates()
 
-        # Real disk partitions only
+        # Real disk partitions only (auto-discovered)
         disks = {}
         for part in psutil.disk_partitions(all=False):
             if not part.fstype or part.fstype in SKIP_FS:
@@ -160,6 +175,22 @@ def push_stats():
                 u = psutil.disk_usage(part.mountpoint)
                 disks[part.mountpoint] = {
                     "device": part.device,
+                    "percent": round(u.percent, 1),
+                    "used_gb": round(u.used / 1024**3, 1),
+                    "free_gb": round(u.free / 1024**3, 1),
+                    "total_gb": round(u.total / 1024**3, 1),
+                }
+            except (PermissionError, OSError):
+                pass
+
+        # Explicitly watched paths (user-pinned via UI)
+        for wp in _watched_paths:
+            if wp in disks:
+                continue  # already covered by auto-discovery
+            try:
+                u = psutil.disk_usage(wp)
+                disks[wp] = {
+                    "device": wp,
                     "percent": round(u.percent, 1),
                     "used_gb": round(u.used / 1024**3, 1),
                     "free_gb": round(u.free / 1024**3, 1),

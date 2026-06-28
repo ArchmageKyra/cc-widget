@@ -447,7 +447,7 @@ const THEMES = {
 }`,
   },
 
-  /* ── 9. Tokyo Twilight ─────────────────────────────────────────────────
+  /* ── 9. Tokyo Twilight ────────────────────────────────────────────────
        Neon noir. Rain-slicked streets, glowing kanji, vending machine glow.
        Rajdhani for UI reads like sharp signage. Space Mono for nums
        has the right matrix-terminal energy.                                  */
@@ -552,7 +552,7 @@ const THEMES = {
   --font-code:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
 }`,
   },
-  /* ── Matrix Terminal ───────────────────────────────────────────────
+  /* ── 11. Matrix Terminal ───────────────────────────────────────────────
      Monochrome phosphor display. Single-channel intensity logic.
      Feels like talking directly to the machine.                      */
   "mono-matrix": {
@@ -594,7 +594,7 @@ const THEMES = {
     --font-code:"IBM Plex Mono",ui-monospace,monospace;
   }`,
   },
-  /* ── Blueprint ─────────────────────────────────────────────────────
+  /* ── 12. Blueprint ─────────────────────────────────────────────────────
      Engineering drawing aesthetic. Structured, annotated, precise.
      Feels like instrumentation rather than UI.                      */
   blueprint: {
@@ -636,7 +636,7 @@ const THEMES = {
     --font-code:"IBM Plex Mono",ui-monospace,monospace;
   }`,
   },
-  /* ── Midnight Emerald ──────────────────────────────────────────────
+  /* ── 13. Midnight Emerald ──────────────────────────────────────────────
      Quiet luxury. Dark glass, brass glow, controlled saturation.
      Feels like a precision instrument in a museum.                   */
   "midnight-malachite": {
@@ -678,7 +678,7 @@ const THEMES = {
     --font-code:"IBM Plex Mono",ui-monospace,monospace;
   }`,
   },
-  /* ── Industrial Amber Core ─────────────────────────────────────────
+  /* ── 14. Industrial Amber Core ─────────────────────────────────────────
      Analog control room instrumentation. CRT amber phosphor,
      warning bias, and heavy utilitarian contrast.
      Feels like a reactor panel that refuses to go dim.               */
@@ -723,13 +723,27 @@ const THEMES = {
   },
 };
 
+// Track which CSS custom properties were last set by applyTheme so we can
+// cleanly remove them before applying the next theme (prevents cross-theme
+// leakage — e.g. Misty Metal sets --bg-card/--bg-bar overrides that must not
+// bleed into the next theme if it doesn't define them).
+let _lastThemeVars = [];
+
 function applyTheme(key, customCSS = null) {
   const css = customCSS ?? THEMES[key]?.css ?? THEMES["deep-space"].css;
   const root = document.documentElement;
+
+  // Remove vars from the previous theme before applying the new one
+  _lastThemeVars.forEach((v) => root.style.removeProperty(v));
+  _lastThemeVars = [];
+
   const matches = [...css.matchAll(/(--[\w-]+)\s*:\s*([^;}\n]+)/g)];
   for (const [, name, val] of matches) {
-    root.style.setProperty(name.trim(), val.trim());
+    const n = name.trim();
+    root.style.setProperty(n, val.trim());
+    _lastThemeVars.push(n);
   }
+
   // Keep the <style> tag in sync for devtools / copy
   document.getElementById("theme-vars").textContent = css;
   cfg.theme = key;

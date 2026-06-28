@@ -74,7 +74,7 @@
     --sz-unit: 10px;
     --sz-hdr: 12px;
     --sz-meta: 11px;
-    --sz-pct: 13px;
+    --sz-pct: 16px;
     --sz-dot: 8px;
     --sz-track: 7px;
     --pad-card: 10px;
@@ -150,21 +150,19 @@ body {
 }
 
 /* ── Flyout panel ───────────────────────────────────────────── */
-/* bottom:28px docks the panel directly above the sbar (instead of
-               behind it) so its scrollbar track never renders under the
-               sbar's translucent background. The closed-state transform adds
-               that same 28px so it still clears the window fully when hidden,
-               clipped by #app's overflow:hidden.                          */
+/* bottom:0 so translateY(100%) hides it cleanly behind overflow:hidden.
+               Sbar renders on top via z-index. Flyout inner gets padding-bottom
+               so content never hides behind the sbar.                          */
 #flyout {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 28px;
-    max-height: calc(100% - 28px - 4px);
+    bottom: 0;
+    max-height: calc(100% - 4px);
     background: var(--bg);
     border-top: 1px solid var(--bdr);
     z-index: 5;
-    transform: translateY(calc(100% + 28px + 1px));
+    transform: translateY(calc(100% + 1px));
     transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
@@ -183,7 +181,7 @@ body {
 .flyout-inner {
     flex: 1;
     overflow-y: auto;
-    padding: 2px 12px 12px;
+    padding: 2px 12px 40px; /* extra bottom pad clears sbar */
 }
 .flyout-inner::-webkit-scrollbar {
     width: 3px;
@@ -472,6 +470,11 @@ h2 {
     color: var(--cpu);
     border-color: var(--bdr-accent);
 }
+.style-tog {
+    min-width: 20px;
+    text-align: center;
+    letter-spacing: 0.5px;
+}
 .slot-clr {
     background: none;
     border: none;
@@ -630,7 +633,6 @@ h2 {
     background: var(--bg-active);
     color: var(--txt);
 }
-/* .theme-foot removed — flyout closed via toggle button */
 
 /* ── Theme Builder ─────────────────────────────────────────── */
 .tb-toggle {
@@ -872,117 +874,6 @@ h2 {
     transition: background 0.25s;
 }
 
-/* ── Contrast audit ────────────────────────────────────────── */
-.tb-audit {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-}
-.tb-audit-row {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-}
-.tb-audit-pair {
-    display: flex;
-    align-items: center;
-    gap: 3px;
-    flex-shrink: 0;
-}
-.tb-audit-swatch {
-    width: 14px;
-    height: 14px;
-    border-radius: 3px;
-    border: 1px solid var(--bhi);
-}
-.tb-audit-on {
-    font-size: 8px;
-    color: var(--txt-dim);
-}
-.tb-audit-lbl {
-    font-size: 10px;
-    color: var(--txt-dim);
-    flex: 1;
-}
-.tb-audit-ratio {
-    font-family: var(--font-code);
-    font-size: 10.5px;
-    font-weight: 600;
-    color: var(--txt);
-    min-width: 36px;
-    text-align: right;
-}
-.tb-audit-badge {
-    font-size: 9px;
-    font-weight: 700;
-    padding: 1px 5px;
-    border-radius: 3px;
-    min-width: 36px;
-    text-align: center;
-    letter-spacing: 0.04em;
-}
-/* Audit badge colours are semantic/fixed — intentionally not themed */
-.tb-audit-badge.aaa {
-    background: rgba(74, 222, 128, 0.18);
-    color: #4ade80;
-}
-.tb-audit-badge.aa {
-    background: rgba(96, 165, 250, 0.18);
-    color: #60a5fa;
-}
-.tb-audit-badge.aa-l {
-    background: rgba(251, 191, 36, 0.18);
-    color: #fbbf24;
-}
-.tb-audit-badge.fail {
-    background: rgba(248, 113, 113, 0.18);
-    color: #f87171;
-}
-.tb-score-bar {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    margin-top: 3px;
-    padding-top: 6px;
-    border-top: 1px solid var(--bdr);
-}
-.tb-score-label {
-    font-size: 9.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--txt-dim);
-    flex: 1;
-}
-.tb-score-pill {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 10px;
-    letter-spacing: 0.05em;
-}
-/* Score pill colours are semantic/fixed */
-.tb-score-pill.great {
-    background: rgba(74, 222, 128, 0.2);
-    color: #4ade80;
-    border: 1px solid rgba(74, 222, 128, 0.3);
-}
-.tb-score-pill.good {
-    background: rgba(96, 165, 250, 0.2);
-    color: #60a5fa;
-    border: 1px solid rgba(96, 165, 250, 0.3);
-}
-.tb-score-pill.warn {
-    background: rgba(251, 191, 36, 0.2);
-    color: #fbbf24;
-    border: 1px solid rgba(251, 191, 36, 0.3);
-}
-.tb-score-pill.poor {
-    background: rgba(248, 113, 113, 0.2);
-    color: #f87171;
-    border: 1px solid rgba(248, 113, 113, 0.3);
-}
-
 /* ── Watch-path input ──────────────────────────────────────── */
 .watch-path-row {
     display: flex;
@@ -1174,12 +1065,10 @@ h2 {
     border-radius: 50%;
     transition: background 0.4s;
 }
-.bar-row {
-}
 .br-sub {
     font-family: var(--font-num);
     font-size: var(--sz-unit);
-    color: var(--txt-dim);
+    color: var(--txt-muted);
     white-space: nowrap;
     flex-shrink: 0;
 }
@@ -1248,7 +1137,7 @@ h2 {
 .sbar-uptime {
     font-family: var(--font-num);
     font-size: 10px;
-    color: var(--txt-dim);
+    color: var(--txt-muted);
     letter-spacing: 0.02em;
 }
 .sbar-btns {

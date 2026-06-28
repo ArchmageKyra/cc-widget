@@ -21,7 +21,7 @@ const SIZES = {
       "--sz-unit": "10px",
       "--sz-hdr": "12px",
       "--sz-meta": "11px",
-      "--sz-pct": "13px",
+      "--sz-pct": "16px",
       "--sz-dot": "8px",
       "--sz-track": "7px",
       "--pad-card": "10px",
@@ -42,7 +42,7 @@ const SIZES = {
       "--sz-unit": "11px",
       "--sz-hdr": "13.5px",
       "--sz-meta": "12px",
-      "--sz-pct": "15px",
+      "--sz-pct": "19px",
       "--sz-dot": "9px",
       "--sz-track": "8px",
       "--pad-card": "12px",
@@ -63,7 +63,7 @@ const SIZES = {
       "--sz-unit": "12px",
       "--sz-hdr": "15px",
       "--sz-meta": "13px",
-      "--sz-pct": "17px",
+      "--sz-pct": "22px",
       "--sz-dot": "10px",
       "--sz-track": "9px",
       "--pad-card": "14px",
@@ -202,6 +202,8 @@ const WARN_T = {
   ram_temp: [30, 42, 50, 58, 65],
   ssd_temp: [25, 40, 55, 65, 75],
   case_temp: [20, 32, 38, 45, 55],
+  lnx_ram_pct: [0, 25, 50, 75, 100],
+  lnx_swap_pct: [0, 25, 50, 75, 100],
 };
 
 function warnLevel(slotId, val) {
@@ -239,6 +241,7 @@ let cfg = {
   fanLabels: {},
   watchedPaths: [],
   pathLabels: {},
+  rowStyles: {},
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -283,6 +286,51 @@ function loadCfg() {
 }
 function saveCfg() {
   localStorage.setItem("ccm", JSON.stringify(cfg));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ROW STYLE — user-selectable display per row
+//  Options:  "bar"        — fill bar + percentage
+//            "dots-warn"  — colour dot ramp (green → red)
+//            "dots-meter" — muted dot ramp (neutral intensity)
+//  Rows with pctSid can use all three; others only the two dot modes.
+// ═══════════════════════════════════════════════════════════════
+function getRowStyle(row) {
+  const saved = cfg.rowStyles?.[row.sid];
+  if (saved && (saved !== "bar" || row.pctSid)) return saved;
+  if (row.pctSid) return "bar";
+  if (row.mode === "meter") return "dots-meter";
+  return "dots-warn";
+}
+
+function cycleRowStyle(row) {
+  const options = row.pctSid
+    ? ["bar", "dots-warn", "dots-meter"]
+    : ["dots-warn", "dots-meter"];
+  const current = getRowStyle(row);
+  const next = options[(options.indexOf(current) + 1) % options.length];
+  cfg.rowStyles ??= {};
+  cfg.rowStyles[row.sid] = next;
+  saveCfg();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+}
+
+// Appends a style-cycle button to a row element when in edit mode.
+// Call this before any assign/remap badge so the order reads naturally.
+const _STYLE_LABELS = { bar: "▬", "dots-warn": "●●", "dots-meter": "○○" };
+function _styleToggle(elem, row) {
+  if (!editMode) return;
+  if (!row.pctSid && !row.mode) return; // no meaningful options
+  const btn = el("button", "assign-badge style-tog");
+  btn.textContent = _STYLE_LABELS[getRowStyle(row)] ?? "?";
+  btn.title = "Toggle display style";
+  btn.onclick = (e) => {
+    e.stopPropagation();
+    cycleRowStyle(row);
+  };
+  elem.appendChild(btn);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -362,6 +410,7 @@ function gtksend(msg) {
 }
 
 document.getElementById("bb-x").onclick = () => gtksend("close");
+document.getElementById("bb-min").onclick = () => gtksend("minimize"); // FIX: was missing
 document.getElementById("bb-pin").onclick = () => {
   pinned = !pinned;
   gtksend(pinned ? "pin" : "unpin");
@@ -375,9 +424,15 @@ _bbTheme.onclick = () => {
   const opening = !_flyout.classList.contains("open");
   _flyout.classList.toggle("open", opening);
   _bbTheme.classList.toggle("on", opening);
-  if (opening && !_themeScreenInited) {
-    initThemeScreen();
-    _themeScreenInited = true;
+  if (opening) {
+    if (!_themeScreenInited) {
+      initThemeScreen();
+      _themeScreenInited = true;
+    } else {
+      // Refresh connection fields in case config changed since last open
+      document.getElementById("tc-url").value = cfg.baseUrl;
+      document.getElementById("tc-tok").value = cfg.token;
+    }
   }
 };
 // Click-outside closes flyout
@@ -1298,6 +1353,7 @@ const CARD_DEFS = [
         mode: "warn",
         sparkKey: "load",
         autoLinux: true,
+        pctSid: "cpu_load", // bar row — % of capacity, no used/total pair
       },
       {
         sid: "cpu_fan",
@@ -1327,6 +1383,7 @@ const CARD_DEFS = [
         mode: "warn",
         sparkKey: "load",
         typeFilter: ["duty"],
+        pctSid: "gpu_load", // bar row — % of capacity, no used/total pair
       },
       {
         sid: "gpu_fan",
@@ -1433,7 +1490,7 @@ function _buildSrRow(row, accentColor, dashStyle = "solid") {
 <span class="sr-lbl">${row.lbl}</span>
 <span class="sr-val" id="sv-${row.sid}">--</span>
 <span class="sr-unit">${sd?.unit ?? ""}</span>
-${row.mode ? `<span id="sd-${row.sid}">${makeDots(0, row.mode)}</span>` : ""}`;
+${row.mode ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
   return srow;
 }
 
@@ -1446,10 +1503,11 @@ function _buildBarRow(row, baseColor, dashStyle = "solid") {
   // Right side: [sub "x/y GB"] [pct "23%"] [mini fill track] instead of dots.
   const srow = el("div", "sr");
   srow.id = "bar-" + row.sid;
+  const _hasSub = !!(row.usedSid || row.totalSid);
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
 <span class="sr-lbl" id="bl-${row.sid}">${esc(label)}</span>
-<span class="br-sub" id="bv-${row.sid}">--</span>
+${_hasSub ? `<span class="br-sub" id="bv-${row.sid}">--</span>` : ""}
 <span class="br-pct" id="bp-${row.sid}">--%</span>
 <div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
   return srow;
@@ -1560,11 +1618,13 @@ function buildCards() {
             accent = loadColor;
             dash = "dashed";
           }
-          const elem = row.pctSid
-            ? _buildBarRow(row, accent, dash)
-            : _buildSrRow(row, accent, dash);
+          const elem =
+            getRowStyle(row) === "bar"
+              ? _buildBarRow(row, accent, dash)
+              : _buildSrRow(row, accent, dash);
           // In edit mode, autoLinux rows are also remappable
           if (editMode) {
+            _styleToggle(elem, row);
             elem.classList.add("assignable");
             const badge = el("button", "assign-badge set");
             badge.textContent = "✎";
@@ -1603,9 +1663,11 @@ function buildCards() {
           accent = withAlpha(cssVar("--txt-dim"), 0.45);
           dash = "solid";
         }
-        const elem = row.pctSid
-          ? _buildBarRow(row, accent, dash)
-          : _buildSrRow(row, accent, dash);
+        const elem =
+          getRowStyle(row) === "bar"
+            ? _buildBarRow(row, accent, dash)
+            : _buildSrRow(row, accent, dash);
+        _styleToggle(elem, row);
         _afford(elem, row);
         rcol.appendChild(elem);
       }
@@ -1821,9 +1883,11 @@ function buildCards() {
         // Fan label override
         const customLbl = cfg.fanLabels?.[row.sid];
         const displayRow = customLbl ? { ...row, lbl: customLbl } : row;
-        const elem = row.pctSid
-          ? _buildBarRow(displayRow, cardColor)
-          : _buildSrRow(displayRow, cardColor);
+        const elem =
+          getRowStyle(row) === "bar"
+            ? _buildBarRow(displayRow, cardColor)
+            : _buildSrRow(displayRow, cardColor);
+        _styleToggle(elem, row);
         _afford(elem, row);
         body.appendChild(elem);
       }
@@ -1887,8 +1951,6 @@ function buildCards() {
           body.appendChild(addRow);
         }
       }
-
-      card.appendChild(body);
     }
   }
 
@@ -1933,7 +1995,10 @@ function renderDashboard(devices) {
           row.mode === "warn"
             ? warnLevel(row.sid, v)
             : dutyLevel(getFanDuty(devices, slot));
-        sd.innerHTML = makeDots(lvl, row.mode);
+        sd.innerHTML = makeDots(
+          lvl,
+          getRowStyle(row) === "dots-meter" ? "meter" : "warn",
+        );
       }
 
       if ((def.type === "sensor" || def.type === "spark") && row.pctSid) {
@@ -2109,7 +2174,7 @@ class DualSpark {
 
     // ── Grid ─────────────────────────────────────────────────
     ctx.save();
-    ctx.strokeStyle = cssVar("--grid") || "rgba(255,255,255,0.06)";
+    ctx.strokeStyle = cssVar("--spark-grid") || "rgba(255,255,255,0.06)"; // FIX: was --grid
     ctx.lineWidth = 0.5;
     ctx.setLineDash([]);
     for (const pct of [0.25, 0.5, 0.75, 1.0]) {
@@ -2259,7 +2324,7 @@ class MultiSpark {
 
     // ── Horizontal gridlines ──────────────────────────────────
     ctx.save();
-    ctx.strokeStyle = cssVar("--grid") || "rgba(255,255,255,0.06)";
+    ctx.strokeStyle = cssVar("--spark-grid") || "rgba(255,255,255,0.06)"; // FIX: was --grid
     ctx.lineWidth = 0.5;
     ctx.setLineDash([]);
     for (const pct of [0.25, 0.5, 0.75, 1.0]) {
@@ -2331,6 +2396,11 @@ class MultiSpark {
     cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
     cfg.theme === "custom" ? cfg.customThemeCSS : null,
   );
+
+  // FIX: guard against missing #bar-title element (element may not exist)
+  const _titleEl = document.getElementById("bar-title");
+  if (_titleEl) _titleEl.textContent = `⬡ ${cfg.systemName || "CC Monitor"}`;
+
   if (cfg.token) {
     phase = "connecting";
     setStatus("spin", "Connecting…");
