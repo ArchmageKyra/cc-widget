@@ -475,6 +475,62 @@ h2 {
     text-align: center;
     letter-spacing: 0.5px;
 }
+.row-move {
+    background: none;
+    border: none;
+    color: var(--txt-muted);
+    cursor: pointer;
+    font-size: 9px;
+    line-height: 1;
+    padding: 0 1px;
+    flex-shrink: 0;
+}
+.row-move:hover:not(:disabled) {
+    color: var(--txt);
+}
+.row-move:disabled {
+    color: var(--txt-dim);
+    opacity: 0.35;
+    cursor: default;
+}
+.row-more {
+    min-width: 18px;
+    text-align: center;
+    letter-spacing: 1px;
+}
+.row-menu {
+    position: fixed;
+    z-index: 200;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 4px;
+    background: var(--bg-card);
+    border: 1px solid var(--bdr);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+}
+.row-menu-item {
+    background: none;
+    border: none;
+    color: var(--txt);
+    text-align: left;
+    font-size: 11px;
+    font-family: var(--font-ui);
+    padding: 6px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.row-menu-item:hover {
+    background: var(--bg-hover-subtle);
+}
+.row-menu-item.danger {
+    color: var(--w5);
+}
+.row-menu-item.danger:hover {
+    background: rgba(239, 68, 68, 0.12);
+}
 .slot-clr {
     background: none;
     border: none;

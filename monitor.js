@@ -242,6 +242,8 @@ let cfg = {
   watchedPaths: [],
   pathLabels: {},
   rowStyles: {},
+  customRows: {},
+  rowOrder: {},
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -317,6 +319,91 @@ function cycleRowStyle(row) {
   requestAnimationFrame(() => autoResize());
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  ROW MENU — small floating "⋯" menu used by custom rows to fit
+//  rename/style/reassign/move/remove without crowding the row with
+//  five separate buttons. Single shared instance, positioned from
+//  the trigger button's rect (cards have overflow:hidden, so an
+//  absolutely-positioned dropdown nested inside one would clip).
+// ═══════════════════════════════════════════════════════════════
+let _rowMenuEl = null;
+
+function _closeRowMenu() {
+  if (!_rowMenuEl) return;
+  _rowMenuEl.remove();
+  _rowMenuEl = null;
+  document.removeEventListener("click", _rowMenuOutsideClick, true);
+}
+
+function _rowMenuOutsideClick(e) {
+  if (_rowMenuEl && !_rowMenuEl.contains(e.target)) _closeRowMenu();
+}
+
+// items: [{ label, danger?, onClick }]
+function _openRowMenu(anchorBtn, items) {
+  _closeRowMenu();
+  const menu = el("div", "row-menu");
+  for (const it of items) {
+    const b = el("button", "row-menu-item" + (it.danger ? " danger" : ""));
+    b.textContent = it.label;
+    b.onclick = (e) => {
+      e.stopPropagation();
+      _closeRowMenu();
+      it.onClick();
+    };
+    menu.appendChild(b);
+  }
+  document.body.appendChild(menu);
+
+  const r = anchorBtn.getBoundingClientRect();
+  let left = r.right - menu.offsetWidth;
+  if (left < 4) left = 4;
+  let top = r.bottom + 4;
+  if (top + menu.offsetHeight > window.innerHeight - 4) {
+    top = r.top - menu.offsetHeight - 4; // flip above if it'd overflow
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+
+  _rowMenuEl = menu;
+  // deferred so the click that opened the menu doesn't immediately close it
+  setTimeout(
+    () => document.addEventListener("click", _rowMenuOutsideClick, true),
+    0,
+  );
+}
+
+// Finds a custom row's label by sid — used to give the picker overlay
+// a sensible title when reassigning a custom row's source (custom
+// sids aren't in SLOTS, so the usual title lookup falls through).
+function _customRowLabel(sid) {
+  for (const rows of Object.values(cfg.customRows ?? {})) {
+    const r = rows.find((x) => x.sid === sid);
+    if (r) return r.lbl;
+  }
+  return null;
+}
+
+// Wires an "+ assign" / "✎" affordance onto a row element in edit
+// mode. Top-level (not per-card) since it only touches globals —
+// callable from buildCards()'s per-card loop and from
+// _renderCustomRowSection() alike.
+function _afford(elem, row) {
+  if (!editMode || !row.typeFilter) return;
+  elem.classList.add("assignable");
+  const assigned = !!cfg.slots[row.sid];
+  const badge = el("button", "assign-badge");
+  badge.textContent = assigned ? "✎" : "+ assign";
+  if (assigned) badge.classList.add("set");
+  const open = () => openPicker(row.sid, row.typeFilter);
+  badge.onclick = (e) => {
+    e.stopPropagation();
+    open();
+  };
+  elem.onclick = open;
+  elem.appendChild(badge);
+}
+
 // Appends a style-cycle button to a row element when in edit mode.
 // Call this before any assign/remap badge so the order reads naturally.
 const _STYLE_LABELS = { bar: "▬", "dots-warn": "●●", "dots-meter": "○○" };
@@ -331,6 +418,143 @@ function _styleToggle(elem, row) {
     cycleRowStyle(row);
   };
   elem.appendChild(btn);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CUSTOM ROWS — user-added rows appended to one of the 6 fixed
+//  cards. What gets *plotted* on a card's sparkline is fixed
+//  (CARD_DEFS); custom rows are always noPlot — display-only
+//  (dots/value), never feed the canvas. They reuse the exact same
+//  cfg.slots / typeFilter / style machinery as built-in rows, just
+//  with a generated sid and their own per-card display order.
+// ═══════════════════════════════════════════════════════════════
+const ALL_SENSOR_TYPES = ["temp", "rpm", "duty", "watts"];
+
+function customRowsFor(cardId) {
+  const list = cfg.customRows?.[cardId] ?? [];
+  const order = cfg.rowOrder?.[cardId];
+  if (!order) return list;
+  const bySid = new Map(list.map((r) => [r.sid, r]));
+  const out = [];
+  for (const sid of order) {
+    if (bySid.has(sid)) {
+      out.push(bySid.get(sid));
+      bySid.delete(sid);
+    }
+  }
+  out.push(...bySid.values()); // rows not yet in the saved order (newly added)
+  return out;
+}
+
+function addCustomRow(cardId, leaf) {
+  const sid = `custom_${cardId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const row = {
+    sid,
+    lbl: shortLabel(leaf.label) || leaf.name,
+    mode: "warn",
+    noPlot: true,
+    custom: true,
+    typeFilter: ALL_SENSOR_TYPES,
+  };
+  cfg.customRows ??= {};
+  (cfg.customRows[cardId] ??= []).push(row);
+  cfg.rowOrder ??= {};
+  (cfg.rowOrder[cardId] ??= []).push(sid);
+  cfg.slots[sid] = { ...leaf };
+}
+
+function moveCustomRow(cardId, sid, dir) {
+  const order = customRowsFor(cardId).map((r) => r.sid);
+  const i = order.indexOf(sid);
+  const j = i + dir;
+  if (i < 0 || j < 0 || j >= order.length) return;
+  [order[i], order[j]] = [order[j], order[i]];
+  cfg.rowOrder ??= {};
+  cfg.rowOrder[cardId] = order;
+  saveCfg();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+}
+
+function removeCustomRow(cardId, sid) {
+  cfg.customRows[cardId] = (cfg.customRows[cardId] ?? []).filter(
+    (r) => r.sid !== sid,
+  );
+  if (cfg.rowOrder?.[cardId])
+    cfg.rowOrder[cardId] = cfg.rowOrder[cardId].filter((s) => s !== sid);
+  delete cfg.slots[sid];
+  if (cfg.rowStyles) delete cfg.rowStyles[sid];
+  saveCfg();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+}
+
+// Renders a card's custom rows (in their saved order) plus the
+// trailing "+ Add row" affordance. Shared by spark and sensor cards.
+function _renderCustomRowSection(def, container) {
+  const rows = customRowsFor(def.id);
+  rows.forEach((row, idx) => {
+    if (!cfg.slots[row.sid] && !editMode) return;
+    const elem = _buildSrRow(row, withAlpha(cssVar("--txt-dim"), 0.45));
+    if (editMode) {
+      const more = el("button", "assign-badge row-more");
+      more.textContent = "⋯";
+      more.title = "Row options";
+      more.onclick = (e) => {
+        e.stopPropagation();
+        const items = [
+          {
+            label: "Rename",
+            onClick: () => {
+              const nl = prompt("Label:", row.lbl);
+              if (nl && nl.trim()) {
+                row.lbl = nl.trim();
+                saveCfg();
+                buildCards();
+                renderDashboard(liveDevices);
+                requestAnimationFrame(() => autoResize());
+              }
+            },
+          },
+          {
+            label: `Style: ${_STYLE_LABELS[getRowStyle(row)] ?? "?"}`,
+            onClick: () => cycleRowStyle(row),
+          },
+          {
+            label: "Change sensor…",
+            onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, false, true),
+          },
+        ];
+        if (idx > 0)
+          items.push({
+            label: "Move up",
+            onClick: () => moveCustomRow(def.id, row.sid, -1),
+          });
+        if (idx < rows.length - 1)
+          items.push({
+            label: "Move down",
+            onClick: () => moveCustomRow(def.id, row.sid, 1),
+          });
+        items.push({
+          label: "Remove row",
+          danger: true,
+          onClick: () => removeCustomRow(def.id, row.sid),
+        });
+        _openRowMenu(more, items);
+      };
+      elem.appendChild(more);
+    }
+    container.appendChild(elem);
+  });
+
+  if (editMode) {
+    const addRow = el("div", "picker-add");
+    addRow.textContent = "+ Add row";
+    addRow.onclick = () => openPicker(null, null, false, true, def.id);
+    container.appendChild(addRow);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -851,33 +1075,40 @@ function setEditMode(on) {
 
 // ═══════════════════════════════════════════════════════════════
 //  PICKER OVERLAY
-//  openPicker(slotId, typeFilter, isCaseFan)
-//    slotId      — cfg.slots key to assign, null for case fan
+//  openPicker(slotId, typeFilter, isCaseFan, includeLinux, newRowCard)
+//    slotId      — cfg.slots key to assign, null for case fan / new row
 //    typeFilter  — array of field types: ["temp"], ["rpm"], etc.
 //    isCaseFan   — true → add to cfg.caseFans instead of a slot
+//    newRowCard  — card id → create a brand-new custom row on that
+//                  card and assign the chosen sensor to it
 // ═══════════════════════════════════════════════════════════════
 function openPicker(
   slotId,
   typeFilter,
   isCaseFan = false,
   includeLinux = false,
+  newRowCard = null,
 ) {
-  pickerCtx = { slotId, typeFilter, isCaseFan };
+  pickerCtx = { slotId, typeFilter, isCaseFan, newRowCard };
 
   // Header title
   const slotMeta = SLOTS.find((s) => s.id === slotId);
   const titleEl = document.getElementById("picker-title");
-  if (isCaseFan) {
+  if (newRowCard) {
+    const cardMeta = CARD_DEFS.find((d) => d.id === newRowCard);
+    titleEl.textContent = "Add Row — " + (cardMeta?.lbl ?? newRowCard);
+  } else if (isCaseFan) {
     titleEl.textContent = "Add Case Fan";
   } else {
-    titleEl.textContent = "Assign " + (slotMeta?.lbl ?? slotId ?? "");
+    titleEl.textContent =
+      "Assign " + (slotMeta?.lbl ?? _customRowLabel(slotId) ?? slotId ?? "");
   }
 
   const body = document.getElementById("picker-body");
   body.innerHTML = "";
 
   // Clear option for existing slot assignment
-  if (!isCaseFan && slotId && cfg.slots[slotId]) {
+  if (!isCaseFan && !newRowCard && slotId && cfg.slots[slotId]) {
     const clr = el("div", "picker-clr");
     clr.innerHTML = `<span>× Clear assignment</span>`;
     clr.onclick = () => {
@@ -915,11 +1146,12 @@ function openPicker(
     emp.textContent = "No matching channels found";
     body.appendChild(emp);
   } else {
-    const currentKey = isCaseFan
-      ? null
-      : slotId && cfg.slots[slotId]
-        ? slotKey(cfg.slots[slotId])
-        : null;
+    const currentKey =
+      isCaseFan || newRowCard
+        ? null
+        : slotId && cfg.slots[slotId]
+          ? slotKey(cfg.slots[slotId])
+          : null;
 
     for (const [devLbl, devLeaves] of Object.entries(byDev)) {
       const sec = el("div", "picker-sec");
@@ -940,7 +1172,9 @@ ${fieldTag}
 <span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
 
         row.onclick = () => {
-          if (isCaseFan) {
+          if (newRowCard) {
+            addCustomRow(newRowCard, leaf);
+          } else if (isCaseFan) {
             if (!cfg.caseFans.some((c) => slotKey(c) === lk))
               cfg.caseFans.push({ ...leaf });
           } else {
@@ -1323,14 +1557,23 @@ function pctFromUsedTotal(used, total) {
 // ═══════════════════════════════════════════════════════════════
 
 // ── Card type reference ──────────────────────────────────────────
-//  "spark"     — 2-col: canvas left | rows right
-//                Row flags: sparkKey ("temp"|"load"|"fan") selects the
-//                series to feed; noPlot:true shows value but skips plotting.
-//                Rows with pctSid render as bar-rows; otherwise sr rows.
-//  "longSpark" — full-width canvas top | sr rows below.
-//                sparkSeriesA / sparkSeriesB name the sids to feed.
-//  "sensor"    — rows only, no canvas.
-//                Rows with pctSid → bar-row; otherwise → sr row.
+//  "spark"  — 2-col: canvas left | rows right
+//             Row flags: sparkKey ("temp"|"load"|"fan") selects the
+//             series to feed; dynamicNorm:true lets that series'
+//             Y-scale auto-track its peak instead of a fixed 0-100
+//             ceiling (for non-percentage metrics, e.g. network
+//             throughput); noPlot:true shows value but skips plotting.
+//             Rows with pctSid render as bar-rows; otherwise sr rows.
+//  "sensor" — rows only, no canvas.
+//             Rows with pctSid → bar-row; otherwise → sr row.
+//
+//  Every card also accepts user-added custom rows (cfg.customRows),
+//  reorderable independently of the locked rows above — see
+//  customRowsFor() / _renderCustomRowSection().
+//
+//  (DualSpark, a full-width dual-series canvas, is no longer used by
+//  any card here but is left intact below in case a future card
+//  wants a full-width graph again.)
 // ────────────────────────────────────────────────────────────────
 const CARD_DEFS = [
   {
@@ -1434,13 +1677,22 @@ const CARD_DEFS = [
     id: "net",
     lbl: "NETWORK",
     cls: "net",
-    type: "longSpark",
-    sparkSeriesA: "lnx_net_rx",
-    sparkSeriesB: "lnx_net_tx",
-    fixedMax: null,
+    type: "spark",
     rows: [
-      { sid: "lnx_net_rx", lbl: "↓ RX", autoLinux: true },
-      { sid: "lnx_net_tx", lbl: "↑ TX", autoLinux: true },
+      {
+        sid: "lnx_net_rx",
+        lbl: "↓ RX",
+        autoLinux: true,
+        sparkKey: "temp",
+        dynamicNorm: true,
+      },
+      {
+        sid: "lnx_net_tx",
+        lbl: "↑ TX",
+        autoLinux: true,
+        sparkKey: "load",
+        dynamicNorm: true,
+      },
     ],
   },
   {
@@ -1559,23 +1811,6 @@ function buildCards() {
     const loadColor = withAlpha(cardColor, 0.55);
     const fanLine = def.cls === "fan" ? cardColor : fanColor;
 
-    // Helper: wire an assign affordance onto a row element
-    const _afford = (elem, row) => {
-      if (!editMode || !row.typeFilter) return;
-      elem.classList.add("assignable");
-      const assigned = !!cfg.slots[row.sid];
-      const badge = el("button", "assign-badge");
-      badge.textContent = assigned ? "✎" : "+ assign";
-      if (assigned) badge.classList.add("set");
-      const open = () => openPicker(row.sid, row.typeFilter);
-      badge.onclick = (e) => {
-        e.stopPropagation();
-        open();
-      };
-      elem.onclick = open;
-      elem.appendChild(badge);
-    };
-
     // ── spark ─────────────────────────────────────────────────
     if (def.type === "spark") {
       const body = el("div", "card-spark");
@@ -1601,6 +1836,9 @@ function buildCards() {
         H: CH,
         dpr,
       });
+      for (const r of def.rows) {
+        if (r.dynamicNorm) sparks[def.id].setDynamic(r.sparkKey, true);
+      }
 
       const rcol = el("div", "card-rows");
       body.appendChild(rcol);
@@ -1671,41 +1909,7 @@ function buildCards() {
         _afford(elem, row);
         rcol.appendChild(elem);
       }
-    }
-
-    // ── longSpark ─────────────────────────────────────────────
-    else if (def.type === "longSpark") {
-      const body = el("div", "card-sparkfull");
-      card.appendChild(body);
-
-      const {
-        longSpark: { w: CW, h: CH },
-      } = canvasDims();
-      const dpr = window.devicePixelRatio || 1;
-      const cv = document.createElement("canvas");
-      cv.width = CW * dpr;
-      cv.height = CH * dpr;
-      cv.style.width = CW + "px";
-      cv.style.height = CH + "px";
-      body.appendChild(cv);
-      sparks[def.id] = new DualSpark(cv, {
-        colorA: cardColor,
-        colorB: withAlpha(cardColor, 0.5),
-        W: CW,
-        H: CH,
-        dpr,
-        fixedMax: def.fixedMax ?? null,
-      });
-
-      const vrows = el("div", "net-rows");
-      body.appendChild(vrows);
-      for (const row of def.rows || []) {
-        if (!row.autoLinux && !cfg.slots[row.sid]) continue;
-        const isA = row.sid === def.sparkSeriesA;
-        const accent = isA ? cardColor : withAlpha(cardColor, 0.5);
-        const dash = isA ? "solid" : "dashed";
-        vrows.appendChild(_buildSrRow(row, accent, dash));
-      }
+      _renderCustomRowSection(def, rcol);
     }
 
     // ── sensor ────────────────────────────────────────────────
@@ -1891,6 +2095,7 @@ function buildCards() {
         _afford(elem, row);
         body.appendChild(elem);
       }
+      _renderCustomRowSection(def, body);
 
       // Case fans (user-added RPM channels)
       if (def.caseFans) {
@@ -2107,18 +2312,6 @@ function renderDashboard(devices) {
         }
       }
     }
-
-    if (def.type === "longSpark") {
-      const va =
-        def.sparkSeriesA && cfg.slots[def.sparkSeriesA]
-          ? getSlotValue(devices, cfg.slots[def.sparkSeriesA])
-          : null;
-      const vb =
-        def.sparkSeriesB && cfg.slots[def.sparkSeriesB]
-          ? getSlotValue(devices, cfg.slots[def.sparkSeriesB])
-          : null;
-      if (va != null || vb != null) spark.push(va ?? 0, vb ?? 0);
-    }
   }
 }
 // ═══════════════════════════════════════════════════════════════
@@ -2259,12 +2452,12 @@ class MultiSpark {
     this.H = H;
     this.MAX = 60; // data points kept
     this.BAR = 8; // vertical marker every N points
-    this._fanNorm = 100;
 
     this.S = {
       temp: {
         data: [],
         norm: 100,
+        dynamic: false,
         color: cardColor,
         dash: [],
         lw: 1.6,
@@ -2273,6 +2466,7 @@ class MultiSpark {
       load: {
         data: [],
         norm: 100,
+        dynamic: false,
         color: loadColor,
         dash: [5, 3],
         lw: 1.2,
@@ -2281,6 +2475,7 @@ class MultiSpark {
       fan: {
         data: [],
         norm: 100,
+        dynamic: false,
         color: fanLine,
         dash: [2, 4],
         lw: 1.0,
@@ -2289,21 +2484,38 @@ class MultiSpark {
     };
   }
 
+  // Mark a series as auto-scaling: its norm grows to track the
+  // highest value seen (×1.2 headroom), rather than staying fixed
+  // at 100. Use for metrics with no natural 0–100 ceiling (e.g.
+  // network throughput in MB/s).
+  setDynamic(key, dynamic = true) {
+    const s = this.S[key];
+    if (s) s.dynamic = dynamic;
+  }
+  setNorm(key, n) {
+    const s = this.S[key];
+    if (s) s.norm = n;
+  }
+  trackMax(key, val) {
+    const s = this.S[key];
+    if (!s || typeof val !== "number" || isNaN(val)) return;
+    if (val > s.norm) s.norm = val * 1.2;
+  }
+
+  // Back-compat wrappers — fan duty/RPM dual-mode feed in
+  // renderDashboard() calls these by name.
   setFanNorm(n) {
-    this.S.fan.norm = n;
-    this._fanNorm = n;
+    this.setNorm("fan", n);
   }
   trackFanMax(rpm) {
-    if (rpm > this._fanNorm) {
-      this._fanNorm = rpm * 1.2;
-      this.S.fan.norm = this._fanNorm;
-    }
+    this.trackMax("fan", rpm);
   }
 
   push(key, val) {
     if (val == null || isNaN(val)) return;
     const s = this.S[key];
     if (!s) return;
+    if (s.dynamic) this.trackMax(key, val);
     s.data.push(val);
     if (s.data.length > this.MAX) s.data.shift();
     this.draw();
