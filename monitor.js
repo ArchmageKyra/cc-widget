@@ -144,12 +144,6 @@ const SLOTS = [
     cls: "ram",
     unit: "GB",
   },
-  {
-    id: "ram_temp",
-    lbl: "RAM Temp",
-    cls: "ram",
-    unit: "°C",
-  },
 
   // SSD
   { id: "disk_a_pct", lbl: "Disk A %", cls: "ssd", unit: "%" },
@@ -232,7 +226,6 @@ let cfg = {
   baseUrl: "http://localhost:11987",
   token: "",
   slots: {},
-  caseFans: [],
   theme: "deep-space",
   customThemeCSS: "",
   systemName: "Theia",
@@ -420,6 +413,57 @@ function _styleToggle(elem, row) {
   elem.appendChild(btn);
 }
 
+// ⋯ menu for hardcoded (non-custom) rows — consolidates style toggle +
+// assign/remap into a single button, mirroring the custom-row row-more menu.
+// isAutoLinux:true  → offers "Remap source" (shows all devices incl. Linux)
+// otherwise         → offers "Assign / Change sensor" via typeFilter
+function _hardRowMenu(elem, row, { isAutoLinux = false } = {}) {
+  if (!editMode) return;
+  elem.classList.add("assignable");
+  const more = el("button", "assign-badge row-more");
+  more.textContent = "⋯";
+  more.title = "Row options";
+  more.onclick = (e) => {
+    e.stopPropagation();
+    const items = [];
+    // Style toggle (only when meaningful)
+    if (row.pctSid || row.mode) {
+      items.push({
+        label: `Style: ${_STYLE_LABELS[getRowStyle(row)] ?? "?"}`,
+        onClick: () => cycleRowStyle(row),
+      });
+    }
+    // Sensor assign / remap
+    if (isAutoLinux) {
+      items.push({
+        label: "Remap source…",
+        onClick: () => openPicker(row.sid, null, true),
+      });
+    } else if (row.typeFilter) {
+      const assigned = !!cfg.slots[row.sid];
+      items.push({
+        label: assigned ? "Change sensor…" : "+ Assign sensor",
+        onClick: () => openPicker(row.sid, row.typeFilter),
+      });
+      if (assigned) {
+        items.push({
+          label: "Clear assignment",
+          danger: true,
+          onClick: () => {
+            delete cfg.slots[row.sid];
+            saveCfg();
+            buildCards();
+            renderDashboard(liveDevices);
+            requestAnimationFrame(() => autoResize());
+          },
+        });
+      }
+    }
+    if (items.length) _openRowMenu(more, items);
+  };
+  elem.appendChild(more);
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  CUSTOM ROWS — user-added rows appended to one of the 6 fixed
 //  cards. What gets *plotted* on a card's sparkline is fixed
@@ -524,7 +568,7 @@ function _renderCustomRowSection(def, container) {
           },
           {
             label: "Change sensor…",
-            onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, false, true),
+            onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, true),
           },
         ];
         if (idx > 0)
@@ -552,7 +596,7 @@ function _renderCustomRowSection(def, container) {
   if (editMode) {
     const addRow = el("div", "picker-add");
     addRow.textContent = "+ Add row";
-    addRow.onclick = () => openPicker(null, null, false, true, def.id);
+    addRow.onclick = () => openPicker(null, null, true, def.id);
     container.appendChild(addRow);
   }
 }
@@ -960,10 +1004,7 @@ const leafKey = (l) => `${l.uid}|${l.kind}|${l.name}|${l.field ?? ""}`;
 const slotKey = (s) => `${s.uid}|${s.kind}|${s.name}|${s.field ?? ""}`;
 const isAssigned = (l) => {
   const k = leafKey(l);
-  return (
-    Object.values(cfg.slots).some((s) => slotKey(s) === k) ||
-    cfg.caseFans.some((c) => slotKey(c) === k)
-  );
+  return Object.values(cfg.slots).some((s) => slotKey(s) === k);
 };
 const shortLabel = (lbl) => (lbl ? lbl.split("→").pop().trim() : "");
 
@@ -1075,21 +1116,20 @@ function setEditMode(on) {
 
 // ═══════════════════════════════════════════════════════════════
 //  PICKER OVERLAY
-//  openPicker(slotId, typeFilter, isCaseFan, includeLinux, newRowCard)
-//    slotId      — cfg.slots key to assign, null for case fan / new row
+//  openPicker(slotId, typeFilter, includeLinux, newRowCard)
+//    slotId      — cfg.slots key to assign, null for new custom row
 //    typeFilter  — array of field types: ["temp"], ["rpm"], etc.
-//    isCaseFan   — true → add to cfg.caseFans instead of a slot
+//    includeLinux — show Linux device channels in the list
 //    newRowCard  — card id → create a brand-new custom row on that
 //                  card and assign the chosen sensor to it
 // ═══════════════════════════════════════════════════════════════
 function openPicker(
   slotId,
   typeFilter,
-  isCaseFan = false,
   includeLinux = false,
   newRowCard = null,
 ) {
-  pickerCtx = { slotId, typeFilter, isCaseFan, newRowCard };
+  pickerCtx = { slotId, typeFilter, newRowCard };
 
   // Header title
   const slotMeta = SLOTS.find((s) => s.id === slotId);
@@ -1097,8 +1137,6 @@ function openPicker(
   if (newRowCard) {
     const cardMeta = CARD_DEFS.find((d) => d.id === newRowCard);
     titleEl.textContent = "Add Row — " + (cardMeta?.lbl ?? newRowCard);
-  } else if (isCaseFan) {
-    titleEl.textContent = "Add Case Fan";
   } else {
     titleEl.textContent =
       "Assign " + (slotMeta?.lbl ?? _customRowLabel(slotId) ?? slotId ?? "");
@@ -1108,7 +1146,7 @@ function openPicker(
   body.innerHTML = "";
 
   // Clear option for existing slot assignment
-  if (!isCaseFan && !newRowCard && slotId && cfg.slots[slotId]) {
+  if (!newRowCard && slotId && cfg.slots[slotId]) {
     const clr = el("div", "picker-clr");
     clr.innerHTML = `<span>× Clear assignment</span>`;
     clr.onclick = () => {
@@ -1146,12 +1184,11 @@ function openPicker(
     emp.textContent = "No matching channels found";
     body.appendChild(emp);
   } else {
-    const currentKey =
-      isCaseFan || newRowCard
-        ? null
-        : slotId && cfg.slots[slotId]
-          ? slotKey(cfg.slots[slotId])
-          : null;
+    const currentKey = newRowCard
+      ? null
+      : slotId && cfg.slots[slotId]
+        ? slotKey(cfg.slots[slotId])
+        : null;
 
     for (const [devLbl, devLeaves] of Object.entries(byDev)) {
       const sec = el("div", "picker-sec");
@@ -1174,9 +1211,6 @@ ${fieldTag}
         row.onclick = () => {
           if (newRowCard) {
             addCustomRow(newRowCard, leaf);
-          } else if (isCaseFan) {
-            if (!cfg.caseFans.some((c) => slotKey(c) === lk))
-              cfg.caseFans.push({ ...leaf });
           } else {
             cfg.slots[slotId] = { ...leaf };
           }
@@ -1663,14 +1697,6 @@ const CARD_DEFS = [
         totalSid: "lnx_swap_tot",
         autoLinux: true,
       },
-      {
-        // Optional CC RAM temp sensor (noPlot — displayed but not graphed)
-        sid: "ram_temp",
-        lbl: "TEMP",
-        mode: "warn",
-        noPlot: true,
-        typeFilter: ["temp"],
-      },
     ],
   },
   {
@@ -1717,7 +1743,6 @@ const CARD_DEFS = [
         typeFilter: ["temp"],
       },
     ],
-    caseFans: true,
   },
 ];
 
@@ -1785,18 +1810,16 @@ function buildCards() {
       def.autoDisks &&
       linuxHasData &&
       linuxLat.channels?.some((ch) => /^Disk .+ Usage$/.test(ch.name));
-    const hasFans = def.caseFans && cfg.caseFans.length > 0;
+    const hasCustomRows = (cfg.customRows?.[def.id]?.length ?? 0) > 0;
     const hasEditRows =
       editMode &&
-      (def.rows?.some((r) => !r.autoLinux && r.typeFilter) ||
-        def.caseFans ||
-        def.autoDisks);
+      (def.rows?.some((r) => !r.autoLinux && r.typeFilter) || def.autoDisks);
 
     if (
       !hasAssigned &&
       !hasAutoLinux &&
       !hasDiskRows &&
-      !hasFans &&
+      !hasCustomRows &&
       !hasEditRows
     )
       continue;
@@ -1843,6 +1866,11 @@ function buildCards() {
       const rcol = el("div", "card-rows");
       body.appendChild(rcol);
 
+      // ── Context section (noPlot + custom rows) ────────────────
+      // Built separately and appended below the spark grid so it's
+      // visually unambiguous what is plotted vs what is context.
+      const ctxBody = el("div", "card-spark-ctx");
+
       for (const row of def.rows) {
         if (row.autoLinux) {
           if (!cfg.slots[row.sid] && !linuxHasData) continue;
@@ -1860,31 +1888,11 @@ function buildCards() {
             getRowStyle(row) === "bar"
               ? _buildBarRow(row, accent, dash)
               : _buildSrRow(row, accent, dash);
-          // In edit mode, autoLinux rows are also remappable
-          if (editMode) {
-            _styleToggle(elem, row);
-            elem.classList.add("assignable");
-            const badge = el("button", "assign-badge set");
-            badge.textContent = "✎";
-            badge.title = "Remap source";
-            const open = () =>
-              openPicker(
-                row.sid,
-                null, // no type filter — show all
-                false,
-                true, // includeLinux
-              );
-            badge.onclick = (e) => {
-              e.stopPropagation();
-              open();
-            };
-            elem.onclick = open;
-            elem.appendChild(badge);
-          }
+          if (editMode) _hardRowMenu(elem, row, { isAutoLinux: true });
           rcol.appendChild(elem);
           continue;
         }
-        // CC row — show if assigned or in editMode
+        // CC / noPlot rows — show if assigned or in editMode
         if (!cfg.slots[row.sid] && !editMode) continue;
         let accent = cardColor,
           dash = "solid";
@@ -1905,11 +1913,23 @@ function buildCards() {
           getRowStyle(row) === "bar"
             ? _buildBarRow(row, accent, dash)
             : _buildSrRow(row, accent, dash);
-        _styleToggle(elem, row);
-        _afford(elem, row);
-        rcol.appendChild(elem);
+        if (editMode) _hardRowMenu(elem, row);
+        // noPlot rows go in the context section below the spark grid
+        if (row.noPlot) {
+          ctxBody.appendChild(elem);
+        } else {
+          rcol.appendChild(elem);
+        }
       }
-      _renderCustomRowSection(def, rcol);
+
+      // Custom rows always live in the context section
+      _renderCustomRowSection(def, ctxBody);
+
+      // Only attach ctxBody if it has visible children (or edit mode for the
+      // "+ Add row" affordance which _renderCustomRowSection renders)
+      if (ctxBody.childElementCount > 0) {
+        card.appendChild(ctxBody);
+      }
     }
 
     // ── sensor ────────────────────────────────────────────────
@@ -2091,71 +2111,10 @@ function buildCards() {
           getRowStyle(row) === "bar"
             ? _buildBarRow(displayRow, cardColor)
             : _buildSrRow(displayRow, cardColor);
-        _styleToggle(elem, row);
-        _afford(elem, row);
+        if (editMode) _hardRowMenu(elem, row);
         body.appendChild(elem);
       }
       _renderCustomRowSection(def, body);
-
-      // Case fans (user-added RPM channels)
-      if (def.caseFans) {
-        for (const cf of cfg.caseFans) {
-          const k = slotKey(cf);
-          const customLbl = cfg.fanLabels?.[k];
-          const lbl = (
-            customLbl ||
-            shortLabel(cf.label)
-              .replace(/\s*\(RPM\)/i, "")
-              .slice(0, 14)
-          ).trim();
-          const srow = el("div", "sr");
-          srow.id = "cfr-" + k;
-          srow.innerHTML = `
-<span class="sr-accent" style="background:${fanColor}"></span>
-<span class="sr-lbl" id="cfl-${k}" style="min-width:54px;font-size:9px">${esc(lbl)}</span>
-<span class="sr-val" id="cfv-${k}">--</span>
-<span class="sr-unit">RPM</span>
-<span id="cfd-${k}">${makeDots(0, "meter")}</span>`;
-          if (editMode) {
-            const rmBtn = el("button", "slot-clr");
-            rmBtn.title = "Remove";
-            rmBtn.textContent = "×";
-            rmBtn.onclick = (e) => {
-              e.stopPropagation();
-              cfg.caseFans = cfg.caseFans.filter((c) => slotKey(c) !== k);
-              saveCfg();
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
-            };
-            srow.appendChild(rmBtn);
-            const rnBtn = el("button", "assign-badge");
-            rnBtn.title = "Rename";
-            rnBtn.textContent = "✎";
-            rnBtn.onclick = (e) => {
-              e.stopPropagation();
-              const newLbl = prompt("Fan label:", lbl);
-              if (newLbl !== null) {
-                cfg.fanLabels ??= {};
-                cfg.fanLabels[k] = newLbl.trim() || lbl;
-                saveCfg();
-                const lEl = document.getElementById("cfl-" + k);
-                if (lEl) lEl.textContent = cfg.fanLabels[k];
-              }
-            };
-            srow.appendChild(rnBtn);
-          }
-          body.appendChild(srow);
-        }
-
-        // "Add case fan" affordance in edit mode
-        if (editMode) {
-          const addRow = el("div", "picker-add");
-          addRow.textContent = "+ Add case fan";
-          addRow.onclick = () => openPicker(null, ["rpm"], true);
-          body.appendChild(addRow);
-        }
-      }
     }
   }
 
@@ -2277,19 +2236,6 @@ function renderDashboard(devices) {
       }
     }
 
-    // ── Case fans ─────────────────────────────────────────────
-    if (def.caseFans) {
-      for (const cf of cfg.caseFans) {
-        const k = slotKey(cf);
-        const v = getSlotValue(devices, cf);
-        const sv = document.getElementById("cfv-" + k);
-        const sd = document.getElementById("cfd-" + k);
-        if (sv && v !== undefined) sv.textContent = Math.round(v);
-        if (sd && v !== undefined)
-          sd.innerHTML = makeDots(dutyLevel(getFanDuty(devices, cf)), "meter");
-      }
-    }
-
     // ── Spark canvas feeds ────────────────────────────────────
     const spark = sparks[def.id];
     if (!spark || !def.rows) continue;
@@ -2310,6 +2256,40 @@ function renderDashboard(devices) {
         } else {
           spark.push(row.sparkKey, v);
         }
+      }
+    }
+  }
+
+  // ── Custom rows — update all cards ───────────────────────────
+  // renderDashboard's main loop above handles def.rows only;
+  // custom rows use the same slot machinery but live in cfg.customRows.
+  for (const rows of Object.values(cfg.customRows ?? {})) {
+    for (const row of rows) {
+      const slot = cfg.slots[row.sid];
+      if (!slot) continue;
+      const v = getSlotValue(devices, slot);
+      const sv = document.getElementById("sv-" + row.sid);
+      const sd = document.getElementById("sd-" + row.sid);
+      // Derive unit from the slot itself (custom rows aren't in SLOTS)
+      const unit =
+        slot.unit ??
+        (slot.field === "duty"
+          ? "%"
+          : slot.field === "rpm"
+            ? "RPM"
+            : slot.kind === "temp"
+              ? "°C"
+              : "");
+      if (sv) sv.textContent = fmt1(v, unit);
+      if (sd && v !== undefined) {
+        const lvl =
+          row.mode === "warn"
+            ? warnLevel(row.sid, v)
+            : dutyLevel(getFanDuty(devices, slot));
+        sd.innerHTML = makeDots(
+          lvl,
+          getRowStyle(row) === "dots-meter" ? "meter" : "warn",
+        );
       }
     }
   }
