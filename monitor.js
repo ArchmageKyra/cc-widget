@@ -248,6 +248,7 @@ let pickerCtx = null;
 let linuxAutoAssigned = false;
 let sseAbort = null;
 let pinned = false;
+let locked = false;
 let sparks = {};
 
 function _fmtUptime(ms) {
@@ -366,7 +367,50 @@ function _openRowMenu(anchorBtn, items) {
   );
 }
 
-// Finds a custom row's label by sid — used to give the picker overlay
+// ═══════════════════════════════════════════════════════════════
+//  SUB TOOLTIP — shows the "used / total GB" label on bar row
+//  hover. Body-level so card overflow:hidden can't clip it.
+// ═══════════════════════════════════════════════════════════════
+let _subTipEl = null;
+let _subTipTarget = null;
+
+function _showSubTip(text, anchorEl) {
+  if (!_subTipEl) {
+    _subTipEl = el("div", "sub-tip");
+    document.body.appendChild(_subTipEl);
+  }
+  _subTipEl.textContent = text;
+  _subTipEl.style.display = "block";
+  const r = anchorEl.getBoundingClientRect();
+  // Position above the row, centred
+  const tipW = _subTipEl.offsetWidth;
+  let left = r.left + r.width / 2 - tipW / 2;
+  if (left < 4) left = 4;
+  if (left + tipW > window.innerWidth - 4) left = window.innerWidth - 4 - tipW;
+  _subTipEl.style.left = left + "px";
+  _subTipEl.style.top = r.top - _subTipEl.offsetHeight - 5 + "px";
+}
+
+function _hideSubTip() {
+  if (_subTipEl) _subTipEl.style.display = "none";
+  _subTipTarget = null;
+}
+
+// Delegated listeners on #app — lightweight, survives buildCards() rebuilds
+document.getElementById("app").addEventListener("mouseover", (e) => {
+  if (locked) return;
+  const row = e.target.closest(".sr[data-sub]");
+  if (!row || row === _subTipTarget) return;
+  const sub = row.dataset.sub;
+  if (sub && sub !== "--") {
+    _subTipTarget = row;
+    _showSubTip(sub, row);
+  }
+});
+document.getElementById("app").addEventListener("mouseout", (e) => {
+  const row = e.target.closest(".sr[data-sub]");
+  if (row) _hideSubTip();
+});
 // a sensible title when reassigning a custom row's source (custom
 // sids aren't in SLOTS, so the usual title lookup falls through).
 function _customRowLabel(sid) {
@@ -684,6 +728,11 @@ document.getElementById("bb-pin").onclick = () => {
   gtksend(pinned ? "pin" : "unpin");
   document.getElementById("bb-pin").classList.toggle("on", pinned);
 };
+document.getElementById("bb-lock").onclick = () => {
+  locked = !locked;
+  document.getElementById("bb-lock").classList.toggle("on", locked);
+  document.getElementById("app").classList.toggle("locked", locked);
+};
 // ── Flyout toggle (Appearance button) ─────────────────────────
 const _flyout = document.getElementById("flyout");
 const _bbTheme = document.getElementById("bb-theme");
@@ -726,7 +775,7 @@ document.getElementById("bb-cfg").onclick = () => {
 
 // ── Status bar drag (left zone, not buttons) ───────────────────
 document.getElementById("sbar").addEventListener("mousedown", (e) => {
-  if (!e.target.closest("button") && e.button === 0) {
+  if (!locked && !e.target.closest("button") && e.button === 0) {
     e.preventDefault();
     gtksend("dragstart");
   }
@@ -1200,11 +1249,7 @@ function openPicker(
         const lk = leafKey(leaf);
         if (lk === currentKey) row.classList.add("sel");
 
-        const fieldTag = leaf.field
-          ? `<span class="picker-leaf-field">${esc(leaf.field)}</span>`
-          : "";
         row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.name)}</span>
-${fieldTag}
 <span class="picker-leaf-val">${fmt1(leaf.value, leaf.unit)}</span>
 <span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
 
@@ -1759,6 +1804,8 @@ function _accentBg(color, dashStyle) {
 
 function _buildSrRow(row, accentColor, dashStyle = "solid") {
   const sd = SLOTS.find((s) => s.id === row.sid);
+  // Custom rows aren't in SLOTS — derive unit from the assigned slot instead
+  const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? "";
   const srow = el("div", "sr");
   srow.id = "sr-" + row.sid;
   // Order: [accent] [lbl flex:1] [val] [unit] [dots]
@@ -1766,7 +1813,7 @@ function _buildSrRow(row, accentColor, dashStyle = "solid") {
 <span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
 <span class="sr-lbl">${row.lbl}</span>
 <span class="sr-val" id="sv-${row.sid}">--</span>
-<span class="sr-unit">${sd?.unit ?? ""}</span>
+<span class="sr-unit">${unit}</span>
 ${row.mode ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
   return srow;
 }
@@ -1776,16 +1823,14 @@ function _buildBarRow(row, baseColor, dashStyle = "solid") {
   const label = /^[A-C]$/.test(row.lbl)
     ? mountLabelFromSlot(slot, row.lbl)
     : row.lbl || mountLabelFromSlot(slot, "");
-  // Use .sr so layout, accent bar, and hover are identical to sensor rows.
-  // Right side: [sub "x/y GB"] [pct "23%"] [mini fill track] instead of dots.
   const srow = el("div", "sr");
   srow.id = "bar-" + row.sid;
-  const _hasSub = !!(row.usedSid || row.totalSid);
+  if (row.usedSid || row.totalSid) srow.dataset.sub = "--";
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
 <span class="sr-lbl" id="bl-${row.sid}">${esc(label)}</span>
-${_hasSub ? `<span class="br-sub" id="bv-${row.sid}">--</span>` : ""}
-<span class="br-pct" id="bp-${row.sid}">--%</span>
+${row.usedSid || row.totalSid ? `<span class="br-sub" id="bv-${row.sid}" aria-hidden="true">--</span>` : ""}
+<span class="br-pct-num" id="bp-${row.sid}">--</span><span class="br-pct-unit">%</span>
 <div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
   return srow;
 }
@@ -1963,11 +2008,12 @@ function buildCards() {
 
           const srow = el("div", "sr");
           srow.id = "bar-" + safeId;
+          srow.dataset.sub = barText(used, total);
           srow.innerHTML = `
 <span class="sr-accent" style="background:${cardColor}"></span>
 <span class="sr-lbl" id="bl-${safeId}">${esc(mountLbl)}</span>
-<span class="br-sub" id="bv-${safeId}">${barText(used, total)}</span>
-<span class="br-pct" id="bp-${safeId}">${pctRaw !== undefined ? Math.round(pct) + "%" : "--%"}</span>
+<span class="br-sub" id="bv-${safeId}" aria-hidden="true">${barText(used, total)}</span>
+<span class="br-pct-num" id="bp-${safeId}">${pctRaw !== undefined ? Math.round(pct) : "--"}</span><span class="br-pct-unit">%</span>
 <div class="br-track"><div class="br-fill" id="bf-${safeId}" style="width:${pct}%;background:${barClr}"></div></div>`;
           if (editMode) {
             const hideBtn = el("button", "slot-clr");
@@ -2027,11 +2073,12 @@ function buildCards() {
             (wp === "/" ? "root" : wp.split("/").pop() || wp);
           const srow = el("div", "sr");
           srow.id = "bar-" + safeId;
+          srow.dataset.sub = "--";
           srow.innerHTML = `
 <span class="sr-accent" style="background:${cardColor}"></span>
 <span class="sr-lbl" id="bl-${safeId}">${esc(customLbl)}</span>
-<span class="br-sub" id="bv-${safeId}">--</span>
-<span class="br-pct" id="bp-${safeId}">--%</span>
+<span class="br-sub" id="bv-${safeId}" aria-hidden="true">--</span>
+<span class="br-pct-num" id="bp-${safeId}">--</span><span class="br-pct-unit">%</span>
 <div class="br-track"><div class="br-fill" id="bf-${safeId}" style="width:0%;background:${cardColor}"></div></div>`;
           if (editMode) {
             const rmBtn = el("button", "slot-clr");
@@ -2190,8 +2237,13 @@ function renderDashboard(devices) {
           bf.style.background = barColorForPct(pct, cssVar("--" + def.cls));
         }
         if (bp)
-          bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}%` : "--%";
+          bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
         if (bv) bv.textContent = barText(used, total);
+        // Keep data-sub in sync for hover tooltip
+        if (rowEl && (row.usedSid || row.totalSid)) {
+          const sub = barText(used, total);
+          if (sub !== "--") rowEl.dataset.sub = sub;
+        }
       }
     }
 
@@ -2229,9 +2281,14 @@ function renderDashboard(devices) {
             bf.style.background = barColorForPct(pct, cssVar("--ssd"));
           }
           if (bp)
-            bp.textContent =
-              pctRaw !== undefined ? `${Math.round(pct)}%` : "--%";
+            bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
           if (bv) bv.textContent = barText(used, total);
+          // Keep data-sub in sync for hover tooltip
+          const barEl = document.getElementById("bar-" + safeId);
+          if (barEl) {
+            const sub = barText(used, total);
+            if (sub !== "--") barEl.dataset.sub = sub;
+          }
         }
       }
     }

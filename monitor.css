@@ -372,13 +372,6 @@ h2 {
     font-size: 11.5px;
     color: var(--txt);
 }
-.picker-leaf-field {
-    font-size: 9.5px;
-    color: var(--txt-dim);
-    background: var(--bg-code);
-    padding: 1px 4px;
-    border-radius: 3px;
-}
 .picker-leaf-val {
     font-family: var(--font-num);
     font-size: 12px;
@@ -387,9 +380,12 @@ h2 {
     color: var(--txt);
 }
 .picker-leaf-unit {
-    font-size: 9.5px;
+    font-family: var(--font-num);
+    font-size: 10.5px;
+    font-weight: 600;
     color: var(--txt-dim);
-    min-width: 24px;
+    min-width: 28px;
+    text-align: right;
 }
 .picker-clr {
     display: flex;
@@ -1132,19 +1128,21 @@ h2 {
     transition: background 0.4s;
 }
 .br-sub {
-    font-family: var(--font-num);
-    font-size: var(--sz-unit);
-    color: var(--txt-muted);
-    white-space: nowrap;
-    flex-shrink: 0;
+    display: none; /* data carrier only — shown via hover tooltip */
 }
-.br-pct {
+.br-pct-num {
     font-family: var(--font-num);
-    font-size: var(--sz-pct);
+    font-size: var(--sz-val);
     font-weight: 600;
     color: var(--txt);
     min-width: 30px;
     text-align: right;
+    flex-shrink: 0;
+}
+.br-pct-unit {
+    font-size: var(--sz-unit);
+    color: var(--txt-dim);
+    min-width: 20px;
     flex-shrink: 0;
 }
 .br-track {
@@ -1164,7 +1162,35 @@ h2 {
         background 0.3s;
 }
 
-/* ── Status bar (also primary chrome — no title bar) ──────── */
+/* ── Sub tooltip (GB used / total, shown on bar row hover) ────── */
+.sub-tip {
+    display: none;
+    position: fixed;
+    z-index: 300;
+    font-family: var(--font-num);
+    font-size: 10.5px;
+    color: var(--txt);
+    background: var(--bg);
+    border: 1px solid var(--bhi);
+    border-radius: var(--rs);
+    padding: 3px 8px;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Locked state — suppress all row hover backgrounds ─────────── */
+.locked .sr:hover {
+    background: transparent;
+}
+.locked .sr.assignable {
+    cursor: default;
+}
+.locked .picker-leaf:hover {
+    background: transparent;
+}
+
+/* ── Status bar ────────────────────────────────────────────────── */
 #sbar {
     display: flex;
     align-items: center;
