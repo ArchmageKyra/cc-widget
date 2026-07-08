@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 """
 CC Monitor launcher — borderless GTK/WebKit desktop widget.
-
-Run:    python3 launch.py
-Drag:   click and drag the title bar
-Close:  × button, or Alt+F4
-Pin:    📌 button
-
-Deps:   sudo apt install python3-gi gir1.2-webkit2-4.1 python3-psutil
 """
 
 import json
 import os
+import subprocess
+import threading
 import time
 
 import gi
@@ -64,17 +59,44 @@ def get_net_rates():
     return {"rx_mbps": round(max(0.0, rx), 2), "tx_mbps": round(max(0.0, tx), 2)}
 
 
-# ── Message handler (JS → Python) ────────────────────────────────
+# ── Folder size tracking (du-based, async) ────────────────────
+_folder_paths = []
+_folder_sizes = {}  # path -> gb (cached; updated by background threads)
+_folder_sizes_lock = threading.Lock()
+
+
+def _compute_one_folder(path):
+    """Run du -sb on a single path and cache the result."""
+    try:
+        result = subprocess.run(
+            ["du", "-sb", "--", path],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            bytes_val = int(result.stdout.split()[0])
+            gb = round(bytes_val / 1024**3, 3)
+            with _folder_sizes_lock:
+                _folder_sizes[path] = gb
+    except Exception:
+        pass
+
+
+def _refresh_folder_sizes():
+    """Kick off a background thread for each watched folder path."""
+    for path in list(_folder_paths):
+        t = threading.Thread(target=_compute_one_folder, args=(path,), daemon=True)
+        t.start()
+
+
 manager = WebKit2.UserContentManager()
 win = None
 webview = None
 
-# Paths the user has explicitly requested to watch (sent via "watch:" messages)
-_watched_paths = []
-
 
 def on_message(mgr, result):
-    global _watched_paths
+    global _folder_paths
     try:
         msg = result.get_js_value().to_string()
     except Exception as e:
@@ -93,27 +115,33 @@ def on_message(mgr, result):
         try:
             parts = msg.split(":")
             if len(parts) == 3:
-                # New format: resize:W:H
-                w = int(parts[1])
-                h = int(parts[2])
+                w, h = int(parts[1]), int(parts[2])
             else:
-                # Legacy format: resize:H  (keep width unchanged)
-                w = win.get_size()[0]
-                h = int(parts[1])
+                w, h = win.get_size()[0], int(parts[1])
             w = max(300, min(w, 1200))
             h = max(200, min(h, 1400))
             GLib.idle_add(lambda w=w, h=h: win.resize(w, h) or False)
         except Exception as e:
             print("Resize error:", e)
     elif msg.startswith("watch:"):
-        # JS sends the full watchedPaths array whenever it changes
+        # JS sends the full folder-path list whenever it changes
         try:
-            _watched_paths = json.loads(msg[6:])
+            new_paths = json.loads(msg[6:])
+            with _folder_sizes_lock:
+                # Evict cache for paths no longer watched
+                for p in list(_folder_sizes):
+                    if p not in new_paths:
+                        del _folder_sizes[p]
+            _folder_paths = new_paths
+            # Kick off immediate refresh for any newly added paths
+            _refresh_folder_sizes()
         except Exception as e:
             print("Watch parse error:", e)
     elif msg.startswith("dragstart"):
         try:
-            win.begin_move_drag(1, *win.get_pointer()[1:3], Gtk.get_current_event_time())
+            win.begin_move_drag(
+                1, *win.get_pointer()[1:3], Gtk.get_current_event_time()
+            )
         except Exception:
             pass
 
@@ -164,7 +192,6 @@ def push_stats():
         cpu_freq = psutil.cpu_freq()
         net = get_net_rates()
 
-        # Real disk partitions only (auto-discovered)
         disks = {}
         for part in psutil.disk_partitions(all=False):
             if not part.fstype or part.fstype in SKIP_FS:
@@ -183,21 +210,11 @@ def push_stats():
             except (PermissionError, OSError):
                 pass
 
-        # Explicitly watched paths (user-pinned via UI)
-        for wp in _watched_paths:
-            if wp in disks:
-                continue  # already covered by auto-discovery
-            try:
-                u = psutil.disk_usage(wp)
-                disks[wp] = {
-                    "device": wp,
-                    "percent": round(u.percent, 1),
-                    "used_gb": round(u.used / 1024**3, 1),
-                    "free_gb": round(u.free / 1024**3, 1),
-                    "total_gb": round(u.total / 1024**3, 1),
-                }
-            except (PermissionError, OSError):
-                pass
+        # Folder sizes (du-based, cached from background threads)
+        with _folder_sizes_lock:
+            folder_sizes = dict(_folder_sizes)
+        # Kick off async refresh for next tick
+        _refresh_folder_sizes()
 
         stats = {
             "cpu_percent": psutil.cpu_percent(interval=None),
@@ -207,13 +224,14 @@ def push_stats():
             else None,
             "ram_percent": vm.percent,
             "ram_used_gb": round(vm.used / 1024**3, 2),
-            "ram_free_gb": round(vm.available / 1024**3, 2),  # available, not free
+            "ram_free_gb": round(vm.available / 1024**3, 2),
             "ram_total_gb": round(vm.total / 1024**3, 2),
             "swap_percent": swap.percent,
             "swap_used_gb": round(swap.used / 1024**3, 2),
             "swap_total_gb": round(swap.total / 1024**3, 2),
             "disks": disks,
             "net": net,
+            "folder_sizes": folder_sizes,
         }
     except Exception as e:
         stats = {"error": str(e)}
@@ -234,7 +252,6 @@ def load_window_pos():
 def save_window_pos():
     if win is None:
         return
-
     try:
         x, y = win.get_position()
         with open(WINDOW_POS_FILE, "w") as f:

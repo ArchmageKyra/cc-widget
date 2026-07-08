@@ -17,9 +17,11 @@
 "use strict";
 
 const THEMES = {
-  /* ── 1. Deep Space ─────────────────────────────────────────────────────
+  /* ── Deep Space ─────────────────────────────────────────────────────
        The default. Clean technical dark — blue-black void, crisp accents.
-       Every other theme is judged against this one for legibility.           */
+       Every other theme is judged against this one for legibility.
+       LCARS-adjacent: the coral --hot + periwinkle --ram pairing carries the
+       reference; Titillium Web (ESA heritage) keeps it calm, not costumey.   */
   "deep-space": {
     name: "Deep Space",
     swatches: ["#0d0d16", "#67b0ff", "#46dfaa", "#ff9e45", "#bcc7ff"],
@@ -54,13 +56,13 @@ const THEMES = {
   --spark-grid:rgba(255,255,255,.08);
   --spark-vtick:rgba(255,255,255,.05);
 
-  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-ui:"Titillium Web",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
   --font-num:"Share Tech Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
 }`,
   },
 
-  /* ── 2. Catppuccin Mocha ───────────────────────────────────────────────
+  /* ── Catppuccin Mocha ───────────────────────────────────────────────
        Faithful to the official Catppuccin palette. Cozy, pastel, readable.
        Rounded corners reinforce the soft personality.                        */
   catppuccin: {
@@ -103,7 +105,7 @@ const THEMES = {
 }`,
   },
 
-  /* ── 3. Nord ───────────────────────────────────────────────────────────
+  /* ── Nord ───────────────────────────────────────────────────────────
        Arctic Scandinavia. Cool desaturated blues, no warm tones.
        Everything feels like ice, pine, and overcast sky.                     */
   nord: {
@@ -146,7 +148,7 @@ const THEMES = {
 }`,
   },
 
-  /* ── 4. Gruvbox Dark ───────────────────────────────────────────────────
+  /* ── Gruvbox Dark ───────────────────────────────────────────────────
        Warm terminal earth tones. Feels like a well-used workstation in
        a cave. Rajdhani gives the labels a slight military-stencil edge.      */
   gruvbox: {
@@ -273,7 +275,97 @@ const THEMES = {
     --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
   }`,
   },
-  /* ── 5. Wandering Waters ───────────────────────────────────────────────
+  /* ── Tokyo Night ───────────────────────────────────────────────────
+       The actual, widely-ported Tokyo Night palette (terminal/editor/GTK),
+       not a generic neon-noir pastiche — this is what makes it useful for
+       matching a desktop that already runs it. Blue/green/orange-led, which
+       also clears the purple/magenta overlap it used to share with
+       Sangheili Signal. Inter keeps it calm and editor-like, not signage.    */
+  "tokyo-night": {
+    name: "Tokyo Night",
+    swatches: ["#1a1b26", "#7aa2f7", "#9ece6a", "#ff9e64", "#bb9af7"],
+    css: `:root{
+  --bg:#1a1b26;
+  --txt:#c0caf5;
+  --txt-dim:#7982a9;
+  --txt-muted:#3b3f58;
+  --hot:#f7768e;
+
+  --bdr:rgba(192,202,245,.09);
+  --bhi:rgba(192,202,245,.18);
+
+  --r:8px; --rs:5px;
+
+  --cpu:#7aa2f7;
+  --gpu:#9ece6a;
+  --fan:#ff9e64;
+  --ssd:#bb9af7;
+  --ram:#c0caf5;
+  --net:#7dcfff;
+
+  --w1:#9ece6a;
+  --w2:#e0af68;
+  --w3:#ff9e64;
+  --w4:#f7768e;
+  --w5:#db4b4b;
+
+  --meter:rgba(122,162,247,.55);
+  --dot-off-warn:rgba(192,202,245,.13);
+  --dot-off-meter:rgba(192,202,245,.08);
+  --spark-grid:rgba(192,202,245,.07);
+  --spark-vtick:rgba(192,202,245,.04);
+
+  --font-ui:"Inter",system-ui,sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,monospace;
+  --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Rosé Pine ─────────────────────────────────────────────────────
+     Replaces Bold Blueprint, which was too close to Reclaimer Relay's cool-
+     blue/sharp-corner register without its own identity. Rosé Pine is a
+     real, widely-ported desktop/terminal/editor palette — soft, muted rose,
+     gold, pine and iris — that gives the set a genuinely different mood
+     (elegant, quiet) instead of another technical/sci-fi entry.       */
+  "rose-pine": {
+    name: "Rosé Pine",
+    swatches: ["#191724", "#eb6f92", "#f6c177", "#9ccfd8", "#c4a7e7"],
+    css: `:root{
+    --bg:#191724;
+    --txt:#e0def4;
+    --txt-dim:#908caa;
+    --txt-muted:#403d52;
+    --hot:#eb6f92;
+
+    --bdr:rgba(224,222,244,.08);
+    --bhi:rgba(224,222,244,.16);
+
+    --r:9px; --rs:5px;
+
+    --cpu:#9ccfd8;
+    --gpu:#c4a7e7;
+    --fan:#f6c177;
+    --ssd:#ebbcba;
+    --ram:#e0def4;
+    --net:#31748f;
+
+    --w1:#9ccfd8;
+    --w2:#f6c177;
+    --w3:#ebbcba;
+    --w4:#eb6f92;
+    --w5:#b4637a;
+
+    --meter:rgba(156,207,216,.45);
+    --dot-off-warn:rgba(224,222,244,.13);
+    --dot-off-meter:rgba(224,222,244,.08);
+    --spark-grid:rgba(224,222,244,.06);
+    --spark-vtick:rgba(224,222,244,.03);
+
+    --font-ui:"Inter",system-ui,sans-serif;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Wandering Waters ───────────────────────────────────────────────
        Dawn light on a dark river. Organic, unhurried.
        Space Grotesk for UI gives it warmth without going precious.           */
   "wandering-waters": {
@@ -304,7 +396,7 @@ const THEMES = {
   --w4:#E68A58;
   --w5:#C9544B;
 
-  --meter:rgba(212,132,91,.42);
+  --meter:rgba(212,132,91,.48);
   --dot-off-warn:rgba(104,182,232,.13);
   --dot-off-meter:rgba(104,182,232,.08);
   --spark-grid:rgba(104,182,232,.07);
@@ -313,44 +405,45 @@ const THEMES = {
   --font-ui:"Space Grotesk",system-ui,sans-serif;
   --font-num:"IBM Plex Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
-}`,
+  }`,
   },
-
-  /* ── 6. Nixie Nocturne ─────────────────────────────────────────────────
-       Vintage vacuum-tube display in a dark machine room.
-       VT323 for numerics is NON-NEGOTIABLE — it IS the theme.
-       Rajdhani for UI reads like embossed metal type.                        */
+  /* ── Nixie Nocturne ───────────────────────────────────────────────────
+       Nixie Nocturne, merged with Atomic Amber's reactor intensity.
+       VT323 for numerics is still NON-NEGOTIABLE — it IS the theme.
+       Rajdhani for UI reads like embossed metal type. The amber/red is
+       brighter and the meter runs hotter than base Nixie — it never
+       fully dims — while the vacuum-tube warmth stays intact.                */
   "nixie-nocturne": {
     name: "Nixie Nocturne",
-    swatches: ["#1A1719", "#D66A4A", "#E0B64F", "#F2E4C8", "#8D4038"],
+    swatches: ["#191316", "#FF9A2E", "#E0B64F", "#F2E4C8", "#C4302B"],
     css: `:root{
-  --bg:#1A1719;
+  --bg:#191316;
   --txt:#F2E4C8;
-  --txt-dim:#A08E78;
-  --txt-muted:#3D342B;
-  --hot:#B6463B;
+  --txt-dim:#B39A72;
+  --txt-muted:#40342A;
+  --hot:#FF3B30;
 
-  --bdr:rgba(242,228,200,.08);
-  --bhi:rgba(242,228,200,.16);
+  --bdr:rgba(255,176,0,.10);
+  --bhi:rgba(255,176,0,.20);
 
-  --r:10px; --rs:6px;
+  --r:7px; --rs:4px;
 
-  --cpu:#D66A4A;
+  --cpu:#FF9A2E;
   --gpu:#E0B64F;
-  --fan:#C65C43;
+  --fan:#D66A4A;
   --ssd:#D6C39A;
   --ram:#F2E4C8;
-  --net:#C98652;
+  --net:#E89A4A;
 
   --w1:#D6C39A;
   --w2:#E0B64F;
-  --w3:#E89A4A;
-  --w4:#D66A4A;
-  --w5:#B6463B;
+  --w3:#FF9A2E;
+  --w4:#E85A2A;
+  --w5:#FF3B30;
 
-  --meter:rgba(214,106,74,.38);
-  --dot-off-warn:rgba(224,182,79,.14);
-  --dot-off-meter:rgba(224,182,79,.09);
+  --meter:rgba(255,154,46,.52);
+  --dot-off-warn:rgba(224,182,79,.15);
+  --dot-off-meter:rgba(224,182,79,.10);
   --spark-grid:rgba(242,228,200,.07);
   --spark-vtick:rgba(242,228,200,.04);
 
@@ -359,8 +452,113 @@ const THEMES = {
   --font-code:"IBM Plex Mono",ui-monospace,monospace;
 }`,
   },
+  /* ── Monochrome Matrix ─────────────────────────────────────────────
+     Monochrome phosphor display. Single-channel intensity logic — severity
+     is read through brightness, not hue, so the warn ramp climbs from a dim
+     idle green up to a near-white overdriven phosphor. --hot is the only
+     color allowed to break green, which is what keeps this a terminal
+     instrument rather than a wall of identical green.                 */
+  "mono-matrix": {
+    name: "Monochrome Matrix",
+    swatches: ["#050805", "#00ff66", "#00cc55", "#009944", "#66ff99"],
+    css: `:root{
+    --bg:#050805;
+    --txt:#b6ffcc;
+    --txt-dim:#5bbf7a;
+    --txt-muted:#1a3322;
+    --hot:#ff3b3b;
 
-  /* ── 7. Reclaimer Relay ────────────────────────────────────────────────
+    --bdr:rgba(0,255,102,.10);
+    --bhi:rgba(0,255,102,.20);
+
+    --r:2px; --rs:1px;
+
+    --cpu:#00ff66;
+    --gpu:#66ff99;
+    --fan:#00cc55;
+    --ssd:#99ffcc;
+    --ram:#33ff88;
+    --net:#00dd77;
+
+    --w1:#1c7a44;
+    --w2:#00cc55;
+    --w3:#00ff66;
+    --w4:#7dffb3;
+    --w5:#e8fff0;
+
+    --meter:rgba(0,255,102,.40);
+    --dot-off-warn:rgba(0,255,102,.10);
+    --dot-off-meter:rgba(0,255,102,.06);
+    --spark-grid:rgba(0,255,102,.05);
+    --spark-vtick:rgba(0,255,102,.03);
+
+    --font-ui:"VT323",monospace;
+    --font-num:"VT323",monospace;
+    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  }`,
+  },
+  /* ── Misty Metal ───────────────────────────────────────────────────
+       Brushed aluminum. Desaturated and precise, Apple-adjacent industrial.
+       Full surface overrides because this theme's neutrals need exact tuning.
+       SF Pro / SF Mono feel native on macOS; fall through to system stack
+       gracefully on Linux.                                                   */
+  "misty-metal": {
+    name: "Misty Metal",
+    swatches: ["#1E222A", "#A9C7FF", "#7FD6C2", "#D2A679", "#E57373"],
+    css: `:root{
+  --bg:#1E222A;
+  --txt:#E6EAF2;
+  --txt-dim:#8A95A8;
+  --txt-muted:#3A404C;
+  --hot:#E57373;
+
+  --bg-bar:rgba(255,255,255,.04);
+  --bg-overlay:rgba(255,255,255,.03);
+  --bg-card:rgba(255,255,255,.04);
+  --bg-card-hdr:rgba(255,255,255,.03);
+  --bg-input:rgba(255,255,255,.05);
+  --bg-canvas:rgba(0,0,0,.20);
+  --bg-code:rgba(255,255,255,.06);
+  --bg-hover:rgba(255,255,255,.06);
+  --bg-hover-subtle:rgba(255,255,255,.03);
+  --bg-active:rgba(255,255,255,.08);
+  --bg-sel:rgba(111,168,255,.12);
+  --bg-danger:rgba(229,115,115,.14);
+  --bg-err:rgba(229,115,115,.09);
+  --track-bg:rgba(255,255,255,.07);
+
+  --bdr:rgba(255,255,255,.08);
+  --bhi:rgba(255,255,255,.14);
+  --bdr-accent:rgba(169,199,255,.28);
+  --bdr-err:rgba(229,115,115,.22);
+
+  --r:12px; --rs:7px;
+
+  --cpu:#A9C7FF;
+  --gpu:#7FD6C2;
+  --fan:#D2A679;
+  --ssd:#C3A6FF;
+  --ram:#C4CEDE;
+  --net:#7CCFD0;
+
+  --w1:#6FD98C;
+  --w2:#B9D96F;
+  --w3:#E6C46A;
+  --w4:#E69A5C;
+  --w5:#E57373;
+
+  --meter:rgba(196,206,222,.42);
+  --dot-off-warn:rgba(196,206,222,.12);
+  --dot-off-meter:rgba(196,206,222,.07);
+  --spark-grid:rgba(255,255,255,.06);
+  --spark-vtick:rgba(255,255,255,.04);
+
+  --font-ui:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-num:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
+  --font-code:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
+}`,
+  },
+  /* ── Reclaimer Relay ────────────────────────────────────────────────
        UNSC clean-room tech. Cool blues and warm amber status lights
        against a near-black hull. Orbitron is the Halo font.                 */
   "reclaimer-relay": {
@@ -403,7 +601,7 @@ const THEMES = {
 }`,
   },
 
-  /* ── 8. Sangheili Signal ───────────────────────────────────────────────
+  /* ── Sangheili Signal ───────────────────────────────────────────────
        Covenant plasma tech. Bioluminescent purples and alien greens.
        Warn ramp goes violet → magenta → acid → cyan → hot — deliberately
        non-temperature to feel alien. Severity still escalates left→right.    */
@@ -420,7 +618,7 @@ const THEMES = {
   --bdr:rgba(174,124,255,.09);
   --bhi:rgba(174,124,255,.18);
 
-  --r:8px; --rs:5px;
+  --r:14px; --rs:8px;
 
   --cpu:#AE7CFF;
   --gpu:#F47DFF;
@@ -446,279 +644,97 @@ const THEMES = {
   --font-code:"Space Mono",ui-monospace,monospace;
 }`,
   },
-
-  /* ── 9. Tokyo Twilight ────────────────────────────────────────────────
-       Neon noir. Rain-slicked streets, glowing kanji, vending machine glow.
-       Rajdhani for UI reads like sharp signage. Space Mono for nums
-       has the right matrix-terminal energy.                                  */
-  "tokyo-twilight": {
-    name: "Tokyo Twilight",
-    swatches: ["#0A1022", "#FF5EA8", "#8A7CFF", "#49E0FF", "#FFD3BF"],
-    css: `:root{
-  --bg:#0A1022;
-  --txt:#F8DDF0;
-  --txt-dim:#8A7AA0;
-  --txt-muted:#261E38;
-  --hot:#FF4968;
-
-  --bdr:rgba(255,94,168,.09);
-  --bhi:rgba(255,94,168,.18);
-
-  --r:10px; --rs:6px;
-
-  --cpu:#FF5EA8;
-  --gpu:#8A7CFF;
-  --fan:#49E0FF;
-  --ssd:#FF8B6B;
-  --ram:#FFD3BF;
-  --net:#6AC8FF;
-
-  --w1:#49E0FF;
-  --w2:#8A7CFF;
-  --w3:#C98BFF;
-  --w4:#FF5EA8;
-  --w5:#FF4968;
-
-  --meter:rgba(138,124,255,.44);
-  --dot-off-warn:rgba(255,94,168,.12);
-  --dot-off-meter:rgba(255,94,168,.07);
-  --spark-grid:rgba(73,224,255,.06);
-  --spark-vtick:rgba(73,224,255,.03);
-
-  --font-ui:"Rajdhani",system-ui,sans-serif;
-  --font-num:"Space Mono",ui-monospace,monospace;
-  --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
-}`,
-  },
-
-  /* ── 10. Misty Metal ───────────────────────────────────────────────────
-       Brushed aluminum. Desaturated and precise, Apple-adjacent industrial.
-       Full surface overrides because this theme's neutrals need exact tuning.
-       SF Pro / SF Mono feel native on macOS; fall through to system stack
-       gracefully on Linux.                                                   */
-  "misty-metal": {
-    name: "Misty Metal",
-    swatches: ["#1E222A", "#A9C7FF", "#7FD6C2", "#D2A679", "#E57373"],
-    css: `:root{
-  --bg:#1E222A;
-  --txt:#E6EAF2;
-  --txt-dim:#8A95A8;
-  --txt-muted:#3A404C;
-  --hot:#E57373;
-
-  --bg-bar:rgba(255,255,255,.04);
-  --bg-overlay:rgba(255,255,255,.03);
-  --bg-card:rgba(255,255,255,.04);
-  --bg-card-hdr:rgba(255,255,255,.03);
-  --bg-input:rgba(255,255,255,.05);
-  --bg-canvas:rgba(0,0,0,.20);
-  --bg-code:rgba(255,255,255,.06);
-  --bg-hover:rgba(255,255,255,.06);
-  --bg-hover-subtle:rgba(255,255,255,.03);
-  --bg-active:rgba(255,255,255,.08);
-  --bg-sel:rgba(111,168,255,.12);
-  --bg-danger:rgba(229,115,115,.14);
-  --bg-err:rgba(229,115,115,.09);
-  --track-bg:rgba(255,255,255,.07);
-
-  --bdr:rgba(255,255,255,.08);
-  --bhi:rgba(255,255,255,.14);
-  --bdr-accent:rgba(169,199,255,.28);
-  --bdr-err:rgba(229,115,115,.22);
-
-  --r:10px; --rs:6px;
-
-  --cpu:#A9C7FF;
-  --gpu:#7FD6C2;
-  --fan:#D2A679;
-  --ssd:#A7B0FF;
-  --ram:#C4CEDE;
-  --net:#7CCFD0;
-
-  --w1:#6FD98C;
-  --w2:#B9D96F;
-  --w3:#E6C46A;
-  --w4:#E69A5C;
-  --w5:#E57373;
-
-  --meter:rgba(196,206,222,.42);
-  --dot-off-warn:rgba(196,206,222,.12);
-  --dot-off-meter:rgba(196,206,222,.07);
-  --spark-grid:rgba(255,255,255,.06);
-  --spark-vtick:rgba(255,255,255,.04);
-
-  --font-ui:"SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-  --font-num:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
-  --font-code:"SF Mono","IBM Plex Mono",ui-monospace,monospace;
-}`,
-  },
-  /* ── 11. Matrix Terminal ───────────────────────────────────────────────
-     Monochrome phosphor display. Single-channel intensity logic.
-     Feels like talking directly to the machine.                      */
-  "mono-matrix": {
-    name: "Mono Matrix",
-    swatches: ["#050805", "#00ff66", "#00cc55", "#009944", "#66ff99"],
-    css: `:root{
-    --bg:#050805;
-    --txt:#b6ffcc;
-    --txt-dim:#5bbf7a;
-    --txt-muted:#1a3322;
-    --hot:#ff3b3b;
-
-    --bdr:rgba(0,255,102,.10);
-    --bhi:rgba(0,255,102,.20);
-
-    --r:2px; --rs:1px;
-
-    --cpu:#00ff66;
-    --gpu:#66ff99;
-    --fan:#00cc55;
-    --ssd:#99ffcc;
-    --ram:#33ff88;
-    --net:#00dd77;
-
-    --w1:#00ff66;
-    --w2:#00cc55;
-    --w3:#009944;
-    --w4:#66ff99;
-    --w5:#b6ffcc;
-
-    --meter:rgba(0,255,102,.40);
-    --dot-off-warn:rgba(0,255,102,.10);
-    --dot-off-meter:rgba(0,255,102,.06);
-    --spark-grid:rgba(0,255,102,.05);
-    --spark-vtick:rgba(0,255,102,.03);
-
-    --font-ui:"VT323",monospace;
-    --font-num:"VT323",monospace;
-    --font-code:"IBM Plex Mono",ui-monospace,monospace;
-  }`,
-  },
-  /* ── 12. Blueprint ─────────────────────────────────────────────────────
-     Engineering drawing aesthetic. Structured, annotated, precise.
-     Feels like instrumentation rather than UI.                      */
-  blueprint: {
-    name: "Bold Blueprint",
-    swatches: ["#0b1f3a", "#71c9ff", "#b3e5ff", "#ffe08a", "#e7f5ff"],
-    css: `:root{
-    --bg:#0b1f3a;
-    --txt:#e7f5ff;
-    --txt-dim:#9bb3c7;
-    --txt-muted:#2a3f57;
-    --hot:#ff6b6b;
-
-    --bdr:rgba(113,201,255,.12);
-    --bhi:rgba(113,201,255,.22);
-
-    --r:3px; --rs:2px;
-
-    --cpu:#71c9ff;
-    --gpu:#b3e5ff;
-    --fan:#ffe08a;
-    --ssd:#8fd3ff;
-    --ram:#cfe9ff;
-    --net:#a3d5ff;
-
-    --w1:#71c9ff;
-    --w2:#8fd3ff;
-    --w3:#b3e5ff;
-    --w4:#ffe08a;
-    --w5:#ff6b6b;
-
-    --meter:rgba(113,201,255,.50);
-    --dot-off-warn:rgba(231,245,255,.10);
-    --dot-off-meter:rgba(231,245,255,.06);
-    --spark-grid:rgba(113,201,255,.10);
-    --spark-vtick:rgba(113,201,255,.05);
-
-    --font-ui:"IBM Plex Mono",ui-monospace,monospace;
-    --font-num:"IBM Plex Mono",ui-monospace,monospace;
-    --font-code:"IBM Plex Mono",ui-monospace,monospace;
-  }`,
-  },
-  /* ── 13. Midnight Emerald ──────────────────────────────────────────────
-     Quiet luxury. Dark glass, brass glow, controlled saturation.
-     Feels like a precision instrument in a museum.                   */
-  "midnight-malachite": {
+  /* ── Radiant ───────────────────────────────────────────────────────
+     Midnight Malachite, retuned — the malachite-and-gold DNA was already
+     doing ancient-temple-at-night, so this leans into it fully as the
+     light-side half of a Radiant/Dire pair. Emerald, antique gold, warm
+     ember-red escalation. Pairs with Dire (below); same font stack for
+     both, so the only contrast between the two is chromatic — like the
+     two sides of the same UI shell reskinned.                        */
+  radiant: {
     name: "Midnight Malachite",
-    swatches: ["#07140f", "#2dd4bf", "#6ee7b7", "#d4af37", "#e5e7eb"],
+    swatches: ["#071510", "#34D399", "#D4AF37", "#F0E4B8", "#FF6B5C"],
     css: `:root{
-    --bg:#07140f;
-    --txt:#e5e7eb;
-    --txt-dim:#9aa7a1;
-    --txt-muted:#1f2d28;
-    --hot:#fb7185;
+    --bg:#071510;
+    --txt:#EAF2E8;
+    --txt-dim:#9DB39A;
+    --txt-muted:#1E2E22;
+    --hot:#FF6B5C;
 
-    --bdr:rgba(45,212,191,.10);
-    --bhi:rgba(45,212,191,.20);
+    --bdr:rgba(52,211,153,.10);
+    --bhi:rgba(52,211,153,.20);
 
     --r:10px; --rs:6px;
 
-    --cpu:#2dd4bf;
-    --gpu:#6ee7b7;
-    --fan:#d4af37;
-    --ssd:#94a3b8;
-    --ram:#a7f3d0;
-    --net:#5eead4;
+    --cpu:#34D399;
+    --gpu:#86EFAC;
+    --fan:#D4AF37;
+    --ssd:#7FD8A8;
+    --ram:#F0E4B8;
+    --net:#4ADE80;
 
-    --w1:#2dd4bf;
-    --w2:#6ee7b7;
-    --w3:#d4af37;
-    --w4:#94a3b8;
-    --w5:#fb7185;
+    --w1:#34D399;
+    --w2:#A3E635;
+    --w3:#D4AF37;
+    --w4:#F59E0B;
+    --w5:#FF6B5C;
 
-    --meter:rgba(45,212,191,.45);
-    --dot-off-warn:rgba(229,231,235,.10);
-    --dot-off-meter:rgba(229,231,235,.06);
-    --spark-grid:rgba(45,212,191,.06);
-    --spark-vtick:rgba(45,212,191,.03);
+    --meter:rgba(52,211,153,.48);
+    --dot-off-warn:rgba(240,228,184,.12);
+    --dot-off-meter:rgba(240,228,184,.08);
+    --spark-grid:rgba(52,211,153,.06);
+    --spark-vtick:rgba(52,211,153,.03);
 
     --font-ui:"Space Grotesk",system-ui,sans-serif;
     --font-num:"IBM Plex Mono",ui-monospace,monospace;
-    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
   }`,
   },
-  /* ── 14. Industrial Amber Core ─────────────────────────────────────────
-     Analog control room instrumentation. CRT amber phosphor,
-     warning bias, and heavy utilitarian contrast.
-     Feels like a reactor panel that refuses to go dim.               */
-  "atomic-amber": {
-    name: "Atomic Amber",
-    swatches: ["#120b05", "#ffb000", "#ff7a18", "#ffd36a", "#3a2a1a"],
+  /* ── 14. Dire ──────────────────────────────────────────────────────────
+     Atomic Amber's reactor intensity got folded into Atomic Nixie above,
+     which freed this slot — now the dark-side half of the Radiant pair.
+     Red and black, volcanic/wasteland, sith-adjacent. Same font stack as
+     Radiant on purpose: the contrast between the two factions is entirely
+     chromatic. Warn ramp escalates crimson → ember-orange → blazing red,
+     the same "break the palette's own rule for the top of the ramp" trick
+     Atomic Nixie and Radiant both use.                               */
+  "dire-dusk": {
+    name: "Dire Dusk",
+    swatches: ["#140708", "#E23B4E", "#8B2E3F", "#FF6A3D", "#E8A0A8"],
     css: `:root{
-    --bg:#120b05;
-    --txt:#ffe6b3;
-    --txt-dim:#c7a36a;
-    --txt-muted:#3b2a16;
-    --hot:#ff3b30;
+    --bg:#140708;
+    --txt:#F2DCD9;
+    --txt-dim:#A67A78;
+    --txt-muted:#35181A;
+    --hot:#FF3B3B;
 
-    --bdr:rgba(255,176,0,.12);
-    --bhi:rgba(255,176,0,.22);
+    --bdr:rgba(226,59,78,.10);
+    --bhi:rgba(226,59,78,.20);
 
-    --r:4px; --rs:2px;
+    --r:10px; --rs:6px;
 
-    --cpu:#ffb000;
-    --gpu:#ff7a18;
-    --fan:#ffd36a;
-    --ssd:#ff9a3d;
-    --ram:#ffcf7a;
-    --net:#e6a04a;
+    --cpu:#E23B4E;
+    --gpu:#8B2E3F;
+    --fan:#FF6A3D;
+    --ssd:#C25A6B;
+    --ram:#E8A0A8;
+    --net:#B34848;
 
-    --w1:#ffcf7a;
-    --w2:#ffd36a;
-    --w3:#ffb000;
-    --w4:#ff7a18;
-    --w5:#ff3b30;
+    --w1:#7A3B3F;
+    --w2:#B34848;
+    --w3:#E23B4E;
+    --w4:#FF6A3D;
+    --w5:#FF3B3B;
 
-    --meter:rgba(255,176,0,.55);
-    --dot-off-warn:rgba(255,176,0,.12);
-    --dot-off-meter:rgba(255,176,0,.08);
-    --spark-grid:rgba(255,176,0,.06);
-    --spark-vtick:rgba(255,176,0,.03);
+    --meter:rgba(226,59,78,.50);
+    --dot-off-warn:rgba(242,220,217,.13);
+    --dot-off-meter:rgba(242,220,217,.08);
+    --spark-grid:rgba(242,220,217,.06);
+    --spark-vtick:rgba(242,220,217,.03);
 
-    --font-ui:"IBM Plex Mono",ui-monospace,monospace;
-    --font-num:"Share Tech Mono",ui-monospace,monospace;
-    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+    --font-ui:"Space Grotesk",system-ui,sans-serif;
+    --font-num:"IBM Plex Mono",ui-monospace,monospace;
+    --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
   }`,
   },
 };

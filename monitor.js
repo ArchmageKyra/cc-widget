@@ -232,8 +232,6 @@ let cfg = {
   size: "s",
   hiddenMounts: [],
   fanLabels: {},
-  watchedPaths: [],
-  pathLabels: {},
   rowStyles: {},
   customRows: {},
   rowOrder: {},
@@ -293,16 +291,24 @@ function saveCfg() {
 // ═══════════════════════════════════════════════════════════════
 function getRowStyle(row) {
   const saved = cfg.rowStyles?.[row.sid];
-  if (saved && (saved !== "bar" || row.pctSid)) return saved;
+  if (saved) {
+    if (saved === "bar" && !row.pctSid) {
+      /* bar invalid without pctSid — fall through */
+    } else return saved;
+  }
   if (row.pctSid) return "bar";
   if (row.mode === "meter") return "dots-meter";
-  return "dots-warn";
+  if (row.mode) return "dots-warn";
+  return "num-only"; // rows with no mode/pctSid are implicitly num-only
 }
 
 function cycleRowStyle(row) {
   const options = row.pctSid
-    ? ["bar", "dots-warn", "dots-meter"]
-    : ["dots-warn", "dots-meter"];
+    ? ["bar", "dots-warn", "dots-meter", "num-only"]
+    : row.mode
+      ? ["dots-warn", "dots-meter", "num-only"]
+      : [];
+  if (!options.length) return;
   const current = getRowStyle(row);
   const next = options[(options.indexOf(current) + 1) % options.length];
   cfg.rowStyles ??= {};
@@ -443,7 +449,12 @@ function _afford(elem, row) {
 
 // Appends a style-cycle button to a row element when in edit mode.
 // Call this before any assign/remap badge so the order reads naturally.
-const _STYLE_LABELS = { bar: "▬", "dots-warn": "●●", "dots-meter": "○○" };
+const _STYLE_LABELS = {
+  bar: "▬",
+  "dots-warn": "●●",
+  "dots-meter": "○○",
+  "num-only": "#",
+};
 function _styleToggle(elem, row) {
   if (!editMode) return;
   if (!row.pctSid && !row.mode) return; // no meaningful options
@@ -574,6 +585,7 @@ function removeCustomRow(cardId, sid) {
   delete cfg.slots[sid];
   if (cfg.rowStyles) delete cfg.rowStyles[sid];
   saveCfg();
+  _sendFolderPaths();
   buildCards();
   renderDashboard(liveDevices);
   requestAnimationFrame(() => autoResize());
@@ -606,15 +618,40 @@ function _renderCustomRowSection(def, container) {
               }
             },
           },
-          {
+        ];
+        // Style option only when dots or bar are meaningful
+        if (row.pctSid || row.mode) {
+          items.push({
             label: `Style: ${_STYLE_LABELS[getRowStyle(row)] ?? "?"}`,
             onClick: () => cycleRowStyle(row),
-          },
-          {
+          });
+        }
+        // Folder rows get "Change path", sensor rows get "Change sensor"
+        if (row.kind === "folder") {
+          items.push({
+            label: "Change path…",
+            onClick: () => {
+              const newPath = prompt("Folder path:", row.path);
+              if (!newPath?.trim() || newPath.trim() === row.path) return;
+              row.path = newPath.trim();
+              cfg.slots[row.sid] = {
+                ...cfg.slots[row.sid],
+                name: `Folder ${row.path}`,
+                label: `Folder: ${row.path}`,
+              };
+              saveCfg();
+              _sendFolderPaths();
+              buildCards();
+              renderDashboard(liveDevices);
+              requestAnimationFrame(() => autoResize());
+            },
+          });
+        } else {
+          items.push({
             label: "Change sensor…",
             onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, true),
-          },
-        ];
+          });
+        }
         if (idx > 0)
           items.push({
             label: "Move up",
@@ -666,7 +703,9 @@ const fmt1 = (v, u) =>
     ? "--"
     : u === "°C" || u === "MB/s"
       ? v.toFixed(1)
-      : Math.round(v).toString();
+      : u === "GB"
+        ? v.toFixed(2)
+        : Math.round(v).toString();
 
 function showScreen(id) {
   ["s-setup", "s-dash"].forEach((s) =>
@@ -838,23 +877,16 @@ window.onLinuxStats = function (stats) {
 
   Object.entries(stats.disks || {}).forEach(([mount, disk]) => {
     channels.push(
-      {
-        name: `Disk ${mount} Usage`,
-        duty: disk.percent,
-      },
-      {
-        name: `Disk ${mount} Used`,
-        watts: disk.used_gb,
-      },
-      {
-        name: `Disk ${mount} Free`,
-        watts: disk.free_gb,
-      },
-      {
-        name: `Disk ${mount} Total`,
-        watts: disk.total_gb,
-      },
+      { name: `Disk ${mount} Usage`, duty: disk.percent },
+      { name: `Disk ${mount} Used`, watts: disk.used_gb },
+      { name: `Disk ${mount} Free`, watts: disk.free_gb },
+      { name: `Disk ${mount} Total`, watts: disk.total_gb },
     );
+  });
+
+  // Folder sizes from du (background-computed by Python)
+  Object.entries(stats.folder_sizes || {}).forEach(([path, gb]) => {
+    channels.push({ name: `Folder ${path}`, watts: gb });
   });
 
   linuxDevices = [
@@ -946,6 +978,7 @@ function onSSEPacket(payload) {
     // Enter edit mode automatically on first-time setup
     editMode = !hasCCSlots;
     buildCards();
+    _sendFolderPaths(); // Re-sync Python with any persisted folder rows
     showScreen("s-dash");
     // Update gear button state after screen transition
     requestAnimationFrame(() => {
@@ -1034,17 +1067,19 @@ function buildLeaves(devices) {
           dLbl,
           label: `${dLbl} → ${ch.name} (Duty)`,
         });
-      if (ch.watts !== undefined)
+      if (ch.watts !== undefined) {
+        const isFolder = ch.name?.startsWith("Folder ");
         out.push({
           uid: dev.uid,
           kind: "channel",
           name: ch.name,
           field: "watts",
           value: ch.watts,
-          unit: "W",
+          unit: isFolder ? "GB" : "W",
           dLbl,
-          label: `${dLbl} → ${ch.name} (Watts)`,
+          label: `${dLbl} → ${ch.name} ${isFolder ? "(GB)" : "(Watts)"}`,
         });
+      }
     }
   }
   return out;
@@ -1056,6 +1091,18 @@ const isAssigned = (l) => {
   return Object.values(cfg.slots).some((s) => slotKey(s) === k);
 };
 const shortLabel = (lbl) => (lbl ? lbl.split("→").pop().trim() : "");
+
+// Collects all folder-kind custom row paths across every card and tells
+// Python which paths to track via du.  Call whenever custom rows change.
+function _sendFolderPaths() {
+  const paths = [];
+  for (const rows of Object.values(cfg.customRows ?? {})) {
+    for (const row of rows) {
+      if (row.kind === "folder" && row.path) paths.push(row.path);
+    }
+  }
+  gtksend("watch:" + JSON.stringify(paths));
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  SETUP SCREEN
@@ -1268,6 +1315,75 @@ function openPicker(
         body.appendChild(row);
       }
     }
+  }
+
+  // ── Folder size option — available for any custom row ──────────
+  // Show when adding a new custom row or remapping an existing one.
+  const isCustomCtx = newRowCard || slotId?.startsWith("custom_");
+  if (isCustomCtx) {
+    const folderSec = el("div", "picker-sec");
+    folderSec.textContent = "Folder Size";
+    body.appendChild(folderSec);
+
+    const folderOpt = el("div", "picker-add");
+    folderOpt.textContent = "+ Monitor folder path…";
+    folderOpt.onclick = () => {
+      const rawPath = prompt("Folder path to monitor:", "/home");
+      if (!rawPath?.trim()) return;
+      const path = rawPath.trim();
+      const defaultLbl = path === "/" ? "root" : path.split("/").pop() || path;
+      const rawLbl = prompt("Label:", defaultLbl);
+      if (rawLbl === null) return; // user cancelled
+      const lbl = rawLbl.trim() || defaultLbl;
+
+      const slot = {
+        uid: "linux-system",
+        kind: "channel",
+        name: `Folder ${path}`,
+        field: "watts",
+        unit: "GB",
+        dLbl: "Linux",
+        label: `Folder: ${path}`,
+      };
+
+      if (newRowCard) {
+        // Creating a brand-new custom row
+        const sid = `custom_${newRowCard}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        const row = {
+          sid,
+          lbl,
+          noPlot: true,
+          custom: true,
+          kind: "folder",
+          path,
+        };
+        cfg.customRows ??= {};
+        (cfg.customRows[newRowCard] ??= []).push(row);
+        cfg.rowOrder ??= {};
+        (cfg.rowOrder[newRowCard] ??= []).push(sid);
+        cfg.slots[sid] = slot;
+      } else {
+        // Remapping an existing custom row
+        cfg.slots[slotId] = slot;
+        // Mark the row as a folder row and record its path
+        for (const rows of Object.values(cfg.customRows ?? {})) {
+          const r = rows.find((x) => x.sid === slotId);
+          if (r) {
+            r.kind = "folder";
+            r.path = path;
+            break;
+          }
+        }
+      }
+
+      saveCfg();
+      closePicker();
+      _sendFolderPaths();
+      buildCards();
+      renderDashboard(liveDevices);
+      requestAnimationFrame(() => autoResize());
+    };
+    body.appendChild(folderOpt);
   }
 
   document.getElementById("picker").classList.remove("hide");
@@ -1814,7 +1930,7 @@ function _buildSrRow(row, accentColor, dashStyle = "solid") {
 <span class="sr-lbl">${row.lbl}</span>
 <span class="sr-val" id="sv-${row.sid}">--</span>
 <span class="sr-unit">${unit}</span>
-${row.mode ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
+${row.mode && getRowStyle(row) !== "num-only" ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
   return srow;
 }
 
@@ -2055,95 +2171,6 @@ function buildCards() {
             rrow.appendChild(restBtn);
             body.appendChild(rrow);
           }
-        }
-
-        // Watched paths — user-pinned paths (sent to Python)
-        const autoMounts = new Set(
-          diskChs.map((ch) =>
-            ch.name.replace(/^Disk /, "").replace(/ Usage$/, ""),
-          ),
-        );
-        for (const wp of cfg.watchedPaths ?? []) {
-          // Already shown by auto-discovery? skip
-          if (autoMounts.has(wp)) continue;
-          if ((cfg.hiddenMounts ?? []).includes(wp)) continue;
-          const safeId = "ad-" + wp.replace(/[^a-zA-Z0-9]/g, "_");
-          const customLbl =
-            cfg.pathLabels?.[wp] ||
-            (wp === "/" ? "root" : wp.split("/").pop() || wp);
-          const srow = el("div", "sr");
-          srow.id = "bar-" + safeId;
-          srow.dataset.sub = "--";
-          srow.innerHTML = `
-<span class="sr-accent" style="background:${cardColor}"></span>
-<span class="sr-lbl" id="bl-${safeId}">${esc(customLbl)}</span>
-<span class="br-sub" id="bv-${safeId}" aria-hidden="true">--</span>
-<span class="br-pct-num" id="bp-${safeId}">--</span><span class="br-pct-unit">%</span>
-<div class="br-track"><div class="br-fill" id="bf-${safeId}" style="width:0%;background:${cardColor}"></div></div>`;
-          if (editMode) {
-            const rmBtn = el("button", "slot-clr");
-            rmBtn.title = `Remove ${wp}`;
-            rmBtn.textContent = "×";
-            rmBtn.onclick = (e) => {
-              e.stopPropagation();
-              cfg.watchedPaths = (cfg.watchedPaths ?? []).filter(
-                (p) => p !== wp,
-              );
-              saveCfg();
-              gtksend("watch:" + JSON.stringify(cfg.watchedPaths));
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
-            };
-            srow.appendChild(rmBtn);
-            const rnBtn = el("button", "assign-badge");
-            rnBtn.textContent = "✎";
-            rnBtn.title = "Rename label";
-            rnBtn.onclick = (e) => {
-              e.stopPropagation();
-              const nl = prompt("Label:", customLbl);
-              if (nl !== null) {
-                cfg.pathLabels ??= {};
-                cfg.pathLabels[wp] = nl.trim() || customLbl;
-                saveCfg();
-                const lEl = document.getElementById("bl-" + safeId);
-                if (lEl) lEl.textContent = cfg.pathLabels[wp];
-              }
-            };
-            srow.appendChild(rnBtn);
-          }
-          body.appendChild(srow);
-        }
-
-        // Edit mode: "+ Watch path" input
-        if (editMode) {
-          const watchRow = el("div", "watch-path-row");
-          watchRow.innerHTML = `
-<input class="watch-path-input" id="watch-path-inp" type="text"
-  placeholder="/mnt/data  or  /home/user" spellcheck="false">
-<button class="assign-badge" id="watch-path-add" title="Add path">+</button>`;
-          const doAdd = () => {
-            const inp = document.getElementById("watch-path-inp");
-            const val = (inp?.value ?? "").trim();
-            if (!val) return;
-            cfg.watchedPaths ??= [];
-            if (!cfg.watchedPaths.includes(val)) {
-              cfg.watchedPaths.push(val);
-              saveCfg();
-              gtksend("watch:" + JSON.stringify(cfg.watchedPaths));
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
-            } else if (inp) {
-              inp.value = "";
-            }
-          };
-          watchRow.querySelector("#watch-path-add").onclick = doAdd;
-          // also submit on Enter
-          watchRow.addEventListener("keydown", (e) => {
-            if (e.key === "Enter") doAdd();
-          });
-          body.appendChild(watchRow);
         }
       }
 
