@@ -732,6 +732,28 @@ function withAlpha(color, a) {
   return `rgba(128,128,128,${a})`;
 }
 
+// ── WCAG 2.x contrast ratio (hex-only — Theme Builder swatches are
+//    always #rrggbb) ── returns a value from 1 (no contrast) to 21.
+function wcagContrast(hex1, hex2) {
+  const toRgb = (h) => {
+    h = (h || "").replace("#", "");
+    if (h.length !== 6) return [0, 0, 0];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) || 0);
+  };
+  const relLuminance = ([r, g, b]) => {
+    const f = (c) => {
+      c /= 255;
+      return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const [R, G, B] = [r, g, b].map(f);
+    return 0.2126 * R + 0.7152 * G + 0.0722 * B;
+  };
+  const L1 = relLuminance(toRgb(hex1));
+  const L2 = relLuminance(toRgb(hex2));
+  const [light, dark] = L1 > L2 ? [L1, L2] : [L2, L1];
+  return (light + 0.05) / (dark + 0.05);
+}
+
 // ═══════════════════════════════════════════════════════════════
 //  DOTS
 // ═══════════════════════════════════════════════════════════════
@@ -790,6 +812,7 @@ _bbTheme.onclick = () => {
       document.getElementById("tc-tok").value = cfg.token;
     }
   }
+  requestAnimationFrame(() => autoResize());
 };
 // Click-outside closes flyout
 document.getElementById("app").addEventListener(
@@ -802,6 +825,7 @@ document.getElementById("app").addEventListener(
     ) {
       _flyout.classList.remove("open");
       _bbTheme.classList.remove("on");
+      requestAnimationFrame(() => autoResize());
     }
   },
   true,
@@ -1414,6 +1438,7 @@ function initThemeBuilder() {
     const open = body.classList.toggle("open");
     toggle.classList.toggle("open", open);
     if (open) syncBuilderFromActive();
+    requestAnimationFrame(() => autoResize());
   };
 
   const getCSSVar = (n) =>
@@ -1505,6 +1530,8 @@ function initThemeBuilder() {
     const rval = document.getElementById("tb-radius-val");
     if (slider) slider.value = bv["--r"];
     if (rval) rval.textContent = bv["--r"] + "px";
+
+    updateContrastBadges();
   }
 
   // ── Live gradient bar for the warn ramp ───────────────────
@@ -1513,6 +1540,32 @@ function initThemeBuilder() {
     if (!bar) return;
     const stops = [1, 2, 3, 4, 5].map((i) => bv["--w" + i]).join(", ");
     bar.style.background = `linear-gradient(to right, ${stops})`;
+  }
+
+  // ── WCAG contrast checker — live ratio vs --bg for every text colour ──
+  // AA body-text threshold is 4.5:1; AA large-text/UI threshold is 3:1.
+  // ok = passes 4.5:1, warn = passes 3:1 only, bad = fails both.
+  const CONTRAST_PAIRS = [
+    ["--txt", "tbc-txt"],
+    ["--txt-dim", "tbc-txt-dim"],
+    ["--hot", "tbc-hot"],
+  ];
+  function updateContrastBadges() {
+    for (const [fgVar, badgeId] of CONTRAST_PAIRS) {
+      const badge = document.getElementById(badgeId);
+      if (!badge) continue;
+      const ratio = wcagContrast(bv[fgVar], bv["--bg"]);
+      const grade = ratio >= 4.5 ? "ok" : ratio >= 3 ? "warn" : "bad";
+      badge.textContent = ratio.toFixed(1) + ":1";
+      badge.classList.remove("ok", "warn", "bad");
+      badge.classList.add(grade);
+      badge.title =
+        grade === "ok"
+          ? "Passes WCAG AA for body text (≥4.5:1)"
+          : grade === "warn"
+            ? "Passes WCAG AA for large text only (≥3:1) — risky for small labels"
+            : "Fails WCAG AA — hard to read against this background";
+    }
   }
 
   // ── Wire all color inputs ──────────────────────────────────
@@ -1553,6 +1606,11 @@ function initThemeBuilder() {
 
       // Warn ramp gradient
       if (varName.match(/--w[0-9]/)) updateWarnGradient();
+
+      // Contrast badges — any of these four changes what's being measured
+      if (["--bg", "--txt", "--txt-dim", "--hot"].includes(varName)) {
+        updateContrastBadges();
+      }
     });
   });
 
@@ -2204,11 +2262,26 @@ function autoResize() {
   // Don't send a zero-height resize while dashboard is hidden
   if (document.getElementById("s-dash").classList.contains("hide")) return;
   const sbarH = document.getElementById("sbar").offsetHeight;
-  const cardsH = document.getElementById("cards").scrollHeight;
-  const screenPad = 24; // .screen { padding: 12px } × 2 sides
   const borders = 2; // #app top + bottom border
-  const h = cardsH + sbarH + screenPad + borders;
   const w = (SIZES[cfg.size] || SIZES.s).width;
+
+  let contentH;
+  if (_flyout.classList.contains("open")) {
+    // Flyout is absolutely positioned and capped by max-height: calc(100% - 4px),
+    // so it can only grow as tall as the window already is — measure its true
+    // content height (handle + inner, ignoring the inner's own overflow-y:auto
+    // clip) and size the window to fit, instead of leaving it to scroll.
+    const handle = document.querySelector(".flyout-handle");
+    const inner = document.querySelector(".flyout-inner");
+    const handleH = handle.offsetHeight + 7; // its own margin-top isn't in offsetHeight
+    contentH = handleH + inner.scrollHeight;
+  } else {
+    const cardsH = document.getElementById("cards").scrollHeight;
+    const screenPad = 24; // .screen { padding: 12px } × 2 sides
+    contentH = cardsH + screenPad;
+  }
+
+  const h = contentH + sbarH + borders;
   gtksend("resize:" + w + ":" + h);
 }
 

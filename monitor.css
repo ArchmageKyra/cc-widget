@@ -848,6 +848,31 @@ h2 {
     text-align: right;
     letter-spacing: 0.02em;
 }
+/* WCAG contrast badge — live ratio of a text colour against --bg */
+.tb-contrast {
+    font-family: var(--font-code);
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1.5px 5px;
+    border-radius: 3px;
+    min-width: 32px;
+    text-align: center;
+    letter-spacing: 0.01em;
+    flex-shrink: 0;
+    cursor: help;
+}
+.tb-contrast.ok {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.14);
+}
+.tb-contrast.warn {
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.14);
+}
+.tb-contrast.bad {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.14);
+}
 .tb-radius-row {
     display: flex;
     align-items: center;
