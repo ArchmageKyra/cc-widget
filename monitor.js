@@ -235,6 +235,7 @@ let cfg = {
   rowStyles: {},
   customRows: {},
   rowOrder: {},
+  showPeakMarkers: true,
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -248,6 +249,9 @@ let sseAbort = null;
 let pinned = false;
 let locked = false;
 let sparks = {};
+// Highest value seen per sid since launch — resets on relaunch by design
+// ("session" peak), surfaced via the existing hover sub-tip mechanism.
+let sessionPeaks = {};
 
 function _fmtUptime(ms) {
   const s = Math.floor(ms / 1000);
@@ -707,6 +711,16 @@ const fmt1 = (v, u) =>
         ? v.toFixed(2)
         : Math.round(v).toString();
 
+// Formats an elapsed-time span (ms) for the sparkline's time-horizon
+// label — e.g. "48s", "2m". Returns null while there isn't enough
+// history yet to be worth showing (avoids a flash of "0s" on launch).
+function _fmtSpan(ms) {
+  if (typeof ms !== "number" || ms < 4000) return null;
+  const s = Math.round(ms / 1000);
+  if (s < 90) return `${s}s`;
+  return `${Math.round(s / 60)}m`;
+}
+
 function showScreen(id) {
   ["s-setup", "s-dash"].forEach((s) =>
     document.getElementById(s).classList.toggle("hide", s !== id),
@@ -752,6 +766,41 @@ function wcagContrast(hex1, hex2) {
   const L2 = relLuminance(toRgb(hex2));
   const [light, dark] = L1 > L2 ? [L1, L2] : [L2, L1];
   return (light + 0.05) / (dark + 0.05);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SESSION PEAKS
+//  Tracks the highest value seen per sid since launch and surfaces
+//  it via the row's existing hover sub-tip (see SUB TOOLTIP above) —
+//  no new chrome, just more info in a place people already hover.
+// ═══════════════════════════════════════════════════════════════
+function _trackPeak(sid, val) {
+  if (typeof val !== "number" || isNaN(val)) return;
+  if (sessionPeaks[sid] === undefined || val > sessionPeaks[sid]) {
+    sessionPeaks[sid] = val;
+  }
+}
+
+function _fmtPeak(val, unit) {
+  if (typeof val !== "number" || isNaN(val)) return null;
+  const numStr = fmt1(val, unit);
+  const tight = unit === "°C" || unit === "%" || !unit; // no space before these
+  return `peak ${numStr}${tight ? "" : " "}${unit || ""}`;
+}
+
+// Writes a row's hover tooltip as [extra] · [peak], skipping either part
+// when absent. rowEl is looked up by sid since a row renders as either
+// an "sr-" (dot/value) element or a "bar-" (fill bar) element depending
+// on its current display style, never both.
+function _updatePeakTip(sid, unit, extra) {
+  const peakStr = _fmtPeak(sessionPeaks[sid], unit);
+  const parts = [];
+  if (extra && extra !== "--") parts.push(extra);
+  if (peakStr) parts.push(peakStr);
+  const rowEl =
+    document.getElementById("sr-" + sid) ||
+    document.getElementById("bar-" + sid);
+  if (rowEl) rowEl.dataset.sub = parts.length ? parts.join(" · ") : "--";
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1714,6 +1763,19 @@ function initThemeScreen() {
     sb.appendChild(btn);
   }
 
+  // ── Display toggles ──────────────────────────────────────────
+  const peakToggle = document.getElementById("toggle-peak-markers");
+  peakToggle.classList.toggle("on", cfg.showPeakMarkers);
+  peakToggle.setAttribute("aria-checked", String(cfg.showPeakMarkers));
+  peakToggle.onclick = () => {
+    cfg.showPeakMarkers = !cfg.showPeakMarkers;
+    saveCfg();
+    peakToggle.classList.toggle("on", cfg.showPeakMarkers);
+    peakToggle.setAttribute("aria-checked", String(cfg.showPeakMarkers));
+    // Redraw immediately rather than waiting on the next data push
+    Object.values(sparks).forEach((s) => s.draw());
+  };
+
   // ── Theme tiles ────────────────────────────────────────────
   const g = document.getElementById("theme-grid");
   g.innerHTML = "";
@@ -1982,6 +2044,7 @@ function _buildSrRow(row, accentColor, dashStyle = "solid") {
   const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? "";
   const srow = el("div", "sr");
   srow.id = "sr-" + row.sid;
+  srow.dataset.sub = "--"; // populated with peak info on first render tick
   // Order: [accent] [lbl flex:1] [val] [unit] [dots]
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
@@ -1999,7 +2062,7 @@ function _buildBarRow(row, baseColor, dashStyle = "solid") {
     : row.lbl || mountLabelFromSlot(slot, "");
   const srow = el("div", "sr");
   srow.id = "bar-" + row.sid;
-  if (row.usedSid || row.totalSid) srow.dataset.sub = "--";
+  srow.dataset.sub = "--"; // populated with used/total and/or peak on render
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
 <span class="sr-lbl" id="bl-${row.sid}">${esc(label)}</span>
@@ -2311,6 +2374,7 @@ function renderDashboard(devices) {
           getRowStyle(row) === "dots-meter" ? "meter" : "warn",
         );
       }
+      _trackPeak(row.sid, v);
 
       if ((def.type === "sensor" || def.type === "spark") && row.pctSid) {
         const used = row.usedSid
@@ -2339,11 +2403,9 @@ function renderDashboard(devices) {
         if (bp)
           bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
         if (bv) bv.textContent = barText(used, total);
-        // Keep data-sub in sync for hover tooltip
-        if (rowEl && (row.usedSid || row.totalSid)) {
-          const sub = barText(used, total);
-          if (sub !== "--") rowEl.dataset.sub = sub;
-        }
+        _updatePeakTip(row.sid, "%", barText(used, total));
+      } else {
+        _updatePeakTip(row.sid, sd2?.unit ?? "");
       }
     }
 
@@ -2383,12 +2445,8 @@ function renderDashboard(devices) {
           if (bp)
             bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
           if (bv) bv.textContent = barText(used, total);
-          // Keep data-sub in sync for hover tooltip
-          const barEl = document.getElementById("bar-" + safeId);
-          if (barEl) {
-            const sub = barText(used, total);
-            if (sub !== "--") barEl.dataset.sub = sub;
-          }
+          _trackPeak(safeId, pctRaw);
+          _updatePeakTip(safeId, "%", barText(used, total));
         }
       }
     }
@@ -2398,6 +2456,7 @@ function renderDashboard(devices) {
     if (!spark || !def.rows) continue;
 
     if (def.type === "spark") {
+      spark.tick();
       for (const row of def.rows) {
         if (!cfg.slots[row.sid] || !row.sparkKey || row.noPlot) continue;
         const v = getSlotValue(devices, cfg.slots[row.sid]);
@@ -2411,7 +2470,7 @@ function renderDashboard(devices) {
             spark.push("fan", v);
           }
         } else {
-          spark.push(row.sparkKey, v);
+          spark.push(row.sparkKey, v, sessionPeaks[row.sid]);
         }
       }
     }
@@ -2448,6 +2507,8 @@ function renderDashboard(devices) {
           getRowStyle(row) === "dots-meter" ? "meter" : "warn",
         );
       }
+      _trackPeak(row.sid, v);
+      _updatePeakTip(row.sid, unit);
     }
   }
 }
@@ -2503,12 +2564,19 @@ class DualSpark {
       H - Math.min(1, Math.max(0, v / norm)) * H * 0.86 - H * 0.04;
 
     // ── Grid ─────────────────────────────────────────────────
+    // Boosted to a fixed, legible alpha here rather than trusting each
+    // theme's --spark-grid value — several themes tuned it low enough
+    // to be nearly invisible against their background, which defeats
+    // the point of a level reference. Hue still comes from the theme;
+    // only opacity is normalized. Midline reads a touch brighter as an
+    // at-a-glance "half" mark.
     ctx.save();
-    ctx.strokeStyle = cssVar("--spark-grid") || "rgba(255,255,255,0.06)"; // FIX: was --grid
     ctx.lineWidth = 0.5;
     ctx.setLineDash([]);
+    const gridColor = cssVar("--spark-grid") || "rgba(255,255,255,0.06)";
     for (const pct of [0.25, 0.5, 0.75, 1.0]) {
       const y = H - pct * H * 0.86 - H * 0.04;
+      ctx.strokeStyle = withAlpha(gridColor, pct === 0.5 ? 0.22 : 0.13);
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(W, y);
@@ -2599,6 +2667,7 @@ class MultiSpark {
         dash: [],
         lw: 1.6,
         fill: true,
+        peak: undefined,
       },
       load: {
         data: [],
@@ -2608,6 +2677,7 @@ class MultiSpark {
         dash: [5, 3],
         lw: 1.2,
         fill: false,
+        peak: undefined,
       },
       fan: {
         data: [],
@@ -2617,8 +2687,40 @@ class MultiSpark {
         dash: [2, 4],
         lw: 1.0,
         fill: false,
+        peak: undefined,
       },
     };
+
+    // Peak markers are real DOM elements (not canvas-drawn) parented
+    // to the canvas's own container (.spark-col, which has
+    // position:relative for exactly this), so they can physically
+    // straddle the canvas border and spill into the gap beside it —
+    // canvas content is always clipped to its own bitmap and can
+    // never overflow that way.
+    this.peakDots = {};
+    const container = canvas.parentElement;
+    for (const key of Object.keys(this.S)) {
+      const dot = document.createElement("div");
+      dot.className = "spark-peak-dot";
+      dot.style.display = "none";
+      container.appendChild(dot);
+      this.peakDots[key] = dot;
+    }
+
+    // Wall-clock timestamps paralleling the data buffers — lets the
+    // canvas show an honest "how much time is this window" label
+    // instead of a fixed guess, since push cadence isn't perfectly
+    // regular (it's driven by whichever data source — CC SSE or the
+    // Linux stats timer — fires next).
+    this.times = [];
+  }
+
+  // Call once per render tick (not per push) so the time-horizon label
+  // reflects real elapsed time even when a card's series don't all
+  // push on the same tick.
+  tick() {
+    this.times.push(Date.now());
+    if (this.times.length > this.MAX) this.times.shift();
   }
 
   // Mark a series as auto-scaling: its norm grows to track the
@@ -2648,13 +2750,21 @@ class MultiSpark {
     this.trackMax("fan", rpm);
   }
 
-  push(key, val) {
+  push(key, val, peakOverride) {
     if (val == null || isNaN(val)) return;
     const s = this.S[key];
     if (!s) return;
     if (s.dynamic) this.trackMax(key, val);
     s.data.push(val);
     if (s.data.length > this.MAX) s.data.shift();
+    if (typeof peakOverride === "number") {
+      // Caller has a persistent, correctly-scaled peak already (e.g.
+      // sessionPeaks, which survives card rebuilds) — trust it over
+      // this instance's own short-lived tracking.
+      s.peak = peakOverride;
+    } else if (s.peak === undefined || val > s.peak) {
+      s.peak = val;
+    }
     this.draw();
   }
 
@@ -2672,12 +2782,19 @@ class MultiSpark {
     };
 
     // ── Horizontal gridlines ──────────────────────────────────
+    // Boosted to a fixed, legible alpha here rather than trusting each
+    // theme's --spark-grid value — several themes tuned it low enough
+    // to be nearly invisible against their background, which defeats
+    // the point of a level reference. Hue still comes from the theme;
+    // only opacity is normalized. Midline reads a touch brighter as an
+    // at-a-glance "half" mark.
     ctx.save();
-    ctx.strokeStyle = cssVar("--spark-grid") || "rgba(255,255,255,0.06)"; // FIX: was --grid
     ctx.lineWidth = 0.5;
     ctx.setLineDash([]);
+    const gridColor = cssVar("--spark-grid") || "rgba(255,255,255,0.06)";
     for (const pct of [0.25, 0.5, 0.75, 1.0]) {
       const y = GH - pct * GH * 0.86 - GH * 0.04;
+      ctx.strokeStyle = withAlpha(gridColor, pct === 0.5 ? 0.22 : 0.13);
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(W, y);
@@ -2686,7 +2803,10 @@ class MultiSpark {
 
     // ── Vertical time markers ─────────────────────────────────
     const maxLen = Math.max(...Object.values(S).map((s) => s.data.length), 2);
-    ctx.strokeStyle = cssVar("--spark-vtick");
+    ctx.strokeStyle = withAlpha(
+      cssVar("--spark-vtick") || "rgba(255,255,255,0.04)",
+      0.09,
+    );
     for (let i = maxLen - 1; i >= 0; i -= BAR) {
       const x = xOf(i, maxLen);
       ctx.beginPath();
@@ -2730,6 +2850,56 @@ class MultiSpark {
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
       });
       ctx.stroke();
+      ctx.restore();
+
+      // Peak marker — a DOM element (see constructor), positioned here
+      // to sit at this series' peak height, right on the canvas's
+      // border. Unlike canvas drawing it isn't clipped to the bitmap,
+      // so it can actually spill into the gap beside the canvas rather
+      // than being cut off at the edge. Gated behind a preference since
+      // it's a taste call, not everyone wants the extra marks.
+      const dot = this.peakDots[key];
+      if (dot) {
+        if (cfg.showPeakMarkers && s.peak !== undefined) {
+          dot.style.top = yOf(s.peak, s.norm) + "px";
+          dot.style.background = s.color;
+          dot.style.display = "block";
+        } else {
+          dot.style.display = "none";
+        }
+      }
+    }
+
+    // ── Time-horizon label ────────────────────────────────────
+    // Honest elapsed-time span of the visible window — push cadence
+    // isn't perfectly regular, so this reads real timestamps rather
+    // than assuming a fixed interval per data point. Drawn on a small
+    // scrim (not just bare text) since a fixed corner otherwise gets
+    // run over by whatever's plotted near its floor — this guarantees
+    // legibility regardless of size preset or where the line sits.
+    const span = _fmtSpan(
+      this.times.length >= 2
+        ? this.times[this.times.length - 1] - this.times[0]
+        : undefined,
+    );
+    if (span) {
+      const fontSize = Math.max(7, Math.round(GH * 0.088));
+      const label = `-${span}`;
+      ctx.save();
+      ctx.font = `${fontSize}px ${cssVar("--font-num") || "monospace"}`;
+      const textW = ctx.measureText(label).width;
+      const padX = 4,
+        padY = 2;
+      const boxW = textW + padX * 2;
+      const boxH = fontSize + padY * 2;
+      ctx.fillStyle = withAlpha(
+        cssVar("--bg-canvas") || "rgba(0,0,0,0.18)",
+        0.82,
+      );
+      ctx.fillRect(0, GH - boxH, boxW, boxH);
+      ctx.fillStyle = withAlpha(cssVar("--txt-dim") || "#888", 0.85);
+      ctx.textBaseline = "bottom";
+      ctx.fillText(label, padX, GH - padY);
       ctx.restore();
     }
   }

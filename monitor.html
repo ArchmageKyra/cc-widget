@@ -80,6 +80,18 @@
                     <div class="th-sec" style="margin-top: 4px">Size</div>
                     <div class="size-seg" id="size-btns"></div>
 
+                    <div class="th-sec">Display</div>
+                    <div class="toggle-row">
+                        <span class="toggle-lbl">Sparkline peak markers</span>
+                        <button
+                            class="toggle-switch"
+                            id="toggle-peak-markers"
+                            role="switch"
+                            aria-checked="true"
+                            title="Show a small dot marking each metric's session-high on the sparkline"
+                        ></button>
+                    </div>
+
                     <div class="th-sec">Theme</div>
                     <div class="theme-grid" id="theme-grid"></div>
 
@@ -179,10 +191,7 @@
                                     </div>
                                     <span class="tb-lbl">Primary text</span>
                                     <span class="tb-hex" id="tbh-txt"></span>
-                                    <span
-                                        class="tb-contrast"
-                                        id="tbc-txt"
-                                    ></span>
+                                    <span class="tb-contrast" id="tbc-txt"></span>
                                 </div>
                                 <div class="tb-row">
                                     <div class="tb-swatch" id="tbs-txt-dim">
@@ -207,10 +216,7 @@
                                     </div>
                                     <span class="tb-lbl">Danger / error</span>
                                     <span class="tb-hex" id="tbh-hot"></span>
-                                    <span
-                                        class="tb-contrast"
-                                        id="tbc-hot"
-                                    ></span>
+                                    <span class="tb-contrast" id="tbc-hot"></span>
                                 </div>
                                 <div class="tb-radius-row">
                                     <span class="tb-lbl">Corner radius</span>
