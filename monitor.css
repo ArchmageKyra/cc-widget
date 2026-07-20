@@ -149,44 +149,48 @@ body {
     display: block;
 }
 
-/* ── Flyout panel ───────────────────────────────────────────── */
-/* bottom:0 so translateY(100%) hides it cleanly behind overflow:hidden.
-               Sbar renders on top via z-index. Flyout inner gets padding-bottom
-               so content never hides behind the sbar.                          */
-#flyout {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    max-height: calc(100% - 4px);
+/* ── Main row: dashboard + settings drawer side by side ────────── */
+#main-row {
+    display: flex;
+    flex-direction: row;
+    flex: 1;
+    min-height: 0; /* let children scroll instead of stretching #app */
+    overflow: hidden;
+}
+
+/* ── Settings drawer ────────────────────────────────────────── */
+/* A real flex column, not an overlay — width animates 0 → 280px so it
+               visibly pops out to the right of the dashboard and pushes the
+               window wider, rather than sliding on top of existing content.
+               #sbar is normal flow *below* #main-row (not overlapping the
+               drawer), so .drawer-inner needs no special bottom clearance.     */
+#drawer {
+    order: 2;
+    flex: 0 0 auto;
+    width: 0;
+    min-height: 0;
+    overflow: hidden;
     background: var(--bg);
-    border-top: 1px solid var(--bdr);
     z-index: 5;
-    transform: translateY(calc(100% + 1px));
-    transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     flex-direction: column;
 }
-#flyout.open {
-    transform: translateY(0);
+#drawer.open {
+    width: 280px;
+    border-left: 1px solid var(--bdr);
 }
-.flyout-handle {
-    width: 30px;
-    height: 3px;
-    background: var(--bhi);
-    border-radius: 2px;
-    margin: 7px auto 0;
-    flex-shrink: 0;
-}
-.flyout-inner {
+.drawer-inner {
+    width: 280px;
     flex: 1;
+    flex-shrink: 0;
     overflow-y: auto;
-    padding: 2px 12px 40px; /* extra bottom pad clears sbar */
+    padding: 10px 12px 14px;
 }
-.flyout-inner::-webkit-scrollbar {
+.drawer-inner::-webkit-scrollbar {
     width: 3px;
 }
-.flyout-inner::-webkit-scrollbar-thumb {
+.drawer-inner::-webkit-scrollbar-thumb {
     background: var(--bhi);
     border-radius: 2px;
 }
@@ -207,6 +211,14 @@ body {
 .screen::-webkit-scrollbar-thumb {
     background: var(--bhi);
     border-radius: 2px;
+}
+/* Dashboard keeps the size preset's exact width — never stretches to fill
+   the extra room the drawer opens up beside it. */
+#s-dash {
+    order: 1;
+    flex: 0 0 auto;
+    width: var(--dash-w, 440px);
+    min-height: 0;
 }
 
 /* ── Setup ─────────────────────────────────────────────────── */
@@ -234,7 +246,7 @@ h2 {
     color: var(--cpu);
 }
 .field {
-    margin-bottom: 11px;
+    margin-bottom: 8px;
 }
 .field label {
     display: block;
@@ -277,14 +289,6 @@ h2 {
 }
 .btn-p:hover {
     opacity: 0.85;
-}
-.btn-s {
-    background: var(--bg-hover-subtle);
-    color: var(--txt);
-    border: 1px solid var(--bhi);
-}
-.btn-s:hover {
-    background: var(--bg-active);
 }
 .errmsg {
     margin-top: 10px;
@@ -471,24 +475,6 @@ h2 {
     text-align: center;
     letter-spacing: 0.5px;
 }
-.row-move {
-    background: none;
-    border: none;
-    color: var(--txt-muted);
-    cursor: pointer;
-    font-size: 9px;
-    line-height: 1;
-    padding: 0 1px;
-    flex-shrink: 0;
-}
-.row-move:hover:not(:disabled) {
-    color: var(--txt);
-}
-.row-move:disabled {
-    color: var(--txt-dim);
-    opacity: 0.35;
-    cursor: default;
-}
 .row-more {
     min-width: 18px;
     text-align: center;
@@ -546,16 +532,22 @@ h2 {
 }
 
 /* ── Theme screen ──────────────────────────────────────────── */
+/* Tier 1 — top-level drawer sections (Size / Display / Theme / Connection).
+   Brighter text + a bottom rule so these read as real section breaks,
+   distinct from the dimmer, unruled tier-2 sub-headers (.tb-sec-hdr)
+   nested underneath them.                                              */
 .th-sec {
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
-    color: var(--txt-dim);
+    letter-spacing: 0.08em;
+    color: var(--txt);
+    padding-bottom: 6px;
     margin: 16px 0 8px;
+    border-bottom: 1px solid var(--bdr);
 }
 .th-sec:first-child {
-    margin-top: 4px;
+    margin-top: 2px;
 }
 .size-seg {
     display: flex;
@@ -572,7 +564,7 @@ h2 {
     color: var(--txt-dim);
     font-size: 12px;
     font-weight: 700;
-    height: 34px;
+    height: 30px;
     cursor: pointer;
     transition:
         background 0.12s,
@@ -641,11 +633,11 @@ h2 {
 .theme-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 6px;
+    gap: 4px;
     margin-bottom: 0;
 }
 .theme-tile {
-    padding: 9px 10px;
+    padding: 6px 8px;
     border-radius: var(--rs);
     cursor: pointer;
     border: 1px solid var(--bdr);
@@ -665,7 +657,7 @@ h2 {
 .theme-swatches {
     display: flex;
     gap: 3px;
-    margin-bottom: 5px;
+    margin-bottom: 3px;
 }
 .swatch {
     flex: 1;
@@ -678,44 +670,47 @@ h2 {
     font-weight: 600;
     color: var(--txt);
 }
-.theme-custom-area {
-    margin-top: 0;
-    border-radius: var(--rs);
-    overflow: hidden;
-    border: 1px solid var(--bdr);
+.theme-tile-custom {
+    border-style: dashed;
 }
-.theme-custom-area .tb-toggle {
-    border: none;
-    border-radius: 0;
-    border-bottom: 1px solid var(--bdr);
+.theme-tile-custom .theme-swatches-custom {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 14px;
+    margin-bottom: 3px;
+    color: var(--txt-dim);
 }
-.theme-custom-area .tb-body {
-    border: none;
+.theme-tile-custom.active .theme-swatches-custom {
+    color: var(--cpu);
 }
-.theme-custom-area textarea {
+.tile-custom-icon {
+    font-size: 11px;
+    line-height: 1;
+}
+#custom-css {
     width: 100%;
-    height: 72px;
+    height: 60px;
     background: var(--bg-input);
-    border: none;
-    border-top: 1px solid var(--bdr);
-    border-radius: 0;
+    border: 1px solid var(--bdr);
+    border-radius: var(--rs);
     color: var(--txt-dim);
     font-family: var(--font-code);
     font-size: 10.5px;
-    padding: 7px;
+    padding: 8px;
     outline: none;
     resize: none;
     line-height: 1.5;
     display: block;
+    margin-bottom: 8px;
 }
-.theme-custom-area textarea:focus {
+#custom-css:focus {
     border-color: var(--bhi);
     color: var(--txt);
 }
 .btn-apply-custom {
     width: 100%;
-    border-radius: 0 0 var(--rs) var(--rs);
-    border-top: none;
+    border-radius: var(--rs);
     font-size: 11.5px;
     padding: 7px;
     background: var(--bg-hover-subtle);
@@ -733,45 +728,7 @@ h2 {
     color: var(--txt);
 }
 
-/* ── Theme Builder ─────────────────────────────────────────── */
-.tb-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 7px 10px;
-    background: var(--bg-hover-subtle);
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs) var(--rs) 0 0;
-    cursor: pointer;
-    user-select: none;
-    transition: background 0.12s;
-}
-.tb-toggle:hover {
-    background: var(--bg-hover);
-}
-.tb-toggle-label {
-    font-size: 10.5px;
-    font-weight: 700;
-    color: var(--txt-dim);
-    letter-spacing: 0.04em;
-}
-.tb-toggle-arr {
-    font-size: 9px;
-    color: var(--txt-muted);
-    transition: transform 0.2s;
-}
-.tb-toggle.open .tb-toggle-arr {
-    transform: rotate(180deg);
-}
 .tb-body {
-    border: 1px solid var(--bdr);
-    border-top: none;
-    border-radius: 0;
-    background: var(--bg-overlay);
-    overflow: hidden;
-    display: none;
-}
-.tb-body.open {
     display: block;
 }
 /* Accent pill bar */
@@ -779,8 +736,6 @@ h2 {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 5px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--bdr);
 }
 .tb-pill {
     position: relative;
@@ -833,19 +788,28 @@ h2 {
     border: none;
     padding: 0;
 }
-/* Builder sections */
+/* Builder sections — Accent Colors / Background & Chrome / Warning Ramp /
+   Custom CSS all use this same tier-2 header + divider rhythm, so the whole
+   Theme area reads as one flat, consistent flow rather than a boxed panel. */
 .tb-section {
-    padding: 8px 10px 6px;
+    padding: 10px 0 8px;
     border-bottom: 1px solid var(--bdr);
+}
+.tb-section:first-child {
+    /* Deliberately wider than the default — this is the seam right below
+       the theme tile grid, and needs a clearer break from it than the
+       tighter rhythm between the sections below. */
+    padding-top: 16px;
 }
 .tb-section:last-child {
     border-bottom: none;
+    padding-bottom: 2px;
 }
 .tb-sec-hdr {
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.09em;
     color: var(--txt-dim);
     margin-bottom: 7px;
 }
@@ -969,7 +933,7 @@ h2 {
 }
 .tb-warn-pip {
     flex: 1;
-    height: 28px;
+    height: 24px;
     border-radius: var(--rs);
     border: 1px solid var(--bhi);
     cursor: pointer;
@@ -1089,12 +1053,6 @@ h2 {
     gap: 3px;
     justify-content: center;
 }
-.card-flat {
-    padding: 7px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
 .card-rows-full {
     padding: var(--pad-card) 10px;
     display: flex;
@@ -1112,11 +1070,6 @@ h2 {
     border-radius: 3px;
     background: var(--bg-canvas);
     width: 100%;
-}
-.net-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
 }
 .bar-hide {
     display: none;
@@ -1258,7 +1211,7 @@ h2 {
     font-size: var(--sz-meta);
     color: var(--txt-dim);
     flex-shrink: 0;
-    z-index: 10; /* sits above the flyout */
+    z-index: 10; /* sits above the drawer */
     cursor: default;
 }
 /* Left zone is the drag handle */

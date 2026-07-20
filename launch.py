@@ -95,6 +95,26 @@ win = None
 webview = None
 
 
+def _screen_caps():
+    """Generous (w, h) bounds derived from the monitor the window is
+    currently on, so taller presets (M/L) plus the settings drawer's
+    Math.max(cardsH, drawerH) height request aren't forced under a flat
+    ceiling and pushed into a scrollbar. Falls back to the old flat
+    constants if geometry can't be read (e.g. window not yet realized)."""
+    try:
+        display = win.get_display()
+        gdk_win = win.get_window()
+        monitor = (
+            display.get_monitor_at_window(gdk_win)
+            if gdk_win
+            else display.get_monitor(0)
+        )
+        geo = monitor.get_workarea()
+        return int(geo.width * 0.92), int(geo.height * 0.92)
+    except Exception:
+        return 1200, 1400
+
+
 def on_message(mgr, result):
     global _folder_paths
     try:
@@ -118,8 +138,9 @@ def on_message(mgr, result):
                 w, h = int(parts[1]), int(parts[2])
             else:
                 w, h = win.get_size()[0], int(parts[1])
-            w = max(300, min(w, 1200))
-            h = max(200, min(h, 1400))
+            max_w, max_h = _screen_caps()
+            w = max(300, min(w, max_w))
+            h = max(200, min(h, max_h))
             GLib.idle_add(lambda w=w, h=h: win.resize(w, h) or False)
         except Exception as e:
             print("Resize error:", e)

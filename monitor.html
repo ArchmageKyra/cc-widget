@@ -73,10 +73,11 @@
                 <div class="picker-body" id="picker-body"></div>
             </div>
 
-            <!-- ── Flyout panel (slides up from status bar) ─────────────── -->
-            <div id="flyout">
-                <div class="flyout-handle"></div>
-                <div class="flyout-inner">
+            <!-- ── Main row: dashboard + settings drawer side by side ────── -->
+            <div id="main-row">
+            <!-- ── Settings drawer (pops out to the right of the dashboard) ── -->
+            <div id="drawer">
+                <div class="drawer-inner">
                     <div class="th-sec" style="margin-top: 4px">Size</div>
                     <div class="size-seg" id="size-btns"></div>
 
@@ -95,16 +96,14 @@
                     <div class="th-sec">Theme</div>
                     <div class="theme-grid" id="theme-grid"></div>
 
-                    <div class="th-sec">Custom CSS</div>
                     <div class="theme-custom-area">
-                        <!-- ── Theme Builder ──────────────────────────── -->
-                        <div class="tb-toggle" id="tb-toggle">
-                            <span class="tb-toggle-label">Theme Builder</span>
-                            <span class="tb-toggle-arr">▼</span>
-                        </div>
                         <div class="tb-body" id="tb-body">
                             <!-- Accent pill bar -->
-                            <div class="tb-pill-bar">
+                            <div class="tb-section">
+                                <div class="tb-sec-hdr" id="tb-toggle">
+                                    Accent Colors
+                                </div>
+                                <div class="tb-pill-bar">
                                 <div class="tb-pill" id="tbs-cpu">
                                     <div class="tb-pill-stripe"></div>
                                     <div class="tb-pill-content">
@@ -170,6 +169,7 @@
                                         ></span>
                                     </div>
                                     <input type="color" data-var="--net" />
+                                </div>
                                 </div>
                             </div>
 
@@ -283,31 +283,21 @@
                                 </div>
                             </div>
 
-                            <!-- Generate -->
-                            <div
-                                class="tb-section"
-                                style="padding-top: 6px; padding-bottom: 7px"
-                            >
+                            <!-- Custom CSS -->
+                            <div class="tb-section">
+                                <div class="tb-sec-hdr">Custom CSS</div>
+                                <textarea
+                                    id="custom-css"
+                                    placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
+                                ></textarea>
                                 <button
                                     class="btn-apply-custom"
-                                    id="tb-generate"
-                                    style="
-                                        border-radius: var(--rs);
-                                        border: 1px solid var(--bdr);
-                                    "
+                                    id="btn-theme-apply"
                                 >
-                                    → Generate CSS
+                                    Apply
                                 </button>
                             </div>
                         </div>
-
-                        <textarea
-                            id="custom-css"
-                            placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
-                        ></textarea>
-                        <button class="btn-apply-custom" id="btn-theme-apply">
-                            Apply
-                        </button>
                     </div>
 
                     <div class="th-sec">Connection</div>
@@ -333,6 +323,8 @@
             <div id="s-dash" class="screen hide">
                 <div class="cards" id="cards"></div>
             </div>
+            </div>
+            <!-- #main-row -->
 
             <div id="sbar">
                 <!-- Left: status + uptime — also serves as drag handle -->
@@ -368,42 +360,7 @@
                             <line x1="6" y1="6.5" x2="6" y2="11" />
                         </svg>
                     </button>
-                    <button class="bb" id="bb-theme" title="Appearance">
-                        <svg
-                            class="bb-icon"
-                            viewBox="0 0 12 12"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.4"
-                            stroke-linecap="round"
-                        >
-                            <line x1="1" y1="3" x2="11" y2="3" />
-                            <line x1="1" y1="6.5" x2="11" y2="6.5" />
-                            <line x1="1" y1="10" x2="11" y2="10" />
-                            <circle
-                                cx="3.5"
-                                cy="3"
-                                r="1.5"
-                                fill="currentColor"
-                                stroke="none"
-                            />
-                            <circle
-                                cx="8"
-                                cy="6.5"
-                                r="1.5"
-                                fill="currentColor"
-                                stroke="none"
-                            />
-                            <circle
-                                cx="5"
-                                cy="10"
-                                r="1.5"
-                                fill="currentColor"
-                                stroke="none"
-                            />
-                        </svg>
-                    </button>
-                    <button class="bb" id="bb-cfg" title="Edit sensor layout">
+                    <button class="bb" id="bb-cfg" title="Edit layout &amp; settings">
                         <svg
                             class="bb-icon"
                             viewBox="0 0 12 12"

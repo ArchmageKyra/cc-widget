@@ -8,9 +8,7 @@
 "use strict";
 
 // ═══════════════════════════════════════════════════════════════
-//  SIZES  — recalibrated for 1440p+
-//  Old S (390px) was unreadably small at a glance.
-//  New S ≈ old M · new M ≈ old L · new L is a new larger tier.
+//  SIZES
 // ═══════════════════════════════════════════════════════════════
 const SIZES = {
   s: {
@@ -29,6 +27,7 @@ const SIZES = {
       "--canvas-w": "162px",
       "--canvas-h": "92px",
       "--canvas-lh": "62px",
+      "--dash-w": "440px",
     },
     width: 440,
     canvas: { w: 162, h: 92 },
@@ -50,6 +49,7 @@ const SIZES = {
       "--canvas-w": "180px",
       "--canvas-h": "108px",
       "--canvas-lh": "72px",
+      "--dash-w": "500px",
     },
     width: 500,
     canvas: { w: 180, h: 108 },
@@ -71,6 +71,7 @@ const SIZES = {
       "--canvas-w": "204px",
       "--canvas-h": "124px",
       "--canvas-lh": "84px",
+      "--dash-w": "580px",
     },
     width: 580,
     canvas: { w: 204, h: 124 },
@@ -78,7 +79,7 @@ const SIZES = {
   },
 };
 
-// All var keys managed by size (used to clear before re-apply)
+// All var keys managed by size
 const SIZE_VAR_KEYS = Object.keys(SIZES.m.vars);
 
 function applySize(key, rebuild = true) {
@@ -228,7 +229,6 @@ let cfg = {
   slots: {},
   theme: "deep-space",
   customThemeCSS: "",
-  systemName: "Theia",
   size: "s",
   hiddenMounts: [],
   fanLabels: {},
@@ -243,6 +243,7 @@ let ccDevices = [];
 let linuxDevices = [];
 let liveDevices = [];
 let editMode = false;
+let drawerOpen = false; // settings drawer — normally moves in lockstep with editMode via the gear button
 let pickerCtx = null;
 let linuxAutoAssigned = false;
 let sseAbort = null;
@@ -832,7 +833,7 @@ function gtksend(msg) {
 }
 
 document.getElementById("bb-x").onclick = () => gtksend("close");
-document.getElementById("bb-min").onclick = () => gtksend("minimize"); // FIX: was missing
+document.getElementById("bb-min").onclick = () => gtksend("minimize");
 document.getElementById("bb-pin").onclick = () => {
   pinned = !pinned;
   gtksend(pinned ? "pin" : "unpin");
@@ -843,15 +844,17 @@ document.getElementById("bb-lock").onclick = () => {
   document.getElementById("bb-lock").classList.toggle("on", locked);
   document.getElementById("app").classList.toggle("locked", locked);
 };
-// ── Flyout toggle (Appearance button) ─────────────────────────
-const _flyout = document.getElementById("flyout");
-const _bbTheme = document.getElementById("bb-theme");
+// ── Settings drawer toggle (single gear button) ────────────────
+// One button now drives editMode + the settings drawer together: the
+// row-editing affordances on the dashboard and the theme/size/connection
+// drawer open and close as one unit. See setConfigOpen().
+const _drawer = document.getElementById("drawer");
 let _themeScreenInited = false;
-_bbTheme.onclick = () => {
-  const opening = !_flyout.classList.contains("open");
-  _flyout.classList.toggle("open", opening);
-  _bbTheme.classList.toggle("on", opening);
-  if (opening) {
+function setConfigOpen(open) {
+  drawerOpen = open;
+  setEditMode(open); // updates editMode, the gear icon, and #cards state
+  _drawer.classList.toggle("open", open);
+  if (open) {
     if (!_themeScreenInited) {
       initThemeScreen();
       _themeScreenInited = true;
@@ -862,26 +865,10 @@ _bbTheme.onclick = () => {
     }
   }
   requestAnimationFrame(() => autoResize());
-};
-// Click-outside closes flyout
-document.getElementById("app").addEventListener(
-  "click",
-  (e) => {
-    if (
-      _flyout.classList.contains("open") &&
-      !_flyout.contains(e.target) &&
-      !_bbTheme.contains(e.target)
-    ) {
-      _flyout.classList.remove("open");
-      _bbTheme.classList.remove("on");
-      requestAnimationFrame(() => autoResize());
-    }
-  },
-  true,
-);
+}
 
 document.getElementById("bb-cfg").onclick = () => {
-  if (phase === "dashboard") setEditMode(!editMode);
+  if (phase === "dashboard") setConfigOpen(!drawerOpen);
   else initSetup();
 };
 
@@ -1159,10 +1146,6 @@ function buildLeaves(devices) {
 }
 const leafKey = (l) => `${l.uid}|${l.kind}|${l.name}|${l.field ?? ""}`;
 const slotKey = (s) => `${s.uid}|${s.kind}|${s.name}|${s.field ?? ""}`;
-const isAssigned = (l) => {
-  const k = leafKey(l);
-  return Object.values(cfg.slots).some((s) => slotKey(s) === k);
-};
 const shortLabel = (lbl) => (lbl ? lbl.split("→").pop().trim() : "");
 
 // Collects all folder-kind custom row paths across every card and tells
@@ -1477,18 +1460,15 @@ document.getElementById("picker-close").onclick = () => closePicker();
 //  Interactive color picker panel → generates :root { … } CSS
 //  into the custom-css textarea, ready to Apply.
 // ═══════════════════════════════════════════════════════════════
+// Set by initThemeBuilder — exposed so theme-tile clicks (initThemeScreen)
+// can resync the pickers, and so the "Custom…" tile can pull a CSS string
+// without duplicating the generator.
+let _tbSync = null;
+let _tbGenerateCSS = null;
+
 function initThemeBuilder() {
   if (document.getElementById("tb-toggle")._wired) return;
   document.getElementById("tb-toggle")._wired = true;
-
-  const toggle = document.getElementById("tb-toggle");
-  const body = document.getElementById("tb-body");
-  toggle.onclick = () => {
-    const open = body.classList.toggle("open");
-    toggle.classList.toggle("open", open);
-    if (open) syncBuilderFromActive();
-    requestAnimationFrame(() => autoResize());
-  };
 
   const getCSSVar = (n) =>
     getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -1660,6 +1640,8 @@ function initThemeBuilder() {
       if (["--bg", "--txt", "--txt-dim", "--hot"].includes(varName)) {
         updateContrastBadges();
       }
+
+      liveApply();
     });
   });
 
@@ -1667,10 +1649,23 @@ function initThemeBuilder() {
   document.getElementById("tb-radius").addEventListener("input", (e) => {
     bv["--r"] = parseInt(e.target.value, 10);
     document.getElementById("tb-radius-val").textContent = bv["--r"] + "px";
+    liveApply();
   });
 
-  // ── Generate full CSS → textarea ───────────────────────────
-  document.getElementById("tb-generate").onclick = () => {
+  // ── Live apply — pickers write straight to the active theme, no
+  //    separate Generate→Apply step. The textarea stays in sync as a
+  //    secondary "paste your own" path for hand-editing.        ──
+  function liveApply() {
+    const css = generateCSS();
+    document.getElementById("custom-css").value = css;
+    applyTheme("custom", css);
+    document
+      .querySelectorAll(".theme-tile")
+      .forEach((t) => t.classList.toggle("active", t.dataset.key === "custom"));
+  }
+
+  // ── Generate full CSS from current builder values ──────────
+  function generateCSS() {
     const r = bv["--r"];
     const bgHex = bv["--bg"].replace("#", "");
     const bgR = parseInt(bgHex.slice(0, 2), 16),
@@ -1744,8 +1739,11 @@ function initThemeBuilder() {
       `  --r: ${r}px; --rs: ${rs}px;`,
       `}`,
     ];
-    document.getElementById("custom-css").value = lines.join("\n");
-  };
+    return lines.join("\n");
+  }
+
+  _tbSync = syncBuilderFromActive;
+  _tbGenerateCSS = generateCSS;
 
   syncBuilderFromActive();
 }
@@ -1790,9 +1788,28 @@ function initThemeScreen() {
         .forEach((t) => t.classList.remove("active"));
       tile.classList.add("active");
       applyTheme(key);
+      // Builder is always visible now — reload it from whatever preset
+      // just got selected so the pickers stay in sync with the theme.
+      if (_tbSync) _tbSync();
     };
     g.appendChild(tile);
   }
+
+  // "Custom…" tile — always present, active whenever cfg.theme is custom
+  const customTile = el("div", "theme-tile theme-tile-custom");
+  customTile.dataset.key = "custom";
+  if (cfg.theme === "custom") customTile.classList.add("active");
+  customTile.innerHTML = `<div class="theme-swatches-custom"><span class="tile-custom-icon">✎</span></div><div class="theme-name">Custom…</div>`;
+  customTile.onclick = () => {
+    document
+      .querySelectorAll(".theme-tile")
+      .forEach((t) => t.classList.remove("active"));
+    customTile.classList.add("active");
+    const css =
+      cfg.customThemeCSS || (_tbGenerateCSS ? _tbGenerateCSS() : null);
+    if (css) applyTheme("custom", css);
+  };
+  g.appendChild(customTile);
 
   // ── Theme Builder ──────────────────────────────────────────
   initThemeBuilder();
@@ -1810,7 +1827,8 @@ function initThemeScreen() {
     applyTheme("custom", css);
     document
       .querySelectorAll(".theme-tile")
-      .forEach((t) => t.classList.remove("active"));
+      .forEach((t) => t.classList.toggle("active", t.dataset.key === "custom"));
+    if (_tbSync) _tbSync();
   };
 
   // ── Connection fields ──────────────────────────────────────
@@ -1826,7 +1844,7 @@ function initThemeScreen() {
   document.getElementById("tc-url").onchange = persist;
   document.getElementById("tc-tok").onchange = persist;
 
-  // Flyout is shown/hidden by bb-theme toggle — no showScreen needed
+  // Drawer is shown/hidden by the gear button — no showScreen needed
 }
 
 function fmtGB(v) {
@@ -1859,12 +1877,6 @@ function mountLabelFromSlot(slot, fallback = "") {
 function barText(used, total) {
   if (typeof used !== "number" || typeof total !== "number") return "--";
   return `${fmtGB(used)}/${fmtGB(total)} GB`;
-}
-
-function pctFromUsedTotal(used, total) {
-  if (typeof used !== "number" || typeof total !== "number" || total <= 0)
-    return undefined;
-  return clampPct((used / total) * 100);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2321,26 +2333,32 @@ function buildCards() {
 //  Measures true card content height and notifies Python so the
 //  GTK window snaps to fit — no scroll, no dead space.
 // ═══════════════════════════════════════════════════════════════
+const DRAWER_W = 280; // matches #drawer's fixed width in monitor.css
+
 function autoResize() {
   // Don't send a zero-height resize while dashboard is hidden
   if (document.getElementById("s-dash").classList.contains("hide")) return;
   const sbarH = document.getElementById("sbar").offsetHeight;
   const borders = 2; // #app top + bottom border
-  const w = (SIZES[cfg.size] || SIZES.s).width;
+  const baseW = (SIZES[cfg.size] || SIZES.s).width;
+  const screenPad = 24; // .screen { padding: 12px } × 2 sides
+  const cardsH = document.getElementById("cards").scrollHeight;
 
-  let contentH;
-  if (_flyout.classList.contains("open")) {
-    // Flyout is absolutely positioned and capped by max-height: calc(100% - 4px),
-    // so it can only grow as tall as the window already is — measure its true
-    // content height (handle + inner, ignoring the inner's own overflow-y:auto
-    // clip) and size the window to fit, instead of leaving it to scroll.
-    const handle = document.querySelector(".flyout-handle");
-    const inner = document.querySelector(".flyout-inner");
-    const handleH = handle.offsetHeight + 7; // its own margin-top isn't in offsetHeight
-    contentH = handleH + inner.scrollHeight;
+  let w, contentH;
+  if (drawerOpen) {
+    // Drawer sits beside the dashboard, not on top of it — window widens to
+    // fit both columns, and height follows whichever column is taller.
+    // +4 safety margin: .drawer-inner's content is identical at every size,
+    // so any shortfall here would show up as a hairline scrollbar on every
+    // preset rather than scaling with anything — a sub-pixel rounding /
+    // scrollbar-gutter reflow away from fitting exactly. Cheaper to pad
+    // the measurement than chase the exact fractional pixel.
+    const inner = document.querySelector(".drawer-inner");
+    const drawerH = inner ? inner.scrollHeight + 4 : 0;
+    w = baseW + DRAWER_W;
+    contentH = Math.max(cardsH + screenPad, drawerH);
   } else {
-    const cardsH = document.getElementById("cards").scrollHeight;
-    const screenPad = 24; // .screen { padding: 12px } × 2 sides
+    w = baseW;
     contentH = cardsH + screenPad;
   }
 
@@ -2915,10 +2933,6 @@ class MultiSpark {
     cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
     cfg.theme === "custom" ? cfg.customThemeCSS : null,
   );
-
-  // FIX: guard against missing #bar-title element (element may not exist)
-  const _titleEl = document.getElementById("bar-title");
-  if (_titleEl) _titleEl.textContent = `⬡ ${cfg.systemName || "CC Monitor"}`;
 
   if (cfg.token) {
     phase = "connecting";
