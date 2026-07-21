@@ -26,14 +26,59 @@ except ImportError:
     print("  Fix: sudo apt install python3-psutil")
 
 here = os.path.dirname(os.path.abspath(__file__))
-WINDOW_POS_FILE = os.path.join(here, "window_pos.json")
 html_uri = "file://" + os.path.join(here, "monitor.html")
+
+# ── XDG user directories ──────────────────────────────────────────
+# CONFIG_DIR / CACHE_DIR here are the exact same paths install.sh and
+# uninstall.sh already know about — this is deliberate, so "remove my
+# settings" in uninstall.sh actually removes everything, not just
+# window position.
+XDG_CONFIG_HOME = os.environ.get(
+    "XDG_CONFIG_HOME", os.path.join(os.path.expanduser("~"), ".config")
+)
+XDG_CACHE_HOME = os.environ.get(
+    "XDG_CACHE_HOME", os.path.join(os.path.expanduser("~"), ".cache")
+)
+CONFIG_DIR = os.path.join(XDG_CONFIG_HOME, "cc-widget")
+CACHE_DIR = os.path.join(XDG_CACHE_HOME, "cc-widget")
+os.makedirs(CONFIG_DIR, exist_ok=True)
+os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Window position is user state — kept out of the install directory
+# since install.sh wipes and replaces that wholesale on every upgrade.
+WINDOW_POS_FILE = os.path.join(CONFIG_DIR, "window_pos.json")
+
+# WebKit's own site data (this is where cfg — token, theme, layout —
+# actually lives, via the page's localStorage). Left unconfigured,
+# WebKit falls back to $XDG_DATA_HOME/<prgname>/..., and prgname
+# defaults to argv[0]'s basename — i.e. literally "launch.py" when
+# run as `python3 launch.py`. Pointing it here explicitly instead
+# means: a sensible, known location; consistent behavior regardless
+# of how/where launch.py is invoked from; and uninstall.sh's existing
+# CONFIG_DIR/CACHE_DIR cleanup actually reaches this data.
+WEBKIT_DATA_DIR = os.path.join(CONFIG_DIR, "webkit-data")
+WEBKIT_CACHE_DIR = os.path.join(CACHE_DIR, "webkit-cache")
+os.makedirs(WEBKIT_DATA_DIR, exist_ok=True)
+os.makedirs(WEBKIT_CACHE_DIR, exist_ok=True)
+
+# Also give the process a real name instead of inheriting "launch.py"
+# — mostly cosmetic (window-manager/task-switcher labeling), but
+# there's no reason to leave it as an accident of how the script
+# happens to be invoked.
+GLib.set_prgname("cc-widget")
+GLib.set_application_name("CC Widget")
 
 # ── WebKit settings ───────────────────────────────────────────────
 ws = WebKit2.Settings()
 ws.set_allow_universal_access_from_file_urls(True)
 ws.set_allow_file_access_from_file_urls(True)
 ws.set_javascript_can_open_windows_automatically(False)
+
+data_manager = WebKit2.WebsiteDataManager(
+    base_data_directory=WEBKIT_DATA_DIR,
+    base_cache_directory=WEBKIT_CACHE_DIR,
+)
+web_context = WebKit2.WebContext.new_with_website_data_manager(data_manager)
 
 # ── Network rate tracking (needs delta between calls) ─────────────
 _prev_net = None
@@ -95,26 +140,6 @@ win = None
 webview = None
 
 
-def _screen_caps():
-    """Generous (w, h) bounds derived from the monitor the window is
-    currently on, so taller presets (M/L) plus the settings drawer's
-    Math.max(cardsH, drawerH) height request aren't forced under a flat
-    ceiling and pushed into a scrollbar. Falls back to the old flat
-    constants if geometry can't be read (e.g. window not yet realized)."""
-    try:
-        display = win.get_display()
-        gdk_win = win.get_window()
-        monitor = (
-            display.get_monitor_at_window(gdk_win)
-            if gdk_win
-            else display.get_monitor(0)
-        )
-        geo = monitor.get_workarea()
-        return int(geo.width * 0.92), int(geo.height * 0.92)
-    except Exception:
-        return 1200, 1400
-
-
 def on_message(mgr, result):
     global _folder_paths
     try:
@@ -138,9 +163,8 @@ def on_message(mgr, result):
                 w, h = int(parts[1]), int(parts[2])
             else:
                 w, h = win.get_size()[0], int(parts[1])
-            max_w, max_h = _screen_caps()
-            w = max(300, min(w, max_w))
-            h = max(200, min(h, max_h))
+            w = max(300, min(w, 1200))
+            h = max(200, min(h, 1400))
             GLib.idle_add(lambda w=w, h=h: win.resize(w, h) or False)
         except Exception as e:
             print("Resize error:", e)
@@ -282,7 +306,11 @@ def save_window_pos():
 
 
 # ── WebView ───────────────────────────────────────────────────────
-webview = WebKit2.WebView.new_with_user_content_manager(manager)
+# Built from the explicit web_context (see WEBKIT_DATA_DIR / above)
+# plus the user content manager, rather than the
+# new_with_user_content_manager() convenience constructor, which
+# would silently fall back to WebKit's default (prgname-based) context.
+webview = WebKit2.WebView(web_context=web_context, user_content_manager=manager)
 webview.set_settings(ws)
 webview.load_uri(html_uri)
 webview.set_background_color(Gdk.RGBA(0, 0, 0, 0))
