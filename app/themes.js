@@ -91,8 +91,8 @@ const THEMES = {
   --spark-grid:rgba(205,214,244,.08);
   --spark-vtick:rgba(205,214,244,.05);
 
-  --font-ui:"Inter",system-ui,sans-serif;
-  --font-num:"IBM Plex Mono",ui-monospace,monospace;
+  --font-ui:"Nunito",system-ui,sans-serif;
+  --font-num:"JetBrains Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
 }`,
   },
@@ -131,7 +131,7 @@ const THEMES = {
   --spark-grid:rgba(216,222,233,.08);
   --spark-vtick:rgba(216,222,233,.05);
 
-  --font-ui:"Inter",system-ui,sans-serif;
+  --font-ui:"Manrope",system-ui,sans-serif;
   --font-num:"IBM Plex Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
 }`,
@@ -171,7 +171,7 @@ const THEMES = {
   --spark-grid:rgba(235,219,178,.08);
   --spark-vtick:rgba(235,219,178,.05);
 
-  --font-ui:"Rajdhani",system-ui,sans-serif;
+  --font-ui:"Space Mono",system-ui,sans-serif;
   --font-num:"Share Tech Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
 }`,
@@ -211,9 +211,9 @@ const THEMES = {
     --spark-grid:rgba(147,161,161,.07);
     --spark-vtick:rgba(147,161,161,.04);
 
-    --font-ui:"Inter",system-ui,sans-serif;
-    --font-num:"IBM Plex Mono",ui-monospace,monospace;
-    --font-code:"IBM Plex Mono",ui-monospace,monospace;
+    --font-ui:"Source Sans 3",system-ui,sans-serif;
+    --font-num:"Source Code Pro",ui-monospace,monospace;
+    --font-code:"Source Code Pro",ui-monospace,monospace;
   }`,
   },
 
@@ -331,9 +331,9 @@ const THEMES = {
   --spark-grid:rgba(227,67,59,.07);
   --spark-vtick:rgba(227,67,59,.04);
 
-  --font-ui:"Orbitron",system-ui,sans-serif;
-  --font-num:"Share Tech Mono",ui-monospace,monospace;
-  --font-code:"Share Tech Mono",ui-monospace,monospace;
+  --font-ui:"Rajdhani",system-ui,sans-serif;
+  --font-num:"VT323",ui-monospace,monospace;
+  --font-code:"IBM Plex Mono",ui-monospace,monospace;
 }`,
   },
 
@@ -411,9 +411,9 @@ const THEMES = {
   --spark-grid:rgba(63,196,232,.07);
   --spark-vtick:rgba(63,196,232,.04);
 
-  --font-ui:"Offside", "Rajdhani",system-ui,sans-serif;
-  --font-num:"Offside","Space Mono",ui-monospace,monospace;
-  --font-code:"Offside","Space Mono",ui-monospace,monospace;
+  --font-ui:"Offside","Rajdhani",system-ui,sans-serif;
+  --font-num:"Space Mono",ui-monospace,monospace;
+  --font-code:"Space Mono",ui-monospace,monospace;
 }`,
   },
 

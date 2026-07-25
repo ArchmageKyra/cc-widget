@@ -189,23 +189,82 @@ const SLOTS = [
   },
 ];
 
+// Two threshold modes:
+//   "absolute" — fixed values. Right for CPU/GPU temp (real throttle
+//                points that don't move) and any 0–100% capacity row.
+//   "relative" — offsets above a rolling baseline. Right for sensors
+//                that track room/case conditions as much as component
+//                load (ambient, RAM, SSD) — a fixed cutoff either nags
+//                constantly in a warm room or never fires in a cold
+//                one. See _relBaseline() below for how the baseline
+//                is derived.
+const PCT_LEVELS = [0, 25, 50, 75, 100]; // shared 5-step % ramp
+
 const WARN_T = {
-  cpu_temp: [35, 55, 72, 82, 92],
-  cpu_load: [0, 25, 50, 75, 100],
-  gpu_temp: [35, 55, 72, 82, 92],
-  gpu_load: [0, 25, 50, 75, 100],
-  ram_temp: [30, 42, 50, 58, 65],
-  ssd_temp: [25, 40, 55, 65, 75],
-  case_temp: [20, 32, 38, 45, 55],
-  lnx_ram_pct: [0, 25, 50, 75, 100],
-  lnx_swap_pct: [0, 25, 50, 75, 100],
+  cpu_temp: { mode: "absolute", levels: [35, 55, 72, 82, 92] },
+  cpu_load: { mode: "absolute", levels: PCT_LEVELS },
+  gpu_temp: { mode: "absolute", levels: [35, 55, 72, 82, 92] },
+  gpu_load: { mode: "absolute", levels: PCT_LEVELS },
+  lnx_ram_pct: { mode: "absolute", levels: PCT_LEVELS },
+  lnx_swap_pct: { mode: "absolute", levels: PCT_LEVELS },
+
+  // Ambient/case air has no natural "hot" point the way silicon does —
+  // a warm room reads high all day even with perfect airflow. Levels
+  // are °C above this sensor's own rolling floor, not °C absolute.
+  case_temp: { mode: "relative", levels: [3, 6, 10, 14, 18] },
+
+  // RAM ICs and SSD controllers drift with ambient too, just less than
+  // an open-air case sensor — wider deltas give them the extra
+  // headroom they have before a rise actually means something.
+  ram_temp: { mode: "relative", levels: [8, 14, 20, 28, 36] },
+  disk_a_temp: { mode: "relative", levels: [10, 18, 26, 35, 45] },
 };
 
+// Rolling low-water-mark per sid, used by "relative" mode. A sensor's
+// baseline is simply the lowest value it's shown in the trailing
+// window — no calibration step, nothing persisted. As the window
+// slides, old lows age out: the baseline drifts up on its own if true
+// ambient rises (a heat wave, a warmer room in summer) and snaps down
+// immediately on a new low (cooler night, dust cleaned out). The
+// window needs to be long enough that an ordinary load spike doesn't
+// get mistaken for the new normal — 30 min comfortably outlasts any
+// single gaming/render session's warm-up.
+const BASELINE_WINDOW_MS = 30 * 60 * 1000;
+const _baselineHist = {}; // sid -> [{t, v}, …] oldest-first
+
+function _relBaseline(sid, val) {
+  const hist = (_baselineHist[sid] ??= []);
+  const now = Date.now();
+  hist.push({ t: now, v: val });
+  const cutoff = now - BASELINE_WINDOW_MS;
+  while (hist.length > 1 && hist[0].t < cutoff) hist.shift();
+  let min = hist[0].v;
+  for (const p of hist) if (p.v < min) min = p.v;
+  return min;
+}
+
 function warnLevel(slotId, val) {
-  const t = WARN_T[slotId];
-  if (!t) return 2;
+  const spec = WARN_T[slotId];
+  if (!spec) return 2;
+  if (typeof val !== "number" || isNaN(val)) return 0;
+
+  if (spec.mode === "relative") {
+    const delta = val - _relBaseline(slotId, val);
+    let lvl = 0;
+    for (const d of spec.levels) {
+      if (delta >= d) lvl++;
+      else break;
+    }
+    // Sitting at (or just above) baseline is the *expected* resting
+    // state for these sensors, not an absence of signal — 0 lit dots
+    // reads as "sensor's dead," not "everything's fine." Floor at 1
+    // so nominal always shows something, same way the fan-duty dots
+    // never truly go dark.
+    return Math.max(1, lvl);
+  }
+
   let lvl = 0;
-  for (const thresh of t) {
+  for (const thresh of spec.levels) {
     if (val >= thresh) lvl++;
     else break;
   }
@@ -2741,10 +2800,10 @@ class MultiSpark {
     if (this.times.length > this.MAX) this.times.shift();
   }
 
-  // Mark a series as auto-scaling: its norm grows to track the
-  // highest value seen (×1.2 headroom), rather than staying fixed
-  // at 100. Use for metrics with no natural 0–100 ceiling (e.g.
-  // network throughput in MB/s).
+  // Mark a series as auto-scaling — its norm re-derives from whatever
+  // is actually in the visible window (×1.2 headroom), rather than
+  // staying fixed at 100. Use for metrics with no natural 0–100
+  // ceiling (e.g. network throughput in MB/s).
   setDynamic(key, dynamic = true) {
     const s = this.S[key];
     if (s) s.dynamic = dynamic;
@@ -2753,10 +2812,21 @@ class MultiSpark {
     const s = this.S[key];
     if (s) s.norm = n;
   }
+  // Auto-ranging: recomputed from the current window every call, not a
+  // ratchet that only ever grows. A norm that only grows gets stuck at
+  // whatever the single biggest value ever seen was — once anything
+  // spikes, everyday-sized traffic afterwards reads as ~0% of that
+  // scale forever. Re-deriving from the visible window means the
+  // scale shrinks back down once a spike scrolls out of view (~2 min
+  // at the default 60-point window), so ordinary small values still
+  // get real vertical range instead of hugging the floor. The 0.05
+  // epsilon just keeps a fully-idle window from dividing by ~0 and
+  // turning noise into apparent full-scale spikes.
   trackMax(key, val) {
     const s = this.S[key];
     if (!s || typeof val !== "number" || isNaN(val)) return;
-    if (val > s.norm) s.norm = val * 1.2;
+    const recentMax = Math.max(val, ...s.data);
+    s.norm = Math.max(0.05, recentMax * 1.2);
   }
 
   // Back-compat wrappers — fan duty/RPM dual-mode feed in
@@ -2775,7 +2845,18 @@ class MultiSpark {
     if (s.dynamic) this.trackMax(key, val);
     s.data.push(val);
     if (s.data.length > this.MAX) s.data.shift();
-    if (typeof peakOverride === "number") {
+    if (s.dynamic) {
+      // Auto-ranging series: the scale itself is only ever as tall as
+      // the current window's peak, so an all-time session high almost
+      // always exceeds it — that would just pin the marker to the top
+      // edge forever rather than showing anything meaningful. Track
+      // the windowed peak instead, matching the same basis trackMax()
+      // uses for the scale, so the marker always lands validly within
+      // whatever's currently drawn. (The true all-time high is still
+      // available via the row's hover tooltip — this only affects the
+      // in-chart dot.)
+      s.peak = Math.max(val, ...s.data);
+    } else if (typeof peakOverride === "number") {
       // Caller has a persistent, correctly-scaled peak already (e.g.
       // sessionPeaks, which survives card rebuilds) — trust it over
       // this instance's own short-lived tracking.
