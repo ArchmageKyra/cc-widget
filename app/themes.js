@@ -274,10 +274,10 @@ const THEMES = {
 
   --cpu:#D97C4A;
   --gpu:#7FBF6B;
-  --fan:#E8C97A;
+  --fan:#E9DAC0;
   --ssd:#6FB8D9;
-  --ram:#E9DAC0;
-  --net:#4FC7BE;
+  --ram:#4FC7BE;
+  --net:#E8C97A;
 
   --w1:#7FBF6B;
   --w2:#C7D56B;
@@ -299,7 +299,7 @@ const THEMES = {
 
   "nixie-nocturne": {
     name: "Nixie Nocturne",
-    swatches: ["#101014", "#F5813D", "#E3433B", "#F3A53F", "#E2B332"],
+    swatches: ["#101014", "#E3433B", "#F5813D", "#F3A53F", "#E2B332"],
     css: `:root{
   --bg:#101014;
   --txt:#F0E8DB;
@@ -312,12 +312,12 @@ const THEMES = {
 
   --r:8px; --rs:5px;
 
-  --cpu:#F5813D;
-  --gpu:#E3433B;
+  --cpu:#E3433B;
+  --gpu:#ED7C5A;
   --fan:#EBDCC2;
   --ssd:#E2B332;
-  --ram:#F3A53F;
-  --net:#ED7C5A;
+  --ram:#F5813D;
+  --net:#F3A53F;
 
   --w1:#E8D3B0;
   --w2:#F0BC42;
@@ -394,10 +394,10 @@ const THEMES = {
 
   --cpu:#8B5CF6;
   --gpu:#D63BA0;
-  --fan:#3B8FE0;
-  --ssd:#7DD33D;
-  --ram:#BFE07A;
-  --net:#3FC4E8;
+  --fan:#BFE07A;
+  --ssd:#3B8FE0;
+  --ram:#3FC4E8;
+  --net:#7DD33D;
 
   --w1:#8B5CF6;
   --w2:#3FC4E8;
@@ -411,9 +411,9 @@ const THEMES = {
   --spark-grid:rgba(63,196,232,.07);
   --spark-vtick:rgba(63,196,232,.04);
 
-  --font-ui:"Rajdhani",system-ui,sans-serif;
-  --font-num:"Space Mono",ui-monospace,monospace;
-  --font-code:"Space Mono",ui-monospace,monospace;
+  --font-ui:"Offside", "Rajdhani",system-ui,sans-serif;
+  --font-num:"Offside","Space Mono",ui-monospace,monospace;
+  --font-code:"Offside","Space Mono",ui-monospace,monospace;
 }`,
   },
 
