@@ -354,10 +354,10 @@ const THEMES = {
 
   --cpu:#3FA9F5;
   --gpu:#2FBE86;
-  --fan:#F5A623;
-  --ssd:#7C93AC;
-  --ram:#A8C4D9;
-  --net:#E8A63C;
+  --fan:#7C93AC;
+  --ssd:#E8A63C;
+  --ram:#F5A623;
+  --net:#A8C4D9;
 
   --w1:#2FBE86;
   --w2:#8FB84A;

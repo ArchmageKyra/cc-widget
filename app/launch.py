@@ -88,20 +88,23 @@ _prev_net_time = None
 def get_net_rates():
     global _prev_net, _prev_net_time
     if not HAS_PSUTIL:
-        return {"rx_mbps": 0.0, "tx_mbps": 0.0}
+        return {"rx_kbps": 0.0, "tx_kbps": 0.0}
     now = time.monotonic()
     try:
         net = psutil.net_io_counters()
     except Exception:
-        return {"rx_mbps": 0.0, "tx_mbps": 0.0}
+        return {"rx_kbps": 0.0, "tx_kbps": 0.0}
     if _prev_net is None:
         _prev_net, _prev_net_time = net, now
-        return {"rx_mbps": 0.0, "tx_mbps": 0.0}
+        return {"rx_kbps": 0.0, "tx_kbps": 0.0}
     dt = max(now - _prev_net_time, 0.1)
-    rx = (net.bytes_recv - _prev_net.bytes_recv) / dt / 1_048_576
-    tx = (net.bytes_sent - _prev_net.bytes_sent) / dt / 1_048_576
+    rx = (net.bytes_recv - _prev_net.bytes_recv) / dt / 1024
+    tx = (net.bytes_sent - _prev_net.bytes_sent) / dt / 1024
     _prev_net, _prev_net_time = net, now
-    return {"rx_mbps": round(max(0.0, rx), 2), "tx_mbps": round(max(0.0, tx), 2)}
+    return {
+        "rx_kbps": round(max(0.0, rx), 1),
+        "tx_kbps": round(max(0.0, tx), 1),
+    }
 
 
 # ── Folder size tracking (du-based, async) ────────────────────

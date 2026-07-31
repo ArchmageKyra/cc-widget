@@ -31,7 +31,6 @@ const SIZES = {
     },
     width: 440,
     canvas: { w: 162, h: 92 },
-    canvasL: { w: 397, h: 62 },
   },
   m: {
     label: "M",
@@ -53,7 +52,6 @@ const SIZES = {
     },
     width: 500,
     canvas: { w: 180, h: 108 },
-    canvasL: { w: 451, h: 72 },
   },
   l: {
     label: "L",
@@ -75,7 +73,6 @@ const SIZES = {
     },
     width: 580,
     canvas: { w: 204, h: 124 },
-    canvasL: { w: 528, h: 84 },
   },
 };
 
@@ -96,12 +93,6 @@ function applySize(key, rebuild = true) {
     buildCards();
     renderDashboard(liveDevices);
   }
-}
-
-// Helper: current canvas dimensions from active size preset
-function canvasDims() {
-  const sz = SIZES[cfg.size] || SIZES.s;
-  return { spark: sz.canvas, longSpark: sz.canvasL };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -170,15 +161,15 @@ const SLOTS = [
   // NETWORK
   {
     id: "lnx_net_rx",
-    lbl: "Net RX MB/s",
+    lbl: "Net RX KB/s",
     cls: "net",
-    unit: "MB/s",
+    unit: "KB/s",
   },
   {
     id: "lnx_net_tx",
-    lbl: "Net TX MB/s",
+    lbl: "Net TX KB/s",
     cls: "net",
-    unit: "MB/s",
+    unit: "KB/s",
   },
 
   {
@@ -190,15 +181,9 @@ const SLOTS = [
 ];
 
 // Two threshold modes:
-//   "absolute" — fixed values. Right for CPU/GPU temp (real throttle
-//                points that don't move) and any 0–100% capacity row.
-//   "relative" — offsets above a rolling baseline. Right for sensors
-//                that track room/case conditions as much as component
-//                load (ambient, RAM, SSD) — a fixed cutoff either nags
-//                constantly in a warm room or never fires in a cold
-//                one. See _relBaseline() below for how the baseline
-//                is derived.
-const PCT_LEVELS = [0, 25, 50, 75, 100]; // shared 5-step % ramp
+//   "absolute" — real throttle and any 0–100% capacity row.
+//   "relative" — offsets above a rolling baseline.
+const PCT_LEVELS = [0, 25, 50, 75, 100];
 
 const WARN_T = {
   cpu_temp: { mode: "absolute", levels: [35, 55, 72, 82, 92] },
@@ -207,28 +192,11 @@ const WARN_T = {
   gpu_load: { mode: "absolute", levels: PCT_LEVELS },
   lnx_ram_pct: { mode: "absolute", levels: PCT_LEVELS },
   lnx_swap_pct: { mode: "absolute", levels: PCT_LEVELS },
-
-  // Ambient/case air has no natural "hot" point the way silicon does —
-  // a warm room reads high all day even with perfect airflow. Levels
-  // are °C above this sensor's own rolling floor, not °C absolute.
   case_temp: { mode: "relative", levels: [3, 6, 10, 14, 18] },
-
-  // RAM ICs and SSD controllers drift with ambient too, just less than
-  // an open-air case sensor — wider deltas give them the extra
-  // headroom they have before a rise actually means something.
   ram_temp: { mode: "relative", levels: [8, 14, 20, 28, 36] },
   disk_a_temp: { mode: "relative", levels: [10, 18, 26, 35, 45] },
 };
 
-// Rolling low-water-mark per sid, used by "relative" mode. A sensor's
-// baseline is simply the lowest value it's shown in the trailing
-// window — no calibration step, nothing persisted. As the window
-// slides, old lows age out: the baseline drifts up on its own if true
-// ambient rises (a heat wave, a warmer room in summer) and snaps down
-// immediately on a new low (cooler night, dust cleaned out). The
-// window needs to be long enough that an ordinary load spike doesn't
-// get mistaken for the new normal — 30 min comfortably outlasts any
-// single gaming/render session's warm-up.
 const BASELINE_WINDOW_MS = 30 * 60 * 1000;
 const _baselineHist = {}; // sid -> [{t, v}, …] oldest-first
 
@@ -255,11 +223,6 @@ function warnLevel(slotId, val) {
       if (delta >= d) lvl++;
       else break;
     }
-    // Sitting at (or just above) baseline is the *expected* resting
-    // state for these sensors, not an absence of signal — 0 lit dots
-    // reads as "sensor's dead," not "everything's fine." Floor at 1
-    // so nominal always shows something, same way the fan-duty dots
-    // never truly go dark.
     return Math.max(1, lvl);
   }
 
@@ -384,11 +347,7 @@ function cycleRowStyle(row) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  ROW MENU — small floating "⋯" menu used by custom rows to fit
-//  rename/style/reassign/move/remove without crowding the row with
-//  five separate buttons. Single shared instance, positioned from
-//  the trigger button's rect (cards have overflow:hidden, so an
-//  absolutely-positioned dropdown nested inside one would clip).
+//  "⋯" ROW MENU
 // ═══════════════════════════════════════════════════════════════
 let _rowMenuEl = null;
 
@@ -438,8 +397,7 @@ function _openRowMenu(anchorBtn, items) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SUB TOOLTIP — shows the "used / total GB" label on bar row
-//  hover. Body-level so card overflow:hidden can't clip it.
+//  SUB TOOLTIP — shows the "used / total GB" label
 // ═══════════════════════════════════════════════════════════════
 let _subTipEl = null;
 let _subTipTarget = null;
@@ -491,46 +449,12 @@ function _customRowLabel(sid) {
   return null;
 }
 
-// Wires an "+ assign" / "✎" affordance onto a row element in edit
-// mode. Top-level (not per-card) since it only touches globals —
-// callable from buildCards()'s per-card loop and from
-// _renderCustomRowSection() alike.
-function _afford(elem, row) {
-  if (!editMode || !row.typeFilter) return;
-  elem.classList.add("assignable");
-  const assigned = !!cfg.slots[row.sid];
-  const badge = el("button", "assign-badge");
-  badge.textContent = assigned ? "✎" : "+ assign";
-  if (assigned) badge.classList.add("set");
-  const open = () => openPicker(row.sid, row.typeFilter);
-  badge.onclick = (e) => {
-    e.stopPropagation();
-    open();
-  };
-  elem.onclick = open;
-  elem.appendChild(badge);
-}
-
-// Appends a style-cycle button to a row element when in edit mode.
-// Call this before any assign/remap badge so the order reads naturally.
 const _STYLE_LABELS = {
   bar: "▬",
   "dots-warn": "●●",
   "dots-meter": "○○",
   "num-only": "#",
 };
-function _styleToggle(elem, row) {
-  if (!editMode) return;
-  if (!row.pctSid && !row.mode) return; // no meaningful options
-  const btn = el("button", "assign-badge style-tog");
-  btn.textContent = _STYLE_LABELS[getRowStyle(row)] ?? "?";
-  btn.title = "Toggle display style";
-  btn.onclick = (e) => {
-    e.stopPropagation();
-    cycleRowStyle(row);
-  };
-  elem.appendChild(btn);
-}
 
 // ⋯ menu for hardcoded (non-custom) rows — consolidates style toggle +
 // assign/remap into a single button, mirroring the custom-row row-more menu.
@@ -584,12 +508,9 @@ function _hardRowMenu(elem, row, { isAutoLinux = false } = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  CUSTOM ROWS — user-added rows appended to one of the 6 fixed
-//  cards. What gets *plotted* on a card's sparkline is fixed
-//  (CARD_DEFS); custom rows are always noPlot — display-only
-//  (dots/value), never feed the canvas. They reuse the exact same
-//  cfg.slots / typeFilter / style machinery as built-in rows, just
-//  with a generated sid and their own per-card display order.
+//  CUSTOM ROWS — user-added rows on a card. Always noPlot (display
+//  only, never feed the sparkline). Reuse cfg.slots/typeFilter/style
+//  machinery from built-in rows, with a generated sid + own order.
 // ═══════════════════════════════════════════════════════════════
 const ALL_SENSOR_TYPES = ["temp", "rpm", "duty", "watts"];
 
@@ -765,7 +686,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fmt1 = (v, u) =>
   typeof v !== "number"
     ? "--"
-    : u === "°C" || u === "MB/s"
+    : u === "°C" || u === "KB/s"
       ? v.toFixed(1)
       : u === "GB"
         ? v.toFixed(2)
@@ -985,12 +906,12 @@ window.onLinuxStats = function (stats) {
       watts: stats.swap_total_gb ?? stats.swap_total ?? stats.swap_total_gib,
     },
     {
-      name: "RX MB/s",
-      watts: stats.net?.rx_mbps ?? 0,
+      name: "RX KB/s",
+      watts: stats.net?.rx_kbps ?? 0,
     },
     {
-      name: "TX MB/s",
-      watts: stats.net?.tx_mbps ?? 0,
+      name: "TX KB/s",
+      watts: stats.net?.tx_kbps ?? 0,
     },
   ];
 
@@ -1188,15 +1109,18 @@ function buildLeaves(devices) {
         });
       if (ch.watts !== undefined) {
         const isFolder = ch.name?.startsWith("Folder ");
+        const isNetRate = ch.name === "RX KB/s" || ch.name === "TX KB/s";
+        const unit = isFolder ? "GB" : isNetRate ? "KB/s" : "W";
+        const fieldTag = isFolder ? "(GB)" : isNetRate ? "(KB/s)" : "(Watts)";
         out.push({
           uid: dev.uid,
           kind: "channel",
           name: ch.name,
           field: "watts",
           value: ch.watts,
-          unit: isFolder ? "GB" : "W",
+          unit,
           dLbl,
-          label: `${dLbl} → ${ch.name} ${isFolder ? "(GB)" : "(Watts)"}`,
+          label: `${dLbl} → ${ch.name} ${fieldTag}`,
         });
       }
     }
@@ -1271,21 +1195,23 @@ function autoAssignLinux() {
   const lat = getLatest(linuxDev);
   if (!lat) return;
 
-  // [slotId, channelName, field]
+  // [slotId, channelName, field, unit] — unit is explicit per-entry
+  // rather than derived from field, since "watts" is a generic numeric
+  // carrier reused for GB (folders), KB/s (network), and actual W.
   const MAP = [
-    ["cpu_load", "CPU Usage", "duty"],
-    ["lnx_ram_pct", "RAM Usage", "duty"],
-    ["lnx_ram_used", "RAM Used", "watts"],
-    ["lnx_ram_total", "RAM Total", "watts"],
-    ["lnx_swap_pct", "Swap Usage", "duty"],
-    ["lnx_swap_used", "Swap Used", "watts"],
-    ["lnx_swap_tot", "Swap Total", "watts"],
-    ["lnx_net_rx", "RX MB/s", "watts"],
-    ["lnx_net_tx", "TX MB/s", "watts"],
+    ["cpu_load", "CPU Usage", "duty", "%"],
+    ["lnx_ram_pct", "RAM Usage", "duty", "%"],
+    ["lnx_ram_used", "RAM Used", "watts", "GB"],
+    ["lnx_ram_total", "RAM Total", "watts", "GB"],
+    ["lnx_swap_pct", "Swap Usage", "duty", "%"],
+    ["lnx_swap_used", "Swap Used", "watts", "GB"],
+    ["lnx_swap_tot", "Swap Total", "watts", "GB"],
+    ["lnx_net_rx", "RX KB/s", "watts", "KB/s"],
+    ["lnx_net_tx", "TX KB/s", "watts", "KB/s"],
   ];
 
   let changed = false;
-  for (const [slotId, chName, field] of MAP) {
+  for (const [slotId, chName, field, unit] of MAP) {
     if (cfg.slots[slotId]) continue;
     const ch = lat.channels?.find((c) => c.name === chName);
     if (!ch) continue;
@@ -1294,7 +1220,7 @@ function autoAssignLinux() {
       kind: "channel",
       name: chName,
       field,
-      unit: field === "duty" ? "%" : "W",
+      unit,
       dLbl: "Linux",
       label: `Linux → ${chName}`,
     };
@@ -1512,16 +1438,9 @@ function closePicker() {
 document.getElementById("picker-close").onclick = () => closePicker();
 
 // ═══════════════════════════════════════════════════════════════
-//  THEME SCREEN
+//  THEME BUILDER — color pickers that write :root CSS live to the
+//  active theme. Exposed below so theme-tile clicks can resync them.
 // ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-//  THEME BUILDER
-//  Interactive color picker panel → generates :root { … } CSS
-//  into the custom-css textarea, ready to Apply.
-// ═══════════════════════════════════════════════════════════════
-// Set by initThemeBuilder — exposed so theme-tile clicks (initThemeScreen)
-// can resync the pickers, and so the "Custom…" tile can pull a CSS string
-// without duplicating the generator.
 let _tbSync = null;
 let _tbGenerateCSS = null;
 
@@ -1924,15 +1843,6 @@ function barColorForPct(pct, baseColor) {
   return baseColor;
 }
 
-function mountLabelFromSlot(slot, fallback = "") {
-  const raw = String(slot?.label || slot?.name || fallback || "");
-  const m = raw.match(
-    /Disk\s+(.+?)\s+(?:Usage|Used|Free|Total)(?:\s*\(.*\))?$/i,
-  );
-  if (m) return m[1].trim();
-  return fallback || raw;
-}
-
 function barText(used, total) {
   if (typeof used !== "number" || typeof total !== "number") return "--";
   return `${fmtGB(used)}/${fmtGB(total)} GB`;
@@ -1943,23 +1853,12 @@ function barText(used, total) {
 // ═══════════════════════════════════════════════════════════════
 
 // ── Card type reference ──────────────────────────────────────────
-//  "spark"  — 2-col: canvas left | rows right
-//             Row flags: sparkKey ("temp"|"load"|"fan") selects the
-//             series to feed; dynamicNorm:true lets that series'
-//             Y-scale auto-track its peak instead of a fixed 0-100
-//             ceiling (for non-percentage metrics, e.g. network
-//             throughput); noPlot:true shows value but skips plotting.
-//             Rows with pctSid render as bar-rows; otherwise sr rows.
+//  "spark"  — canvas + rows. sparkKey picks the series a row feeds;
+//             dynamicNorm:true auto-scales Y instead of fixed 0-100;
+//             noPlot:true shows the value but skips the chart.
 //  "sensor" — rows only, no canvas.
-//             Rows with pctSid → bar-row; otherwise → sr row.
-//
-//  Every card also accepts user-added custom rows (cfg.customRows),
-//  reorderable independently of the locked rows above — see
-//  customRowsFor() / _renderCustomRowSection().
-//
-//  (DualSpark, a full-width dual-series canvas, is no longer used by
-//  any card here but is left intact below in case a future card
-//  wants a full-width graph again.)
+//  Rows with pctSid render as bar-rows, else sr rows. Every card also
+//  accepts custom rows (cfg.customRows) — see customRowsFor().
 // ────────────────────────────────────────────────────────────────
 const CARD_DEFS = [
   {
@@ -2127,10 +2026,7 @@ ${row.mode && getRowStyle(row) !== "num-only" ? `<span id="sd-${row.sid}">${make
 }
 
 function _buildBarRow(row, baseColor, dashStyle = "solid") {
-  const slot = cfg.slots[row.sid];
-  const label = /^[A-C]$/.test(row.lbl)
-    ? mountLabelFromSlot(slot, row.lbl)
-    : row.lbl || mountLabelFromSlot(slot, "");
+  const label = row.lbl;
   const srow = el("div", "sr");
   srow.id = "bar-" + row.sid;
   srow.dataset.sub = "--"; // populated with used/total and/or peak on render
@@ -2141,6 +2037,16 @@ ${row.usedSid || row.totalSid ? `<span class="br-sub" id="bv-${row.sid}" aria-hi
 <span class="br-pct-num" id="bp-${row.sid}">--</span><span class="br-pct-unit">%</span>
 <div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
   return srow;
+}
+
+// Accent color + line-dash style for a spark-card row, by sparkKey.
+// noPlot rows (context-only, not actually plotted) get a neutral dim
+// accent instead — used by the non-autoLinux branch in buildCards().
+function _sparkAccent(row, cardColor, fanLine, loadColor) {
+  if (row.noPlot) return { accent: withAlpha(cssVar("--txt-dim"), 0.45), dash: "solid" };
+  if (row.sparkKey === "fan") return { accent: fanLine, dash: "dotted" };
+  if (row.sparkKey === "load") return { accent: loadColor, dash: "dashed" };
+  return { accent: cardColor, dash: "solid" };
 }
 
 function buildCards() {
@@ -2195,8 +2101,8 @@ function buildCards() {
       const scol = el("div", "spark-col");
       body.appendChild(scol);
       const {
-        spark: { w: CW, h: CH },
-      } = canvasDims();
+        canvas: { w: CW, h: CH },
+      } = SIZES[cfg.size] || SIZES.s;
       const dpr = window.devicePixelRatio || 1;
       const cv = document.createElement("canvas");
       cv.width = CW * dpr;
@@ -2227,16 +2133,7 @@ function buildCards() {
       for (const row of def.rows) {
         if (row.autoLinux) {
           if (!cfg.slots[row.sid] && !linuxHasData) continue;
-          let accent = cardColor,
-            dash = "solid";
-          if (row.sparkKey === "fan") {
-            accent = fanLine;
-            dash = "dotted";
-          }
-          if (row.sparkKey === "load") {
-            accent = loadColor;
-            dash = "dashed";
-          }
+          const { accent, dash } = _sparkAccent(row, cardColor, fanLine, loadColor);
           const elem =
             getRowStyle(row) === "bar"
               ? _buildBarRow(row, accent, dash)
@@ -2247,21 +2144,7 @@ function buildCards() {
         }
         // CC / noPlot rows — show if assigned or in editMode
         if (!cfg.slots[row.sid] && !editMode) continue;
-        let accent = cardColor,
-          dash = "solid";
-        if (row.sparkKey === "fan") {
-          accent = fanLine;
-          dash = "dotted";
-        }
-        if (row.sparkKey === "load") {
-          accent = loadColor;
-          dash = "dashed";
-        }
-        // noPlot rows: neutral dim accent — not part of sparkline legend
-        if (row.noPlot) {
-          accent = withAlpha(cssVar("--txt-dim"), 0.45);
-          dash = "solid";
-        }
+        const { accent, dash } = _sparkAccent(row, cardColor, fanLine, loadColor);
         const elem =
           getRowStyle(row) === "bar"
             ? _buildBarRow(row, accent, dash)
@@ -2300,29 +2183,15 @@ function buildCards() {
           const mount = ch.name.replace(/^Disk /, "").replace(/ Usage$/, "");
           if ((cfg.hiddenMounts ?? []).includes(mount)) continue;
           const safeId = "ad-" + mount.replace(/[^a-zA-Z0-9]/g, "_");
-          const usedCh = linuxLat.channels?.find(
-            (c) => c.name === `Disk ${mount} Used`,
-          );
-          const totalCh = linuxLat.channels?.find(
-            (c) => c.name === `Disk ${mount} Total`,
-          );
-          const pctRaw = typeof ch.duty === "number" ? ch.duty : undefined;
-          const used = usedCh?.watts;
-          const total = totalCh?.watts;
-          const pct = clampPct(pctRaw ?? 0);
           const mountLbl =
             mount === "/" ? "root" : mount.split("/").pop() || mount;
-          const barClr = barColorForPct(pct, cardColor);
-
-          const srow = el("div", "sr");
-          srow.id = "bar-" + safeId;
-          srow.dataset.sub = barText(used, total);
-          srow.innerHTML = `
-<span class="sr-accent" style="background:${cardColor}"></span>
-<span class="sr-lbl" id="bl-${safeId}">${esc(mountLbl)}</span>
-<span class="br-sub" id="bv-${safeId}" aria-hidden="true">${barText(used, total)}</span>
-<span class="br-pct-num" id="bp-${safeId}">${pctRaw !== undefined ? Math.round(pct) : "--"}</span><span class="br-pct-unit">%</span>
-<div class="br-track"><div class="br-fill" id="bf-${safeId}" style="width:${pct}%;background:${barClr}"></div></div>`;
+          // usedSid/totalSid just need to be truthy here to get the
+          // "used/total" sub-span rendered — real values are filled in
+          // by the renderDashboard() pass that always follows buildCards().
+          const srow = _buildBarRow(
+            { sid: safeId, lbl: mountLbl, usedSid: true, totalSid: true },
+            cardColor,
+          );
           if (editMode) {
             const hideBtn = el("button", "slot-clr");
             hideBtn.title = `Hide ${mount}`;
@@ -2405,13 +2274,9 @@ function autoResize() {
 
   let w, contentH;
   if (drawerOpen) {
-    // Drawer sits beside the dashboard, not on top of it — window widens to
-    // fit both columns, and height follows whichever column is taller.
-    // +4 safety margin: .drawer-inner's content is identical at every size,
-    // so any shortfall here would show up as a hairline scrollbar on every
-    // preset rather than scaling with anything — a sub-pixel rounding /
-    // scrollbar-gutter reflow away from fitting exactly. Cheaper to pad
-    // the measurement than chase the exact fractional pixel.
+    // Drawer sits beside the dashboard, not on top — window widens to fit
+    // both columns; height follows the taller one. +4px covers rounding
+    // so a hairline scrollbar doesn't appear in the drawer.
     const inner = document.querySelector(".drawer-inner");
     const drawerH = inner ? inner.scrollHeight + 4 : 0;
     w = baseW + DRAWER_W;
@@ -2589,141 +2454,12 @@ function renderDashboard(devices) {
     }
   }
 }
-// ═══════════════════════════════════════════════════════════════
-//  DUAL-SERIES SPARKLINE  (memgraph / netgraph)
-//
-//  Two series sharing the same Y axis:
-//    A — solid line + gradient fill  (RAM%, RX)
-//    B — dashed line, no fill        (Swap%, TX)
-//
-//  fixedMax:null  → Y auto-scales to 115% of peak observed
-//  fixedMax:100   → Y fixed 0–100 (percentages)
-// ═══════════════════════════════════════════════════════════════
-class DualSpark {
-  constructor(canvas, { colorA, colorB, W, H, dpr = 1, fixedMax = null } = {}) {
-    this.cv = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.ctx.scale(dpr, dpr);
-    this.W = W;
-    this.H = H;
-    this.MAX = 60;
-    this.colorA = colorA;
-    this.colorB = colorB;
-    this.fixedMax = fixedMax;
-    this._peak = fixedMax ?? 1;
-    this.dataA = [];
-    this.dataB = [];
-  }
-
-  push(a, b) {
-    const add = (arr, v) => {
-      if (v != null && !isNaN(v)) {
-        arr.push(v);
-        if (arr.length > this.MAX) arr.shift();
-      }
-    };
-    add(this.dataA, a);
-    add(this.dataB, b);
-    if (this.fixedMax == null) {
-      this._peak = Math.max(1, ...this.dataA, ...this.dataB) * 1.15;
-    } else {
-      this._peak = this.fixedMax;
-    }
-    this.draw();
-  }
-
-  draw() {
-    const { ctx, W, H, MAX, dataA, dataB, colorA, colorB, _peak: norm } = this;
-    ctx.clearRect(0, 0, W, H);
-
-    const xOf = (i, len) => (i + MAX - len) * (W / (MAX - 1));
-    const yOf = (v) =>
-      H - Math.min(1, Math.max(0, v / norm)) * H * 0.86 - H * 0.04;
-
-    // ── Grid ─────────────────────────────────────────────────
-    // Boosted to a fixed, legible alpha here rather than trusting each
-    // theme's --spark-grid value — several themes tuned it low enough
-    // to be nearly invisible against their background, which defeats
-    // the point of a level reference. Hue still comes from the theme;
-    // only opacity is normalized. Midline reads a touch brighter as an
-    // at-a-glance "half" mark.
-    ctx.save();
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([]);
-    const gridColor = cssVar("--spark-grid") || "rgba(255,255,255,0.06)";
-    for (const pct of [0.25, 0.5, 0.75, 1.0]) {
-      const y = H - pct * H * 0.86 - H * 0.04;
-      ctx.strokeStyle = withAlpha(gridColor, pct === 0.5 ? 0.22 : 0.13);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // ── Series B: dashed, no fill (drawn first, sits behind) ──
-    if (dataB.length >= 2) {
-      ctx.save();
-      ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = colorB;
-      ctx.lineWidth = 1.2;
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      dataB.forEach((v, i) => {
-        const x = xOf(i, dataB.length),
-          y = yOf(v);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // ── Series A: solid + gradient fill (drawn on top) ────────
-    if (dataA.length >= 2) {
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, withAlpha(colorA, 0.22));
-      g.addColorStop(1, withAlpha(colorA, 0.0));
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(xOf(0, dataA.length), H);
-      dataA.forEach((v, i) => ctx.lineTo(xOf(i, dataA.length), yOf(v)));
-      ctx.lineTo(xOf(dataA.length - 1, dataA.length), H);
-      ctx.closePath();
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.restore();
-
-      ctx.save();
-      ctx.setLineDash([]);
-      ctx.strokeStyle = colorA;
-      ctx.lineWidth = 1.6;
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      dataA.forEach((v, i) => {
-        const x = xOf(i, dataA.length),
-          y = yOf(v);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      ctx.restore();
-    }
-  }
-}
 
 // ═══════════════════════════════════════════════════════════════
-//  MULTI-SERIES SPARKLINE
-//
-//  Three series (drawn fan→load→temp so temp sits on top):
-//    temp — solid + fill, card colour
-//    load — dashed (5,3), card colour @ 55% alpha
-//    fan  — dotted (2,4), fan accent colour
-//
-//  Grid: horizontal lines at 25/50/75/100 %
-//        vertical time markers every 8 data points (~16 s)
-//
-//  Legend: drawn INSIDE the canvas at the bottom — no HTML strip.
-//  The line style samples (solid / dashed / dotted) replace the
-//  old text legend and eliminate the double-legend issue.
+//  MULTI-SERIES SPARKLINE — up to 3 series, drawn fan→load→temp so
+//  temp sits on top: temp solid+fill, load dashed, fan dotted. Grid
+//  lines at 25/50/75/100%; the line-style samples double as the
+//  legend (no separate HTML strip).
 // ═══════════════════════════════════════════════════════════════
 class MultiSpark {
   constructor(canvas, { cardColor, loadColor, fanLine, W, H, dpr = 1 } = {}) {
@@ -2769,11 +2505,8 @@ class MultiSpark {
     };
 
     // Peak markers are real DOM elements (not canvas-drawn) parented
-    // to the canvas's own container (.spark-col, which has
-    // position:relative for exactly this), so they can physically
-    // straddle the canvas border and spill into the gap beside it —
-    // canvas content is always clipped to its own bitmap and can
-    // never overflow that way.
+    // to .spark-col (position:relative) so they can spill past the
+    // canvas's own border instead of being clipped to its bitmap.
     this.peakDots = {};
     const container = canvas.parentElement;
     for (const key of Object.keys(this.S)) {
@@ -2784,11 +2517,8 @@ class MultiSpark {
       this.peakDots[key] = dot;
     }
 
-    // Wall-clock timestamps paralleling the data buffers — lets the
-    // canvas show an honest "how much time is this window" label
-    // instead of a fixed guess, since push cadence isn't perfectly
-    // regular (it's driven by whichever data source — CC SSE or the
-    // Linux stats timer — fires next).
+    // Wall-clock timestamps paralleling the data buffers, for an honest
+    // time-horizon label (push cadence isn't perfectly regular).
     this.times = [];
   }
 
@@ -2803,7 +2533,7 @@ class MultiSpark {
   // Mark a series as auto-scaling — its norm re-derives from whatever
   // is actually in the visible window (×1.2 headroom), rather than
   // staying fixed at 100. Use for metrics with no natural 0–100
-  // ceiling (e.g. network throughput in MB/s).
+  // ceiling (e.g. network throughput in KB/s).
   setDynamic(key, dynamic = true) {
     const s = this.S[key];
     if (s) s.dynamic = dynamic;
@@ -2812,16 +2542,29 @@ class MultiSpark {
     const s = this.S[key];
     if (s) s.norm = n;
   }
-  // Auto-ranging: recomputed from the current window every call, not a
-  // ratchet that only ever grows. A norm that only grows gets stuck at
-  // whatever the single biggest value ever seen was — once anything
-  // spikes, everyday-sized traffic afterwards reads as ~0% of that
-  // scale forever. Re-deriving from the visible window means the
-  // scale shrinks back down once a spike scrolls out of view (~2 min
-  // at the default 60-point window), so ordinary small values still
-  // get real vertical range instead of hugging the floor. The 0.05
-  // epsilon just keeps a fully-idle window from dividing by ~0 and
-  // turning noise into apparent full-scale spikes.
+  // Locks two dynamic series to one Y-scale (e.g. RX/TX) so their heights
+  // stay comparable instead of each auto-scaling to its own peak.
+  setSharedNorm(keys) {
+    if (!Array.isArray(keys) || keys.length < 2) return;
+
+    const values = [];
+
+    for (const key of keys) {
+      const s = this.S[key];
+      if (!s) continue;
+      values.push(...s.data);
+    }
+
+    const norm = Math.max(0.05, ...values) * 1.2;
+
+    for (const key of keys) {
+      const s = this.S[key];
+      if (s) s.norm = norm;
+    }
+  }
+  // Recomputed from the visible window every call (not a one-way
+  // ratchet) so the scale shrinks back down once a spike scrolls out
+  // of view, instead of small values staying pinned near the floor.
   trackMax(key, val) {
     const s = this.S[key];
     if (!s || typeof val !== "number" || isNaN(val)) return;
@@ -2842,19 +2585,17 @@ class MultiSpark {
     if (val == null || isNaN(val)) return;
     const s = this.S[key];
     if (!s) return;
-    if (s.dynamic) this.trackMax(key, val);
     s.data.push(val);
     if (s.data.length > this.MAX) s.data.shift();
     if (s.dynamic) {
-      // Auto-ranging series: the scale itself is only ever as tall as
-      // the current window's peak, so an all-time session high almost
-      // always exceeds it — that would just pin the marker to the top
-      // edge forever rather than showing anything meaningful. Track
-      // the windowed peak instead, matching the same basis trackMax()
-      // uses for the scale, so the marker always lands validly within
-      // whatever's currently drawn. (The true all-time high is still
-      // available via the row's hover tooltip — this only affects the
-      // in-chart dot.)
+      this.trackMax(key, val);
+      // RX/TX share one scale so their bars stay comparable.
+      if (this.S.temp && this.S.load && key !== "fan") {
+        this.setSharedNorm(["temp", "load"]);
+      }
+      // Peak tracks the windowed max (not all-time) so it always lands
+      // within the currently-drawn scale; true all-time high still
+      // shows via the row's hover tooltip.
       s.peak = Math.max(val, ...s.data);
     } else if (typeof peakOverride === "number") {
       // Caller has a persistent, correctly-scaled peak already (e.g.
@@ -2880,13 +2621,8 @@ class MultiSpark {
       return GH - p * GH * 0.86 - GH * 0.04;
     };
 
-    // ── Horizontal gridlines ──────────────────────────────────
-    // Boosted to a fixed, legible alpha here rather than trusting each
-    // theme's --spark-grid value — several themes tuned it low enough
-    // to be nearly invisible against their background, which defeats
-    // the point of a level reference. Hue still comes from the theme;
-    // only opacity is normalized. Midline reads a touch brighter as an
-    // at-a-glance "half" mark.
+    // ── Horizontal gridlines ── alpha is fixed here (not themed) since
+    // some themes' --spark-grid is too faint to read; midline is brighter.
     ctx.save();
     ctx.lineWidth = 0.5;
     ctx.setLineDash([]);
@@ -2951,12 +2687,8 @@ class MultiSpark {
       ctx.stroke();
       ctx.restore();
 
-      // Peak marker — a DOM element (see constructor), positioned here
-      // to sit at this series' peak height, right on the canvas's
-      // border. Unlike canvas drawing it isn't clipped to the bitmap,
-      // so it can actually spill into the gap beside the canvas rather
-      // than being cut off at the edge. Gated behind a preference since
-      // it's a taste call, not everyone wants the extra marks.
+      // Peak marker (DOM element, see constructor) — gated behind a
+      // preference since not everyone wants the extra marks.
       const dot = this.peakDots[key];
       if (dot) {
         if (cfg.showPeakMarkers && s.peak !== undefined) {
@@ -2969,13 +2701,9 @@ class MultiSpark {
       }
     }
 
-    // ── Time-horizon label ────────────────────────────────────
-    // Honest elapsed-time span of the visible window — push cadence
-    // isn't perfectly regular, so this reads real timestamps rather
-    // than assuming a fixed interval per data point. Drawn on a small
-    // scrim (not just bare text) since a fixed corner otherwise gets
-    // run over by whatever's plotted near its floor — this guarantees
-    // legibility regardless of size preset or where the line sits.
+    // ── Time-horizon label — real elapsed span (push cadence isn't
+    // perfectly regular), drawn on a scrim so it stays legible over
+    // whatever's plotted near the floor.
     const span = _fmtSpan(
       this.times.length >= 2
         ? this.times[this.times.length - 1] - this.times[0]
