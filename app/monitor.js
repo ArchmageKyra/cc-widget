@@ -275,6 +275,10 @@ let sparks = {};
 // Highest value seen per sid since launch — resets on relaunch by design
 // ("session" peak), surfaced via the existing hover sub-tip mechanism.
 let sessionPeaks = {};
+// Friendly names — populated once per connection from CC's /devices and
+// /settings/devices endpoints, keyed by device uid. See fetchDeviceMeta().
+// uid -> { name, disabled, temps: {key: label}, channels: {key: label} }
+let deviceMeta = {};
 
 function _fmtUptime(ms) {
   const s = Math.floor(ms / 1000);
@@ -963,9 +967,67 @@ function refreshDevices() {
   if (phase === "dashboard") renderDashboard(liveDevices);
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  DEVICE META — friendly names
+//  CC's live status stream only carries internal keys ("temp1",
+//  "fan1", etc.) and a bare device type ("Liquidctl"). The actual
+//  human-readable names live on two separate REST endpoints:
+//    GET /devices          → dev.name (device), info.temps[key].label,
+//                             info.channels[key].label (sensor/channel)
+//    GET /settings/devices  → disable flags + per-channel label
+//                             overrides (CC's own "rename sensor" field,
+//                             which wins over the device's default label)
+//  Fetched once per connection; buildLeaves() falls back to the old
+//  type/key-based labels if a uid or key isn't found here (e.g. this
+//  fetch hasn't completed yet, or an older daemon lacks an endpoint).
+// ═══════════════════════════════════════════════════════════════
+async function fetchDeviceMeta() {
+  const authHeaders = cfg.token ? { Authorization: "Bearer " + cfg.token } : {};
+  try {
+    const res = await fetch(cfg.baseUrl + "/devices", { headers: authHeaders });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const { devices } = await res.json();
+    const meta = {};
+    for (const dev of devices ?? []) {
+      const temps = {},
+        channels = {};
+      for (const [key, info] of Object.entries(dev.info?.temps ?? {}))
+        if (info?.label) temps[key] = info.label;
+      for (const [key, info] of Object.entries(dev.info?.channels ?? {}))
+        if (info?.label) channels[key] = info.label;
+      meta[dev.uid] = { name: dev.name, disabled: false, temps, channels };
+    }
+    deviceMeta = meta;
+  } catch {
+    return; // keep whatever we had (or the type/key fallback) — non-fatal
+  }
+
+  // Settings pass: device-level disable + per-channel label overrides.
+  // Best-effort — if this one 404s (older daemon) the /devices names
+  // fetched above still apply.
+  try {
+    const res = await fetch(cfg.baseUrl + "/settings/devices", {
+      headers: authHeaders,
+    });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const { devices } = await res.json();
+    for (const dev of devices ?? []) {
+      const m = deviceMeta[dev.uid];
+      if (!m) continue;
+      m.disabled = !!dev.disable;
+      for (const [key, cs] of Object.entries(dev.channel_settings ?? {})) {
+        if (cs?.label) m.channels[key] = cs.label; // user override wins
+      }
+    }
+  } catch {
+    // /devices names are still good without this
+  }
+}
+
 async function startSSE() {
   stopSSE();
   sseAbort = new AbortController();
+  fetchDeviceMeta(); // fire-and-forget — buildLeaves() falls back until it resolves
   setStatus("spin", "Connecting…");
   while (true) {
     try {
@@ -1070,57 +1132,74 @@ function getFanDuty(devices, slot) {
 function buildLeaves(devices) {
   const out = [];
   for (const dev of devices) {
-    const lat = getLatest(dev),
-      dLbl = `${dev.type} ${dev.type_index ?? ""}`.trim();
+    const meta = deviceMeta[dev.uid];
+    if (meta?.disabled) continue; // respect CC's own device-disable flag
+    const lat = getLatest(dev);
     if (!lat) continue;
-    for (const t of lat.temps ?? [])
+    // Prefer CC's real device name (from /devices); dev.type is only ever
+    // set on the synthetic Linux device — dev.d_type is the actual field
+    // name for real CC devices (e.g. "Liquidctl", "CPU").
+    const dLbl =
+      meta?.name || `${dev.d_type ?? dev.type ?? "Device"} ${dev.type_index ?? ""}`.trim();
+
+    for (const t of lat.temps ?? []) {
+      const sensorName = meta?.temps?.[t.name] || t.name;
       out.push({
         uid: dev.uid,
         kind: "temp",
         name: t.name,
+        sensorName,
         field: null,
         value: t.temp,
         unit: "°C",
         dLbl,
-        label: `${dLbl} → ${t.name}`,
+        label: `${dLbl} → ${sensorName}`,
       });
+    }
     for (const ch of lat.channels ?? []) {
+      const sensorName = meta?.channels?.[ch.name] || ch.name;
       if (ch.rpm !== undefined)
         out.push({
           uid: dev.uid,
           kind: "channel",
           name: ch.name,
+          sensorName,
           field: "rpm",
           value: ch.rpm,
           unit: "RPM",
           dLbl,
-          label: `${dLbl} → ${ch.name} (RPM)`,
+          label: `${dLbl} → ${sensorName} (RPM)`,
         });
       if (ch.duty !== undefined)
         out.push({
           uid: dev.uid,
           kind: "channel",
           name: ch.name,
+          sensorName,
           field: "duty",
           value: ch.duty,
           unit: "%",
           dLbl,
-          label: `${dLbl} → ${ch.name} (Duty)`,
+          label: `${dLbl} → ${sensorName} (Duty)`,
         });
       if (ch.watts !== undefined) {
         const isFolder = ch.name?.startsWith("Folder ");
         const isNetRate = ch.name === "RX KB/s" || ch.name === "TX KB/s";
         const unit = isFolder ? "GB" : isNetRate ? "KB/s" : "W";
         const fieldTag = isFolder ? "(GB)" : isNetRate ? "(KB/s)" : "(Watts)";
+        // Folder/net rows are synthetic (Linux side) — no CC label to
+        // look up, so display the constructed name as-is.
+        const dispName = isFolder || isNetRate ? ch.name : sensorName;
         out.push({
           uid: dev.uid,
           kind: "channel",
           name: ch.name,
+          sensorName: dispName,
           field: "watts",
           value: ch.watts,
           unit,
           dLbl,
-          label: `${dLbl} → ${ch.name} ${fieldTag}`,
+          label: `${dLbl} → ${dispName} ${fieldTag}`,
         });
       }
     }
@@ -1337,7 +1416,7 @@ function openPicker(
         const lk = leafKey(leaf);
         if (lk === currentKey) row.classList.add("sel");
 
-        row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.name)}</span>
+        row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.sensorName ?? leaf.name)}</span>
 <span class="picker-leaf-val">${fmt1(leaf.value, leaf.unit)}</span>
 <span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
 
