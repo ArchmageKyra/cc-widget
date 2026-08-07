@@ -1521,14 +1521,6 @@ document.getElementById("picker-close").onclick = () => closePicker();
 //  THEME BUILDER — color pickers that write :root CSS live to the
 //  active theme. Exposed below so theme-tile clicks can resync them.
 // ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-//  THEME BUILDER
-//  Interactive color picker panel → generates :root { … } CSS
-//  into the custom-css textarea, ready to Apply.
-// ═══════════════════════════════════════════════════════════════
-// Set by initThemeBuilder — exposed so theme-tile clicks (initThemeScreen)
-// can resync the pickers, and so the "Custom…" tile can pull a CSS string
-// without duplicating the generator.
 let _tbSync = null;
 let _tbGenerateCSS = null;
 
@@ -2085,6 +2077,58 @@ const CARD_DEFS = [
   },
 ];
 
+// ── Helpers used by buildCards ───────────────────────────────────
+// dashStyle: "solid" | "dashed" | "dotted"
+// Element order: [accent] [lbl flex:1] [dots] [val] [unit]
+function _accentBg(color, dashStyle) {
+  if (dashStyle === "dashed")
+    return `repeating-linear-gradient(to bottom,${color} 0px,${color} 4px,transparent 4px,transparent 8px)`;
+  if (dashStyle === "dotted")
+    return `repeating-linear-gradient(to bottom,${color} 0px,${color} 2px,transparent 2px,transparent 5px)`;
+  return color; // solid
+}
+
+function _buildSrRow(row, accentColor, dashStyle = "solid") {
+  const sd = SLOTS.find((s) => s.id === row.sid);
+  // Custom rows aren't in SLOTS — derive unit from the assigned slot instead
+  const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? "";
+  const srow = el("div", "sr");
+  srow.id = "sr-" + row.sid;
+  srow.dataset.sub = "--"; // populated with peak info on first render tick
+  // Order: [accent] [lbl flex:1] [val] [unit] [dots]
+  srow.innerHTML = `
+<span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
+<span class="sr-lbl">${row.lbl}</span>
+<span class="sr-val" id="sv-${row.sid}">--</span>
+<span class="sr-unit">${unit}</span>
+${row.mode && getRowStyle(row) !== "num-only" ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
+  return srow;
+}
+
+function _buildBarRow(row, baseColor, dashStyle = "solid") {
+  const label = row.lbl;
+  const srow = el("div", "sr");
+  srow.id = "bar-" + row.sid;
+  srow.dataset.sub = "--"; // populated with used/total and/or peak on render
+  srow.innerHTML = `
+<span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
+<span class="sr-lbl" id="bl-${row.sid}">${esc(label)}</span>
+${row.usedSid || row.totalSid ? `<span class="br-sub" id="bv-${row.sid}" aria-hidden="true">--</span>` : ""}
+<span class="br-pct-num" id="bp-${row.sid}">--</span><span class="br-pct-unit">%</span>
+<div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
+  return srow;
+}
+
+// Accent color + line-dash style for a spark-card row, by sparkKey.
+// noPlot rows (context-only, not actually plotted) get a neutral dim
+// accent instead — used by the non-autoLinux branch in buildCards().
+function _sparkAccent(row, cardColor, fanLine, loadColor) {
+  if (row.noPlot) return { accent: withAlpha(cssVar("--txt-dim"), 0.45), dash: "solid" };
+  if (row.sparkKey === "fan") return { accent: fanLine, dash: "dotted" };
+  if (row.sparkKey === "load") return { accent: loadColor, dash: "dashed" };
+  return { accent: cardColor, dash: "solid" };
+}
+
 // Applies the user's saved drag order to CARD_DEFS — same pattern as
 // customRowsFor()/rowOrder for custom rows. Cards not yet in the saved
 // order (e.g. freshly relevant after a new assignment) fall in at the end.
@@ -2156,58 +2200,6 @@ function initCardSort() {
   });
 }
 
-// ── Helpers used by buildCards ───────────────────────────────────
-// dashStyle: "solid" | "dashed" | "dotted"
-// Element order: [accent] [lbl flex:1] [dots] [val] [unit]
-function _accentBg(color, dashStyle) {
-  if (dashStyle === "dashed")
-    return `repeating-linear-gradient(to bottom,${color} 0px,${color} 4px,transparent 4px,transparent 8px)`;
-  if (dashStyle === "dotted")
-    return `repeating-linear-gradient(to bottom,${color} 0px,${color} 2px,transparent 2px,transparent 5px)`;
-  return color; // solid
-}
-
-function _buildSrRow(row, accentColor, dashStyle = "solid") {
-  const sd = SLOTS.find((s) => s.id === row.sid);
-  // Custom rows aren't in SLOTS — derive unit from the assigned slot instead
-  const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? "";
-  const srow = el("div", "sr");
-  srow.id = "sr-" + row.sid;
-  srow.dataset.sub = "--"; // populated with peak info on first render tick
-  // Order: [accent] [lbl flex:1] [val] [unit] [dots]
-  srow.innerHTML = `
-<span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
-<span class="sr-lbl">${row.lbl}</span>
-<span class="sr-val" id="sv-${row.sid}">--</span>
-<span class="sr-unit">${unit}</span>
-${row.mode && getRowStyle(row) !== "num-only" ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
-  return srow;
-}
-
-function _buildBarRow(row, baseColor, dashStyle = "solid") {
-  const label = row.lbl;
-  const srow = el("div", "sr");
-  srow.id = "bar-" + row.sid;
-  srow.dataset.sub = "--"; // populated with used/total and/or peak on render
-  srow.innerHTML = `
-<span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
-<span class="sr-lbl" id="bl-${row.sid}">${esc(label)}</span>
-${row.usedSid || row.totalSid ? `<span class="br-sub" id="bv-${row.sid}" aria-hidden="true">--</span>` : ""}
-<span class="br-pct-num" id="bp-${row.sid}">--</span><span class="br-pct-unit">%</span>
-<div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
-  return srow;
-}
-
-// Accent color + line-dash style for a spark-card row, by sparkKey.
-// noPlot rows (context-only, not actually plotted) get a neutral dim
-// accent instead — used by the non-autoLinux branch in buildCards().
-function _sparkAccent(row, cardColor, fanLine, loadColor) {
-  if (row.noPlot) return { accent: withAlpha(cssVar("--txt-dim"), 0.45), dash: "solid" };
-  if (row.sparkKey === "fan") return { accent: fanLine, dash: "dotted" };
-  if (row.sparkKey === "load") return { accent: loadColor, dash: "dashed" };
-  return { accent: cardColor, dash: "solid" };
-}
-
 function buildCards() {
   const c = document.getElementById("cards");
   c.innerHTML = "";
@@ -2220,7 +2212,7 @@ function buildCards() {
   const linuxLat = linuxDev ? getLatest(linuxDev) : null;
   const linuxHasData = !!linuxLat;
 
-  for (const def of CARD_DEFS) {
+  for (const def of orderedCardDefs()) {
     // ── Visibility ────────────────────────────────────────────
     const hasAssigned = def.rows?.some((r) => !r.autoLinux && cfg.slots[r.sid]);
     const hasAutoLinux = def.rows?.some((r) => r.autoLinux) && linuxHasData;
@@ -2244,7 +2236,7 @@ function buildCards() {
 
     const card = el("div", "card");
     card.id = "card-" + def.id;
-    card.innerHTML = `<div class="card-hdr ${def.cls}"><span class="card-ttl">${def.lbl}</span></div>`;
+    card.innerHTML = `<div class="card-hdr ${def.cls}" id="hdr-${def.id}"><span class="card-ttl">${def.lbl}</span>${editMode ? '<button class="card-grip" title="Drag to reorder" type="button"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg></button>' : ""}</div>`;
     c.appendChild(card);
 
     const cardColor = cssVar("--" + def.cls);
@@ -2454,6 +2446,17 @@ function autoResize() {
 // ═══════════════════════════════════════════════════════════════
 
 function renderDashboard(devices) {
+  // Per-card rollup for the header alert bar — reset every tick and
+  // filled in as rows are walked below (named rows + custom rows).
+  // Only "warn"-mode severity counts; meter-mode (fan duty) is
+  // intensity, not a problem signal. Storage is excluded entirely —
+  // disk fullness isn't the kind of "something's wrong" this is for.
+  const cardAlert = {};
+  const bumpAlert = (cardId, lvl) => {
+    if (typeof lvl !== "number") return;
+    cardAlert[cardId] = Math.max(cardAlert[cardId] ?? 0, lvl);
+  };
+
   for (const def of CARD_DEFS) {
     // ── Named rows (standard + autoLinux) ────────────────────
     for (const row of def.rows || []) {
@@ -2465,15 +2468,18 @@ function renderDashboard(devices) {
       const sd = document.getElementById("sd-" + row.sid);
       const sd2 = SLOTS.find((s) => s.id === row.sid);
       if (sv) sv.textContent = fmt1(v, sd2?.unit ?? "");
-      if (sd && v !== undefined) {
+      if (v !== undefined) {
         const lvl =
           row.mode === "warn"
             ? warnLevel(row.sid, v)
             : dutyLevel(getFanDuty(devices, slot));
-        sd.innerHTML = makeDots(
-          lvl,
-          getRowStyle(row) === "dots-meter" ? "meter" : "warn",
-        );
+        if (sd) {
+          sd.innerHTML = makeDots(
+            lvl,
+            getRowStyle(row) === "dots-meter" ? "meter" : "warn",
+          );
+        }
+        if (row.mode === "warn") bumpAlert(def.id, lvl);
       }
       _trackPeak(row.sid, v);
 
@@ -2580,7 +2586,7 @@ function renderDashboard(devices) {
   // ── Custom rows — update all cards ───────────────────────────
   // renderDashboard's main loop above handles def.rows only;
   // custom rows use the same slot machinery but live in cfg.customRows.
-  for (const rows of Object.values(cfg.customRows ?? {})) {
+  for (const [cardId, rows] of Object.entries(cfg.customRows ?? {})) {
     for (const row of rows) {
       const slot = cfg.slots[row.sid];
       if (!slot) continue;
@@ -2598,15 +2604,18 @@ function renderDashboard(devices) {
               ? "°C"
               : "");
       if (sv) sv.textContent = fmt1(v, unit);
-      if (sd && v !== undefined) {
+      if (v !== undefined) {
         const lvl =
           row.mode === "warn"
             ? warnLevel(row.sid, v)
             : dutyLevel(getFanDuty(devices, slot));
-        sd.innerHTML = makeDots(
-          lvl,
-          getRowStyle(row) === "dots-meter" ? "meter" : "warn",
-        );
+        if (sd) {
+          sd.innerHTML = makeDots(
+            lvl,
+            getRowStyle(row) === "dots-meter" ? "meter" : "warn",
+          );
+        }
+        if (row.mode === "warn") bumpAlert(cardId, lvl);
       }
       _trackPeak(row.sid, v);
       _updatePeakTip(row.sid, unit);
@@ -2615,141 +2624,17 @@ function renderDashboard(devices) {
 
   // ── Header alert bar ──────────────────────────────────────────
   // Silent through levels 1–3 (routine fluctuation) — only the top two
-  // bands recolor the card's own accent bar, so it stays out of the
-  // way except when something's actually elevated.
+  // bands touch the card's own accent bar, and Storage never does.
   for (const def of CARD_DEFS) {
     const hdr = document.getElementById("hdr-" + def.id);
     if (!hdr) continue;
     if (def.id === "storage") {
-      // Disk fullness isn't a "something's wrong" signal the way
-      // temp/load are — this card never gets the alert treatment,
-      // regardless of what fed cardAlert.storage above.
       hdr.classList.remove("hdr-warm", "hdr-hot");
       continue;
     }
     const lvl = cardAlert[def.id] ?? 0;
     hdr.classList.toggle("hdr-warm", lvl === 4);
     hdr.classList.toggle("hdr-hot", lvl >= 5);
-  }
-}
-// ═══════════════════════════════════════════════════════════════
-//  DUAL-SERIES SPARKLINE  (memgraph / netgraph)
-//
-//  Two series sharing the same Y axis:
-//    A — solid line + gradient fill  (RAM%, RX)
-//    B — dashed line, no fill        (Swap%, TX)
-//
-//  fixedMax:null  → Y auto-scales to 115% of peak observed
-//  fixedMax:100   → Y fixed 0–100 (percentages)
-// ═══════════════════════════════════════════════════════════════
-class DualSpark {
-  constructor(canvas, { colorA, colorB, W, H, dpr = 1, fixedMax = null } = {}) {
-    this.cv = canvas;
-    this.ctx = canvas.getContext("2d");
-    this.ctx.scale(dpr, dpr);
-    this.W = W;
-    this.H = H;
-    this.MAX = 60;
-    this.colorA = colorA;
-    this.colorB = colorB;
-    this.fixedMax = fixedMax;
-    this._peak = fixedMax ?? 1;
-    this.dataA = [];
-    this.dataB = [];
-  }
-
-  push(a, b) {
-    const add = (arr, v) => {
-      if (v != null && !isNaN(v)) {
-        arr.push(v);
-        if (arr.length > this.MAX) arr.shift();
-      }
-    };
-    add(this.dataA, a);
-    add(this.dataB, b);
-    if (this.fixedMax == null) {
-      this._peak = Math.max(1, ...this.dataA, ...this.dataB) * 1.15;
-    } else {
-      this._peak = this.fixedMax;
-    }
-    this.draw();
-  }
-
-  draw() {
-    const { ctx, W, H, MAX, dataA, dataB, colorA, colorB, _peak: norm } = this;
-    ctx.clearRect(0, 0, W, H);
-
-    const xOf = (i, len) => (i + MAX - len) * (W / (MAX - 1));
-    const yOf = (v) =>
-      H - Math.min(1, Math.max(0, v / norm)) * H * 0.86 - H * 0.04;
-
-    // ── Grid ─────────────────────────────────────────────────
-    // Boosted to a fixed, legible alpha here rather than trusting each
-    // theme's --spark-grid value — several themes tuned it low enough
-    // to be nearly invisible against their background, which defeats
-    // the point of a level reference. Hue still comes from the theme;
-    // only opacity is normalized. Midline reads a touch brighter as an
-    // at-a-glance "half" mark.
-    ctx.save();
-    ctx.lineWidth = 0.5;
-    ctx.setLineDash([]);
-    const gridColor = cssVar("--spark-grid") || "rgba(255,255,255,0.06)";
-    for (const pct of [0.25, 0.5, 0.75, 1.0]) {
-      const y = H - pct * H * 0.86 - H * 0.04;
-      ctx.strokeStyle = withAlpha(gridColor, pct === 0.5 ? 0.22 : 0.13);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(W, y);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    // ── Series B: dashed, no fill (drawn first, sits behind) ──
-    if (dataB.length >= 2) {
-      ctx.save();
-      ctx.setLineDash([5, 3]);
-      ctx.strokeStyle = colorB;
-      ctx.lineWidth = 1.2;
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      dataB.forEach((v, i) => {
-        const x = xOf(i, dataB.length),
-          y = yOf(v);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // ── Series A: solid + gradient fill (drawn on top) ────────
-    if (dataA.length >= 2) {
-      const g = ctx.createLinearGradient(0, 0, 0, H);
-      g.addColorStop(0, withAlpha(colorA, 0.22));
-      g.addColorStop(1, withAlpha(colorA, 0.0));
-      ctx.save();
-      ctx.beginPath();
-      ctx.moveTo(xOf(0, dataA.length), H);
-      dataA.forEach((v, i) => ctx.lineTo(xOf(i, dataA.length), yOf(v)));
-      ctx.lineTo(xOf(dataA.length - 1, dataA.length), H);
-      ctx.closePath();
-      ctx.fillStyle = g;
-      ctx.fill();
-      ctx.restore();
-
-      ctx.save();
-      ctx.setLineDash([]);
-      ctx.strokeStyle = colorA;
-      ctx.lineWidth = 1.6;
-      ctx.lineJoin = "round";
-      ctx.beginPath();
-      dataA.forEach((v, i) => {
-        const x = xOf(i, dataA.length),
-          y = yOf(v);
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      ctx.restore();
-    }
   }
 }
 
