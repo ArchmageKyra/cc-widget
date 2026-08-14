@@ -4,6 +4,8 @@ A lightweight desktop hardware monitor for Linux, powered by [CoolerControl](htt
 
 CC Widget is built to feel like part of your desktop, not another bulky monitoring app competing for attention. It's a small, borderless, always-on-top widget showing live CPU, GPU, memory, storage, network, and fan telemetry - configurable, themeable, and out of your way.
 
+![CC Widget demo](cc-monitor-demo.gif)
+
 ---
 
 ## Features

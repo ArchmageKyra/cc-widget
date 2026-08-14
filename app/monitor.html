@@ -45,7 +45,7 @@
                         />
                     </div>
                     <button class="btn btn-p" id="btn-connect">Connect</button>
-                    <button class="btn btn-p" id="btn-reset">
+                    <button class="btn btn-s" id="btn-reset">
                         Reset Widget
                     </button>
                     <div id="setup-err" class="errmsg hide"></div>
@@ -98,84 +98,9 @@
 
                     <div class="theme-custom-area">
                         <div class="tb-body" id="tb-body">
-                            <!-- Accent pill bar -->
-                            <div class="tb-section">
-                                <div class="tb-sec-hdr" id="tb-toggle">
-                                    Accent Colors
-                                </div>
-                                <div class="tb-pill-bar">
-                                <div class="tb-pill" id="tbs-cpu">
-                                    <div class="tb-pill-stripe"></div>
-                                    <div class="tb-pill-content">
-                                        <span class="tb-pill-label">CPU</span>
-                                        <span
-                                            class="tb-pill-hex"
-                                            id="tbh-cpu"
-                                        ></span>
-                                    </div>
-                                    <input type="color" data-var="--cpu" />
-                                </div>
-                                <div class="tb-pill" id="tbs-gpu">
-                                    <div class="tb-pill-stripe"></div>
-                                    <div class="tb-pill-content">
-                                        <span class="tb-pill-label">GPU</span>
-                                        <span
-                                            class="tb-pill-hex"
-                                            id="tbh-gpu"
-                                        ></span>
-                                    </div>
-                                    <input type="color" data-var="--gpu" />
-                                </div>
-                                <div class="tb-pill" id="tbs-fan">
-                                    <div class="tb-pill-stripe"></div>
-                                    <div class="tb-pill-content">
-                                        <span class="tb-pill-label">FAN</span>
-                                        <span
-                                            class="tb-pill-hex"
-                                            id="tbh-fan"
-                                        ></span>
-                                    </div>
-                                    <input type="color" data-var="--fan" />
-                                </div>
-                                <div class="tb-pill" id="tbs-ssd">
-                                    <div class="tb-pill-stripe"></div>
-                                    <div class="tb-pill-content">
-                                        <span class="tb-pill-label">SSD</span>
-                                        <span
-                                            class="tb-pill-hex"
-                                            id="tbh-ssd"
-                                        ></span>
-                                    </div>
-                                    <input type="color" data-var="--ssd" />
-                                </div>
-                                <div class="tb-pill" id="tbs-ram">
-                                    <div class="tb-pill-stripe"></div>
-                                    <div class="tb-pill-content">
-                                        <span class="tb-pill-label">RAM</span>
-                                        <span
-                                            class="tb-pill-hex"
-                                            id="tbh-ram"
-                                        ></span>
-                                    </div>
-                                    <input type="color" data-var="--ram" />
-                                </div>
-                                <div class="tb-pill" id="tbs-net">
-                                    <div class="tb-pill-stripe"></div>
-                                    <div class="tb-pill-content">
-                                        <span class="tb-pill-label">NET</span>
-                                        <span
-                                            class="tb-pill-hex"
-                                            id="tbh-net"
-                                        ></span>
-                                    </div>
-                                    <input type="color" data-var="--net" />
-                                </div>
-                                </div>
-                            </div>
-
                             <!-- Background & Chrome -->
                             <div class="tb-section">
-                                <div class="tb-sec-hdr">
+                                <div class="tb-sec-hdr" id="tb-toggle">
                                     Background &amp; Chrome
                                 </div>
                                 <div class="tb-row">
@@ -183,6 +108,12 @@
                                         <input type="color" data-var="--bg" />
                                     </div>
                                     <span class="tb-lbl">Background</span>
+                                    <span
+                                        class="tb-wcag-pill"
+                                        tabindex="0"
+                                        title="WCAG = Web Content Accessibility Guidelines. The badges below measure each text color's contrast against this background — AA needs ≥4.5:1 for body text, ≥3:1 for large text or UI."
+                                        >WCAG</span
+                                    >
                                     <span class="tb-hex" id="tbh-bg"></span>
                                 </div>
                                 <div class="tb-row">
@@ -190,8 +121,8 @@
                                         <input type="color" data-var="--txt" />
                                     </div>
                                     <span class="tb-lbl">Primary text</span>
-                                    <span class="tb-hex" id="tbh-txt"></span>
                                     <span class="tb-contrast" id="tbc-txt"></span>
+                                    <span class="tb-hex" id="tbh-txt"></span>
                                 </div>
                                 <div class="tb-row">
                                     <div class="tb-swatch" id="tbs-txt-dim">
@@ -202,12 +133,12 @@
                                     </div>
                                     <span class="tb-lbl">Secondary text</span>
                                     <span
-                                        class="tb-hex"
-                                        id="tbh-txt-dim"
-                                    ></span>
-                                    <span
                                         class="tb-contrast"
                                         id="tbc-txt-dim"
+                                    ></span>
+                                    <span
+                                        class="tb-hex"
+                                        id="tbh-txt-dim"
                                     ></span>
                                 </div>
                                 <div class="tb-row">
@@ -215,8 +146,8 @@
                                         <input type="color" data-var="--hot" />
                                     </div>
                                     <span class="tb-lbl">Danger / error</span>
-                                    <span class="tb-hex" id="tbh-hot"></span>
                                     <span class="tb-contrast" id="tbc-hot"></span>
+                                    <span class="tb-hex" id="tbh-hot"></span>
                                 </div>
                                 <div class="tb-radius-row">
                                     <span class="tb-lbl">Corner radius</span>

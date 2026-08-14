@@ -248,12 +248,16 @@ h2 {
 .field {
     margin-bottom: 11px;
 }
+/* Eyebrow-label typography — shared verbatim by .field label, .picker-sec,
+   .th-sec, .tb-sec-hdr, and .row-menu-color-lbl so every small uppercase
+   section/field label in the app reads at one consistent size/weight/
+   tracking, regardless of which panel it lives in. */
 .field label {
     display: block;
-    font-size: 10.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
     color: var(--txt-dim);
     margin-bottom: 4px;
 }
@@ -292,11 +296,15 @@ h2 {
 }
 .btn-s {
     background: var(--bg-hover-subtle);
-    color: var(--txt);
-    border: 1px solid var(--bhi);
+    color: var(--txt-dim);
+    border: 1px solid var(--bdr);
+    width: 100%;
+    margin-top: 8px;
 }
 .btn-s:hover {
-    background: var(--bg-active);
+    background: var(--bg-danger);
+    color: var(--hot);
+    border-color: var(--bdr-err);
 }
 .errmsg {
     margin-top: 10px;
@@ -478,33 +486,116 @@ h2 {
     color: var(--cpu);
     border-color: var(--bdr-accent);
 }
-.style-tog {
-    min-width: 20px;
-    text-align: center;
-    letter-spacing: 0.5px;
-}
-.row-move {
-    background: none;
-    border: none;
-    color: var(--txt-muted);
-    cursor: pointer;
-    font-size: 9px;
-    line-height: 1;
-    padding: 0 1px;
-    flex-shrink: 0;
-}
-.row-move:hover:not(:disabled) {
-    color: var(--txt);
-}
-.row-move:disabled {
-    color: var(--txt-dim);
-    opacity: 0.35;
-    cursor: default;
-}
 .row-more {
     min-width: 18px;
     text-align: center;
     letter-spacing: 1px;
+    color: var(--txt-dim);
+    border-color: var(--bhi);
+}
+/* Card-header "…" — opens a small popover to recolor this card's own
+   accent var. The drag grip now lives on the left (see .card-grip),
+   so this sits alone at the header's right edge. */
+.card-more {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--bhi);
+    border-radius: 3px;
+    padding: 0;
+    background: none;
+    cursor: pointer;
+    color: var(--txt-dim);
+    opacity: 0.85;
+    font-size: 11px;
+    letter-spacing: 1px;
+    transition:
+        opacity 0.12s,
+        background 0.12s,
+        color 0.12s,
+        border-color 0.12s;
+}
+.card-more:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+    color: var(--txt);
+    border-color: var(--txt-dim);
+}
+/* Color-picker row inside the "…" flyout — used by the card-header
+   accent-color popover. A display/pick chip (native colour input,
+   for anyone who'd rather eyeball it) plus a typeable hex field. */
+.row-menu-color {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 5px 6px;
+    min-width: 140px;
+}
+.row-menu-color-lbl {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--txt-dim);
+    font-family: var(--font-ui);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.row-menu-color-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+/* Wrapper carries the visible fill; the native <input type=color> sits
+   on top at opacity:0 — same technique as .tb-swatch, so this chip
+   reads as one consistent rounded swatch style app-wide instead of the
+   browser's own (inconsistently-padded) color-input chrome. */
+.row-menu-color-chip {
+    position: relative;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--bhi);
+    border-radius: 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: transform 0.1s;
+}
+.row-menu-color-chip:hover {
+    transform: scale(1.08);
+}
+.row-menu-color-chip input[type="color"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    border: none;
+    padding: 0;
+}
+.row-menu-color-hex {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-input);
+    border: 1px solid var(--bhi);
+    border-radius: 5px;
+    color: var(--txt);
+    font-family: var(--font-code);
+    font-size: 12px;
+    padding: 4px 7px;
+    text-transform: lowercase;
+}
+.row-menu-color-hex:focus {
+    outline: none;
+    border-color: var(--cpu);
+}
+.row-menu-color-hex.invalid {
+    border-color: var(--hot);
 }
 .row-menu {
     position: fixed;
@@ -539,6 +630,38 @@ h2 {
 .row-menu-item.danger:hover {
     background: rgba(239, 68, 68, 0.12);
 }
+/* Style toggle as a multi-segment button — pick a style directly
+   instead of cycling through "Style: X" one click at a time. */
+.row-menu-seg {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    margin-bottom: 3px;
+    background: var(--bg-hover-subtle);
+    border-radius: 5px;
+}
+.row-menu-seg-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--txt-dim);
+    font-family: var(--font-code);
+    font-size: 12px;
+    padding: 5px 0;
+    border-radius: 4px;
+    cursor: pointer;
+    transition:
+        background 0.12s,
+        color 0.12s;
+}
+.row-menu-seg-btn:hover {
+    background: var(--bg-hover);
+    color: var(--txt);
+}
+.row-menu-seg-btn.active {
+    background: var(--bhi);
+    color: var(--txt);
+}
 .slot-clr {
     background: none;
     border: none;
@@ -559,10 +682,10 @@ h2 {
 
 /* ── Theme screen ──────────────────────────────────────────── */
 .th-sec {
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.09em;
+    letter-spacing: 0.08em;
     color: var(--txt-dim);
     margin: 16px 0 8px;
 }
@@ -654,7 +777,7 @@ h2 {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 6px;
-    margin-bottom: 0;
+    margin-bottom: 14px;
 }
 .theme-tile {
     padding: 9px 10px;
@@ -714,11 +837,6 @@ h2 {
     overflow: hidden;
     border: 1px solid var(--bdr);
 }
-.theme-custom-area .tb-toggle {
-    border: none;
-    border-radius: 0;
-    border-bottom: 1px solid var(--bdr);
-}
 .theme-custom-area .tb-body {
     border: none;
 }
@@ -764,22 +882,6 @@ h2 {
 }
 
 /* ── Theme Builder (always expanded) ──────────────────────────── */
-.tb-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 7px 10px;
-    background: var(--bg-hover-subtle);
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs) var(--rs) 0 0;
-    user-select: none;
-}
-.tb-toggle-label {
-    font-size: 10.5px;
-    font-weight: 700;
-    color: var(--txt-dim);
-    letter-spacing: 0.04em;
-}
 .tb-body {
     border: 1px solid var(--bdr);
     border-top: none;
@@ -787,65 +889,6 @@ h2 {
     background: var(--bg-overlay);
     overflow: hidden;
     display: block;
-}
-/* Accent pill bar */
-.tb-pill-bar {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 5px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--bdr);
-}
-.tb-pill {
-    position: relative;
-    display: flex;
-    align-items: stretch;
-    border-radius: var(--rs);
-    border: 1px solid var(--bhi);
-    cursor: pointer;
-    overflow: hidden;
-    transition:
-        border-color 0.15s,
-        box-shadow 0.15s;
-}
-.tb-pill:hover {
-    box-shadow: 0 0 0 1px var(--bhi);
-}
-.tb-pill-stripe {
-    width: 3px;
-    flex-shrink: 0;
-}
-.tb-pill-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 5px 8px;
-}
-.tb-pill-label {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-    line-height: 1;
-    pointer-events: none;
-}
-.tb-pill-hex {
-    font-family: var(--font-code);
-    font-size: 9px;
-    color: var(--txt-dim);
-    line-height: 1;
-    pointer-events: none;
-}
-.tb-pill input[type="color"] {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    opacity: 0;
-    cursor: pointer;
-    border: none;
-    padding: 0;
 }
 /* Builder sections */
 .tb-section {
@@ -859,7 +902,7 @@ h2 {
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
     color: var(--txt-dim);
     margin-bottom: 7px;
 }
@@ -908,6 +951,21 @@ h2 {
     min-width: 54px;
     text-align: right;
     letter-spacing: 0.02em;
+}
+/* Neutral pill on the Background row — no ok/warn/bad tint, just a
+   hover target explaining what the contrast badges below it mean. */
+.tb-wcag-pill {
+    font-family: var(--font-code);
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 1.5px 6px;
+    border-radius: 10px;
+    color: var(--txt-dim);
+    background: var(--bdr);
+    border: 1px solid var(--bhi);
+    cursor: help;
+    flex-shrink: 0;
 }
 /* WCAG contrast badge — live ratio of a text colour against --bg */
 .tb-contrast {
@@ -1070,15 +1128,13 @@ h2 {
     animation: pulse 0.9s infinite;
 }
 .card-grip {
-    position: absolute;
-    right: 5px;
-    top: 50%;
-    transform: translateY(-50%);
+    order: -1;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 20px;
     height: 20px;
+    flex-shrink: 0;
     border-radius: 4px;
     border: none;
     padding: 0;
@@ -1107,7 +1163,51 @@ h2 {
 .card.dragging {
     opacity: 0.55;
 }
+/* ── Custom-row reordering — same drag pattern as cards, scoped to a
+   card's own list of custom rows so it never mixes with disk/named
+   rows sharing the same section. ── */
+.custom-rows-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.row-grip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 18px;
+    flex-shrink: 0;
+    border-radius: 3px;
+    border: none;
+    padding: 0;
+    background: none;
+    cursor: grab;
+    color: var(--txt-dim);
+    opacity: 0.85;
+    transition:
+        opacity 0.12s,
+        background 0.12s,
+        color 0.12s;
+}
+.row-grip:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+    color: var(--txt);
+}
+.row-grip:active {
+    cursor: grabbing;
+}
+.row-grip svg {
+    width: 8px;
+    height: 12px;
+    pointer-events: none;
+}
+.sr.dragging {
+    opacity: 0.55;
+}
 .card-ttl {
+    flex: 1;
     font-size: var(--sz-hdr);
     font-weight: 700;
     letter-spacing: 0.07em;
@@ -1152,34 +1252,11 @@ h2 {
     gap: 3px;
     justify-content: center;
 }
-.card-flat {
-    padding: 7px 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
 .card-rows-full {
     padding: var(--pad-card) 10px;
     display: flex;
     flex-direction: column;
     gap: 3px;
-}
-.card-sparkfull {
-    padding: var(--pad-card) var(--pad-card) calc(var(--pad-card) - 2px);
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
-.card-sparkfull canvas {
-    display: block;
-    border-radius: 3px;
-    background: var(--bg-canvas);
-    width: 100%;
-}
-.net-rows {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
 }
 .bar-hide {
     display: none;

@@ -253,12 +253,12 @@ let cfg = {
   customThemeCSS: "",
   size: "s",
   hiddenMounts: [],
-  fanLabels: {},
   rowStyles: {},
   customRows: {},
   rowOrder: {},
   cardOrder: [],
   showPeakMarkers: true,
+  sparkOff: {},
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -334,17 +334,16 @@ function getRowStyle(row) {
   return "num-only"; // rows with no mode/pctSid are implicitly num-only
 }
 
-function cycleRowStyle(row) {
-  const options = row.pctSid
-    ? ["bar", "dots-warn", "dots-meter", "num-only"]
-    : row.mode
-      ? ["dots-warn", "dots-meter", "num-only"]
-      : [];
-  if (!options.length) return;
-  const current = getRowStyle(row);
-  const next = options[(options.indexOf(current) + 1) % options.length];
+// Style options available for a row, in display order.
+function _rowStyleOptions(row) {
+  if (row.pctSid) return ["bar", "dots-warn", "dots-meter", "num-only"];
+  if (row.mode) return ["dots-warn", "dots-meter", "num-only"];
+  return [];
+}
+
+function setRowStyle(row, style) {
   cfg.rowStyles ??= {};
-  cfg.rowStyles[row.sid] = next;
+  cfg.rowStyles[row.sid] = style;
   saveCfg();
   buildCards();
   renderDashboard(liveDevices);
@@ -367,11 +366,94 @@ function _rowMenuOutsideClick(e) {
   if (_rowMenuEl && !_rowMenuEl.contains(e.target)) _closeRowMenu();
 }
 
-// items: [{ label, danger?, onClick }]
+// items: [{ label, danger?, onClick }] or
+//        [{ type: "segmented", options: [{value,label,title}], current, onSelect }] or
+//        [{ type: "color", label?, value, onChange }]
 function _openRowMenu(anchorBtn, items) {
   _closeRowMenu();
   const menu = el("div", "row-menu");
   for (const it of items) {
+    if (it.type === "segmented") {
+      const seg = el("div", "row-menu-seg");
+      for (const opt of it.options) {
+        const b = el(
+          "button",
+          "row-menu-seg-btn" + (opt.value === it.current ? " active" : ""),
+        );
+        b.textContent = opt.label;
+        if (opt.title) b.title = opt.title;
+        b.onclick = (e) => {
+          e.stopPropagation();
+          _closeRowMenu();
+          it.onSelect(opt.value);
+        };
+        seg.appendChild(b);
+      }
+      menu.appendChild(seg);
+      continue;
+    }
+    if (it.type === "color") {
+      const wrap = el("div", "row-menu-color");
+      if (it.label) {
+        const lbl = el("span", "row-menu-color-lbl");
+        lbl.textContent = it.label;
+        wrap.appendChild(lbl);
+      }
+      const row = el("div", "row-menu-color-row");
+      // Same wrapper-div + invisible-input technique as .tb-swatch, so
+      // this chip renders as a clean filled rounded square instead of
+      // a native color-input frame — matches the rest of the app rather
+      // than introducing a second, uglier swatch style.
+      const chipWrap = el("div", "row-menu-color-chip");
+      chipWrap.style.background = it.value;
+      const chip = document.createElement("input");
+      chip.type = "color";
+      chip.value = it.value;
+      chipWrap.appendChild(chip);
+      const hexInp = document.createElement("input");
+      hexInp.type = "text";
+      hexInp.className = "row-menu-color-hex";
+      hexInp.maxLength = 7;
+      hexInp.spellcheck = false;
+      hexInp.value = it.value;
+      hexInp.placeholder = "#rrggbb";
+
+      // Chip stays a native colour picker too — a quick eyeball option
+      // alongside the typeable hex field.
+      chip.addEventListener("input", (e) => {
+        hexInp.classList.remove("invalid");
+        hexInp.value = e.target.value;
+        chipWrap.style.background = e.target.value;
+        it.onChange(e.target.value);
+      });
+      const applyHex = () => {
+        let v = hexInp.value.trim();
+        if (v && !v.startsWith("#")) v = "#" + v;
+        if (/^#[0-9a-f]{6}$/i.test(v)) {
+          hexInp.classList.remove("invalid");
+          hexInp.value = v;
+          chip.value = v;
+          chipWrap.style.background = v;
+          it.onChange(v);
+        } else {
+          hexInp.classList.add("invalid");
+        }
+      };
+      hexInp.addEventListener("input", applyHex);
+      hexInp.addEventListener("blur", () => {
+        if (!/^#[0-9a-f]{6}$/i.test(hexInp.value.trim())) {
+          hexInp.classList.remove("invalid");
+          hexInp.value = chip.value; // revert to last valid colour
+        }
+      });
+      hexInp.addEventListener("keydown", (e) => e.stopPropagation());
+
+      row.appendChild(chipWrap);
+      row.appendChild(hexInp);
+      wrap.appendChild(row);
+      menu.appendChild(wrap);
+      continue;
+    }
     const b = el("button", "row-menu-item" + (it.danger ? " danger" : ""));
     b.textContent = it.label;
     b.onclick = (e) => {
@@ -460,6 +542,26 @@ const _STYLE_LABELS = {
   "dots-meter": "○○",
   "num-only": "#",
 };
+const _STYLE_TITLES = {
+  bar: "Bar",
+  "dots-warn": "Warning dots",
+  "dots-meter": "Meter dots",
+  "num-only": "Number only",
+};
+function _styleSegItem(row) {
+  const options = _rowStyleOptions(row);
+  if (!options.length) return null;
+  return {
+    type: "segmented",
+    current: getRowStyle(row),
+    options: options.map((v) => ({
+      value: v,
+      label: _STYLE_LABELS[v],
+      title: _STYLE_TITLES[v],
+    })),
+    onSelect: (v) => setRowStyle(row, v),
+  };
+}
 
 // ⋯ menu for hardcoded (non-custom) rows — consolidates style toggle +
 // assign/remap into a single button, mirroring the custom-row row-more menu.
@@ -474,13 +576,9 @@ function _hardRowMenu(elem, row, { isAutoLinux = false } = {}) {
   more.onclick = (e) => {
     e.stopPropagation();
     const items = [];
-    // Style toggle (only when meaningful)
-    if (row.pctSid || row.mode) {
-      items.push({
-        label: `Style: ${_STYLE_LABELS[getRowStyle(row)] ?? "?"}`,
-        onClick: () => cycleRowStyle(row),
-      });
-    }
+    // Style toggle (only when meaningful) — multi-segment, pick directly
+    const seg = _styleSegItem(row);
+    if (seg) items.push(seg);
     // Sensor assign / remap
     if (isAutoLinux) {
       items.push({
@@ -583,39 +681,53 @@ function removeCustomRow(cardId, sid) {
 
 // Renders a card's custom rows (in their saved order) plus the
 // trailing "+ Add row" affordance. Shared by spark and sensor cards.
+// Rows live inside their own .custom-rows-list wrapper so pointer-drag
+// reordering (see initRowSort()) never mixes them with disk/named rows
+// sharing the same section.
 function _renderCustomRowSection(def, container) {
-  const rows = customRowsFor(def.id);
+  const rows = customRowsFor(def.id).filter(
+    (row) => cfg.slots[row.sid] || editMode,
+  );
+  if (!rows.length && !editMode) return;
+
+  const list = el("div", "custom-rows-list");
+  list.dataset.cardId = def.id;
+
   rows.forEach((row, idx) => {
-    if (!cfg.slots[row.sid] && !editMode) return;
     const elem = _buildSrRow(row, withAlpha(cssVar("--txt-dim"), 0.45));
     if (editMode) {
+      const grip = el("button", "row-grip");
+      grip.type = "button";
+      grip.title = "Drag to reorder";
+      grip.innerHTML =
+        '<svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg>';
+      elem.insertBefore(grip, elem.firstChild);
+
       const more = el("button", "assign-badge row-more");
       more.textContent = "⋯";
       more.title = "Row options";
       more.onclick = (e) => {
         e.stopPropagation();
-        const items = [
-          {
-            label: "Rename",
-            onClick: () => {
-              const nl = prompt("Label:", row.lbl);
-              if (nl && nl.trim()) {
-                row.lbl = nl.trim();
-                saveCfg();
-                buildCards();
-                renderDashboard(liveDevices);
-                requestAnimationFrame(() => autoResize());
-              }
-            },
+        const items = [];
+        // Style picker goes first — same position as the built-in row
+        // menu (_hardRowMenu) so the segmented control always lands in
+        // the same spot instead of drifting between "Rename" and
+        // "Change sensor" depending on which row you're on.
+        const seg = _styleSegItem(row);
+        if (seg) items.push(seg);
+        items.push({
+          label: "Rename",
+          onClick: () => {
+            const nl = prompt("Label:", row.lbl);
+            if (nl && nl.trim()) {
+              row.lbl = nl.trim();
+              saveCfg();
+              buildCards();
+              renderDashboard(liveDevices);
+              requestAnimationFrame(() => autoResize());
+            }
           },
-        ];
-        // Style option only when dots or bar are meaningful
-        if (row.pctSid || row.mode) {
-          items.push({
-            label: `Style: ${_STYLE_LABELS[getRowStyle(row)] ?? "?"}`,
-            onClick: () => cycleRowStyle(row),
-          });
-        }
+        });
         // Folder rows get "Change path", sensor rows get "Change sensor"
         if (row.kind === "folder") {
           items.push({
@@ -642,6 +754,7 @@ function _renderCustomRowSection(def, container) {
             onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, true),
           });
         }
+        // Drag the grip to reorder — up/down stay as a no-mouse fallback
         if (idx > 0)
           items.push({
             label: "Move up",
@@ -661,8 +774,10 @@ function _renderCustomRowSection(def, container) {
       };
       elem.appendChild(more);
     }
-    container.appendChild(elem);
+    list.appendChild(elem);
   });
+
+  container.appendChild(list);
 
   if (editMode) {
     const addRow = el("div", "picker-add");
@@ -1130,6 +1245,22 @@ function getFanDuty(devices, slot) {
   return getLatest(dev)?.channels?.find((c) => c.name === slot.name)?.duty;
 }
 
+// ── Chassis fan average — the custom rows a user adds to the Chassis
+// card that are assigned to an rpm-type sensor are treated as "case
+// fans"; case_fan_avg (see CARD_DEFS) plots the mean of their duty%.
+function _chassisFanRows() {
+  return customRowsFor("case").filter(
+    (r) => cfg.slots[r.sid]?.field === "rpm",
+  );
+}
+function _chassisFanAvg(devices) {
+  const duties = _chassisFanRows()
+    .map((r) => getFanDuty(devices, cfg.slots[r.sid]))
+    .filter((d) => d !== undefined);
+  if (!duties.length) return undefined;
+  return duties.reduce((a, b) => a + b, 0) / duties.length;
+}
+
 function buildLeaves(devices) {
   const out = [];
   for (const dev of devices) {
@@ -1523,6 +1654,7 @@ document.getElementById("picker-close").onclick = () => closePicker();
 // ═══════════════════════════════════════════════════════════════
 let _tbSync = null;
 let _tbGenerateCSS = null;
+let _tbSetVar = null;
 
 function initThemeBuilder() {
   if (document.getElementById("tb-toggle")._wired) return;
@@ -1568,25 +1700,10 @@ function initThemeBuilder() {
   }
 
   // ── Push bv → all UI elements ──────────────────────────────
+  // Accent colors (--cpu/--gpu/etc.) have no drawer UI of their own —
+  // they're edited per-card via the header "⋯" popover (see _tbSetVar
+  // below) — so bv tracks them only as inputs to generateCSS().
   function syncUIFromBv() {
-    // Accent pills — background mirrors --bg so colour reads in context
-    for (const v of ACCENT_KEYS) {
-      const key = v.replace(/^--/, "");
-      const pill = document.getElementById("tbs-" + key);
-      if (pill) {
-        pill.style.background = bv["--bg"];
-        pill.style.borderColor = bv[v] + "44"; // accent border, faint
-        const stripe = pill.querySelector(".tb-pill-stripe");
-        if (stripe) stripe.style.background = bv[v];
-        const lbl = pill.querySelector(".tb-pill-label");
-        if (lbl) lbl.style.color = bv[v];
-        const inp = pill.querySelector("input");
-        if (inp) inp.value = bv[v];
-      }
-      const hx = document.getElementById("tbh-" + key);
-      if (hx) hx.textContent = bv[v];
-    }
-
     // Chrome swatches (bg, txt, txt-dim, hot)
     const CHROME_UI = ["--bg", "--txt", "--txt-dim", "--hot"];
     for (const v of CHROME_UI) {
@@ -1661,35 +1778,16 @@ function initThemeBuilder() {
       const varName = e.target.dataset.var;
       bv[varName] = e.target.value;
 
-      // Update the parent swatch / pip / pill
-      const parent = e.target.closest(".tb-swatch,.tb-warn-pip,.tb-pill");
+      // Update the parent swatch / pip
+      const parent = e.target.closest(".tb-swatch,.tb-warn-pip");
       if (parent) {
-        if (parent.classList.contains("tb-pill")) {
-          // Re-style the pill in full
-          parent.style.background = bv["--bg"];
-          parent.style.borderColor = e.target.value + "44";
-          const stripe = parent.querySelector(".tb-pill-stripe");
-          if (stripe) stripe.style.background = e.target.value;
-          const lbl = parent.querySelector(".tb-pill-label");
-          if (lbl) lbl.style.color = e.target.value;
-        } else {
-          parent.style.background = e.target.value;
-        }
+        parent.style.background = e.target.value;
       }
 
       // Update hex readout
       const key = varName.replace(/^--/, "");
       const hx = document.getElementById("tbh-" + key);
       if (hx) hx.textContent = e.target.value;
-
-      // When --bg changes, re-tint all pill backgrounds
-      if (varName === "--bg") {
-        for (const v of ACCENT_KEYS) {
-          const k2 = v.replace(/^--/, "");
-          const pill = document.getElementById("tbs-" + k2);
-          if (pill) pill.style.background = e.target.value;
-        }
-      }
 
       // Warn ramp gradient
       if (varName.match(/--w[0-9]/)) updateWarnGradient();
@@ -1802,6 +1900,16 @@ function initThemeBuilder() {
 
   _tbSync = syncBuilderFromActive;
   _tbGenerateCSS = generateCSS;
+  // Lets a card-header "…" color popover change one accent var without
+  // reverting the rest of the active theme to whatever the builder's
+  // buffer last held — resync from the live theme first, then apply
+  // just the one change on top of it.
+  _tbSetVar = function (varName, hex) {
+    syncBuilderFromActive();
+    bv[varName] = hex;
+    syncUIFromBv();
+    liveApply();
+  };
 
   syncBuilderFromActive();
 }
@@ -2053,27 +2161,41 @@ const CARD_DEFS = [
     ],
   },
   {
-    // Storage: auto-generated from Linux disk data (no static slots)
+    id: "case",
+    lbl: "CHASSIS",
+    cls: "fan",
+    type: "spark",
+    rows: [
+      {
+        sid: "case_temp",
+        lbl: "AMB",
+        mode: "warn",
+        sparkKey: "temp",
+        typeFilter: ["temp"],
+      },
+      {
+        // Not a real sensor slot — averages duty% across whichever
+        // custom rpm-type rows the user has added to this card.
+        // See _chassisFanAvg().
+        sid: "case_fan_avg",
+        lbl: "FAN AVG",
+        mode: "meter",
+        sparkKey: "fan",
+        unit: "%",
+        computedFanAvg: true,
+      },
+    ],
+  },
+  {
+    // Storage: auto-generated from Linux disk data (no static slots).
+    // Kept last so the plotted cards (CPU/GPU/MEMORY/NET/CHASSIS) sit
+    // together, with the plot-less disk list trailing after them.
     id: "storage",
     lbl: "STORAGE",
     cls: "ssd",
     type: "sensor",
     autoDisks: true,
     rows: [],
-  },
-  {
-    id: "case",
-    lbl: "CHASSIS",
-    cls: "fan",
-    type: "sensor",
-    rows: [
-      {
-        sid: "case_temp",
-        lbl: "AMB",
-        mode: "warn",
-        typeFilter: ["temp"],
-      },
-    ],
   },
 ];
 
@@ -2090,10 +2212,12 @@ function _accentBg(color, dashStyle) {
 
 function _buildSrRow(row, accentColor, dashStyle = "solid") {
   const sd = SLOTS.find((s) => s.id === row.sid);
-  // Custom rows aren't in SLOTS — derive unit from the assigned slot instead
-  const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? "";
+  // Custom rows aren't in SLOTS — derive unit from the assigned slot
+  // instead, or from row.unit for computed rows with no real slot.
+  const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? row.unit ?? "";
   const srow = el("div", "sr");
   srow.id = "sr-" + row.sid;
+  srow.dataset.sid = row.sid;
   srow.dataset.sub = "--"; // populated with peak info on first render tick
   // Order: [accent] [lbl flex:1] [val] [unit] [dots]
   srow.innerHTML = `
@@ -2127,6 +2251,22 @@ function _sparkAccent(row, cardColor, fanLine, loadColor) {
   if (row.sparkKey === "fan") return { accent: fanLine, dash: "dotted" };
   if (row.sparkKey === "load") return { accent: loadColor, dash: "dashed" };
   return { accent: cardColor, dash: "solid" };
+}
+
+// Per-card sparkline toggle — cfg.sparkOff[cardId] === true means the card's
+// canvas + plotted-row split are skipped and every row (built-in + custom)
+// renders flat, the same way Storage's sensor-only rows do.
+function isSparkEnabled(cardId) {
+  return !cfg.sparkOff?.[cardId];
+}
+function setSparkEnabled(cardId, on) {
+  cfg.sparkOff ??= {};
+  if (on) delete cfg.sparkOff[cardId];
+  else cfg.sparkOff[cardId] = true;
+  saveCfg();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
 }
 
 // Applies the user's saved drag order to CARD_DEFS — same pattern as
@@ -2200,6 +2340,65 @@ function initCardSort() {
   });
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  CUSTOM-ROW REORDERING — drag via row grip, edit-mode only.
+//  Same manual pointer-based pattern as card reordering above,
+//  scoped to whichever .custom-rows-list wrapper the grip lives in
+//  so a drag never mixes with disk/named rows sharing that section.
+// ═══════════════════════════════════════════════════════════════
+function _persistCustomRowOrder(cardId, list) {
+  cfg.rowOrder ??= {};
+  cfg.rowOrder[cardId] = [...list.querySelectorAll(":scope > .sr")].map(
+    (r) => r.dataset.sid,
+  );
+  saveCfg();
+}
+
+function _rowDragAfterElement(list, y) {
+  const els = [...list.querySelectorAll(".sr:not(.dragging)")];
+  let closest = { offset: -Infinity, element: null };
+  for (const child of els) {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
+  }
+  return closest.element;
+}
+
+function initRowSort() {
+  const container = document.getElementById("cards");
+  let dragEl = null;
+
+  container.addEventListener("mousedown", (e) => {
+    if (!editMode) return;
+    const grip = e.target.closest(".row-grip");
+    if (!grip) return;
+    const list = grip.closest(".custom-rows-list");
+    dragEl = grip.closest(".sr");
+    if (!dragEl || !list) return;
+    e.preventDefault();
+    dragEl.classList.add("dragging");
+
+    const onMove = (e2) => {
+      const after = _rowDragAfterElement(list, e2.clientY);
+      if (after == null) list.appendChild(dragEl);
+      else list.insertBefore(dragEl, after);
+    };
+    const onUp = () => {
+      dragEl.classList.remove("dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      _persistCustomRowOrder(list.dataset.cardId, list);
+      buildCards();
+      renderDashboard(liveDevices);
+      requestAnimationFrame(() => autoResize());
+      dragEl = null;
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
 function buildCards() {
   const c = document.getElementById("cards");
   c.innerHTML = "";
@@ -2236,8 +2435,47 @@ function buildCards() {
 
     const card = el("div", "card");
     card.id = "card-" + def.id;
-    card.innerHTML = `<div class="card-hdr ${def.cls}" id="hdr-${def.id}"><span class="card-ttl">${def.lbl}</span>${editMode ? '<button class="card-grip" title="Drag to reorder" type="button"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg></button>' : ""}</div>`;
+    card.innerHTML = `<div class="card-hdr ${def.cls}" id="hdr-${def.id}">${
+      editMode
+        ? '<button class="card-grip" title="Drag to reorder" type="button"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg></button>'
+        : ""
+    }<span class="card-ttl">${def.lbl}</span>${
+      editMode
+        ? '<button class="card-more" title="Card options" type="button">⋯</button>'
+        : ""
+    }</div>`;
     c.appendChild(card);
+
+    if (editMode) {
+      const moreBtn = card.querySelector(".card-more");
+      moreBtn.onclick = (e) => {
+        e.stopPropagation();
+        const varName = "--" + def.cls;
+        const current = cssVar(varName) || "#888888";
+        const items = [
+          {
+            type: "color",
+            label: def.lbl + " color",
+            value: current,
+            onChange: (hex) => {
+              if (_tbSetVar) _tbSetVar(varName, hex);
+            },
+          },
+        ];
+        if (def.type === "spark") {
+          items.push({
+            type: "segmented",
+            value: isSparkEnabled(def.id) ? "on" : "off",
+            options: [
+              { value: "on", label: "Chart", title: "Show plotted sparkline" },
+              { value: "off", label: "Rows", title: "Show as plain sensor rows, no chart" },
+            ],
+            onSelect: (v) => setSparkEnabled(def.id, v === "on"),
+          });
+        }
+        _openRowMenu(moreBtn, items);
+      };
+    }
 
     const cardColor = cssVar("--" + def.cls);
     const fanColor = cssVar("--fan");
@@ -2246,45 +2484,68 @@ function buildCards() {
 
     // ── spark ─────────────────────────────────────────────────
     if (def.type === "spark") {
-      const body = el("div", "card-spark");
-      card.appendChild(body);
+      const sparkOn = isSparkEnabled(def.id);
+      let body, rcol, ctxBody;
 
-      const scol = el("div", "spark-col");
-      body.appendChild(scol);
-      const {
-        canvas: { w: CW, h: CH },
-      } = SIZES[cfg.size] || SIZES.s;
-      const dpr = window.devicePixelRatio || 1;
-      const cv = document.createElement("canvas");
-      cv.width = CW * dpr;
-      cv.height = CH * dpr;
-      cv.style.width = CW + "px";
-      cv.style.height = CH + "px";
-      scol.appendChild(cv);
-      sparks[def.id] = new MultiSpark(cv, {
-        cardColor,
-        loadColor,
-        fanLine,
-        W: CW,
-        H: CH,
-        dpr,
-      });
-      for (const r of def.rows) {
-        if (r.dynamicNorm) sparks[def.id].setDynamic(r.sparkKey, true);
+      if (sparkOn) {
+        body = el("div", "card-spark");
+        card.appendChild(body);
+
+        const scol = el("div", "spark-col");
+        body.appendChild(scol);
+        const {
+          canvas: { w: CW, h: CH },
+        } = SIZES[cfg.size] || SIZES.s;
+        const dpr = window.devicePixelRatio || 1;
+        const cv = document.createElement("canvas");
+        cv.width = CW * dpr;
+        cv.height = CH * dpr;
+        cv.style.width = CW + "px";
+        cv.style.height = CH + "px";
+        scol.appendChild(cv);
+        sparks[def.id] = new MultiSpark(cv, {
+          cardColor,
+          loadColor,
+          fanLine,
+          W: CW,
+          H: CH,
+          dpr,
+        });
+        for (const r of def.rows) {
+          if (r.dynamicNorm) sparks[def.id].setDynamic(r.sparkKey, true);
+        }
+
+        rcol = el("div", "card-rows");
+        body.appendChild(rcol);
+
+        // ── Context section (noPlot + custom rows) ────────────────
+        // Built separately and appended below the spark grid so it's
+        // visually unambiguous what is plotted vs what is context.
+        ctxBody = el("div", "card-spark-ctx");
+      } else {
+        // Sparkline off — no canvas, no plotted/context split. Every
+        // row (built-in + custom) renders flat, same visual language
+        // as a "sensor"-type card like Storage.
+        body = el("div", "card-rows-full");
+        card.appendChild(body);
+        rcol = body;
+        ctxBody = body;
       }
 
-      const rcol = el("div", "card-rows");
-      body.appendChild(rcol);
-
-      // ── Context section (noPlot + custom rows) ────────────────
-      // Built separately and appended below the spark grid so it's
-      // visually unambiguous what is plotted vs what is context.
-      const ctxBody = el("div", "card-spark-ctx");
-
       for (const row of def.rows) {
+        if (row.computedFanAvg) {
+          if (!_chassisFanRows().length && !editMode) continue;
+          const { accent, dash } = sparkOn
+            ? _sparkAccent(row, cardColor, fanLine, loadColor)
+            : { accent: cardColor, dash: "solid" };
+          rcol.appendChild(_buildSrRow(row, accent, dash));
+          continue;
+        }
         if (row.autoLinux) {
           if (!cfg.slots[row.sid] && !linuxHasData) continue;
-          const { accent, dash } = _sparkAccent(row, cardColor, fanLine, loadColor);
+          const { accent, dash } = sparkOn
+            ? _sparkAccent(row, cardColor, fanLine, loadColor)
+            : { accent: cardColor, dash: "solid" };
           const elem =
             getRowStyle(row) === "bar"
               ? _buildBarRow(row, accent, dash)
@@ -2295,26 +2556,29 @@ function buildCards() {
         }
         // CC / noPlot rows — show if assigned or in editMode
         if (!cfg.slots[row.sid] && !editMode) continue;
-        const { accent, dash } = _sparkAccent(row, cardColor, fanLine, loadColor);
+        const { accent, dash } = sparkOn
+          ? _sparkAccent(row, cardColor, fanLine, loadColor)
+          : { accent: cardColor, dash: "solid" };
         const elem =
           getRowStyle(row) === "bar"
             ? _buildBarRow(row, accent, dash)
             : _buildSrRow(row, accent, dash);
         if (editMode) _hardRowMenu(elem, row);
-        // noPlot rows go in the context section below the spark grid
-        if (row.noPlot) {
+        // noPlot rows go in the context section below the spark grid —
+        // when the sparkline is off, ctxBody === rcol, so this is a no-op
+        if (sparkOn && row.noPlot) {
           ctxBody.appendChild(elem);
         } else {
           rcol.appendChild(elem);
         }
       }
 
-      // Custom rows always live in the context section
+      // Custom rows always live in the context section (== body when flat)
       _renderCustomRowSection(def, ctxBody);
 
-      // Only attach ctxBody if it has visible children (or edit mode for the
-      // "+ Add row" affordance which _renderCustomRowSection renders)
-      if (ctxBody.childElementCount > 0) {
+      // Only attach ctxBody separately if it has visible children and it
+      // isn't already `body` (which was appended above in flat mode)
+      if (sparkOn && ctxBody.childElementCount > 0) {
         card.appendChild(ctxBody);
       }
     }
@@ -2386,17 +2650,17 @@ function buildCards() {
         }
       }
 
-      // Named rows (chassis AMB/FAN/etc.)
+      // Named rows — currently unused by any "sensor"-type card (Storage
+      // is autoDisks-only with rows:[]), kept generic for whatever the
+      // next sensor-type card needs. Not drag-reorderable — only custom
+      // rows are (see .custom-rows-list / initRowSort()).
       for (const row of def.rows || []) {
         const assigned = cfg.slots[row.sid];
         if (!row.autoLinux && !assigned && !editMode) continue;
-        // Fan label override
-        const customLbl = cfg.fanLabels?.[row.sid];
-        const displayRow = customLbl ? { ...row, lbl: customLbl } : row;
         const elem =
           getRowStyle(row) === "bar"
-            ? _buildBarRow(displayRow, cardColor)
-            : _buildSrRow(displayRow, cardColor);
+            ? _buildBarRow(row, cardColor)
+            : _buildSrRow(row, cardColor);
         if (editMode) _hardRowMenu(elem, row);
         body.appendChild(elem);
       }
@@ -2565,6 +2829,26 @@ function renderDashboard(devices) {
     if (def.type === "spark") {
       spark.tick();
       for (const row of def.rows) {
+        if (row.computedFanAvg) {
+          const avg = _chassisFanAvg(devices);
+          const sv = document.getElementById("sv-" + row.sid);
+          const sd = document.getElementById("sd-" + row.sid);
+          if (sv) sv.textContent = fmt1(avg, "%");
+          if (avg !== undefined) {
+            const lvl = dutyLevel(avg);
+            if (sd) {
+              sd.innerHTML = makeDots(
+                lvl,
+                getRowStyle(row) === "dots-meter" ? "meter" : "warn",
+              );
+            }
+            spark.setFanNorm(100);
+            spark.push("fan", avg);
+          }
+          _trackPeak(row.sid, avg);
+          _updatePeakTip(row.sid, "%");
+          continue;
+        }
         if (!cfg.slots[row.sid] || !row.sparkKey || row.noPlot) continue;
         const v = getSlotValue(devices, cfg.slots[row.sid]);
         if (row.sparkKey === "fan") {
@@ -2921,6 +3205,7 @@ class MultiSpark {
 (async () => {
   loadCfg();
   initCardSort();
+  initRowSort();
   applySize(cfg.size || "s", false); // apply before theme so vars are set
   applyTheme(
     cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
