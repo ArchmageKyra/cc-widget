@@ -9,6 +9,30 @@ import subprocess
 import threading
 import time
 
+# ── Force X11 (via XWayland) when running under a native Wayland session ──
+# Wayland deliberately does not let a client query or set its own absolute
+# screen position — only the compositor is allowed to know that, by
+# protocol design. GTK3's win.move()/get_position() quietly become no-ops
+# (or return stale/meaningless values) under native Wayland as a result,
+# which is exactly why window-position saving can silently "not work" —
+# it's not that save_window_pos() is failing, it's that there's nothing
+# real for it to read. Newer Ubuntu releases default new sessions to
+# Wayland, so this bites more machines over time even though nothing in
+# this app changed.
+#
+# XWayland — the X11 compatibility layer virtually every Wayland desktop
+# ships and enables by default — still exposes real window positioning,
+# so we route through it here by forcing GDK's backend before GTK/GDK
+# ever opens a display. This must happen before the `gi.repository`
+# import below; setting it any later is too late; setting it earlier
+# does nothing to other apps since it's this process's own environment.
+# setdefault() (not a hard overwrite) so an explicit GDK_BACKEND choice
+# from the environment is always respected over this guess.
+if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+    os.environ.setdefault("GDK_BACKEND", "x11")
+    if os.environ["GDK_BACKEND"] == "x11":
+        print("Wayland session detected — routing through XWayland so window position saving works.")
+
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -168,7 +192,26 @@ def on_message(mgr, result):
                 w, h = win.get_size()[0], int(parts[1])
             w = max(300, min(w, 1200))
             h = max(200, min(h, 1400))
-            GLib.idle_add(lambda w=w, h=h: win.resize(w, h) or False)
+
+            def _do_resize(w=w, h=h):
+                # GTK3 windows can't be resize()'d smaller than their
+                # current "size request" — and WebKit2GTK's WebView
+                # widget can end up caching a larger natural-size floor
+                # from an earlier (taller) content state and never let
+                # it go. Left alone, every resize that would otherwise
+                # shrink the window gets silently clamped to that stale
+                # floor, while every resize to something taller succeeds
+                # and becomes the new floor — a one-way ratchet, which is
+                # exactly the "keeps getting taller and never shorter"
+                # behavior in edit mode. Clearing the size request back
+                # to "no explicit minimum" right before each resize
+                # forces GTK to recompute from scratch instead of
+                # trusting that stale cached value.
+                win.set_size_request(-1, -1)
+                win.resize(w, h)
+                return False
+
+            GLib.idle_add(_do_resize)
         except Exception as e:
             print("Resize error:", e)
     elif msg.startswith("watch:"):

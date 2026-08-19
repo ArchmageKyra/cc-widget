@@ -257,8 +257,10 @@ let cfg = {
   customRows: {},
   rowOrder: {},
   cardOrder: [],
-  showPeakMarkers: true,
   sparkOff: {},
+  peakOff: {},
+  cardHidden: {},
+  cardLabels: {},
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -1484,7 +1486,8 @@ function openPicker(
   const titleEl = document.getElementById("picker-title");
   if (newRowCard) {
     const cardMeta = CARD_DEFS.find((d) => d.id === newRowCard);
-    titleEl.textContent = "Add Row — " + (cardMeta?.lbl ?? newRowCard);
+    titleEl.textContent =
+      "Add Row — " + (cardMeta ? cardLabel(cardMeta) : newRowCard);
   } else {
     titleEl.textContent =
       "Assign " + (slotMeta?.lbl ?? _customRowLabel(slotId) ?? slotId ?? "");
@@ -1927,19 +1930,6 @@ function initThemeScreen() {
     sb.appendChild(btn);
   }
 
-  // ── Display toggles ──────────────────────────────────────────
-  const peakToggle = document.getElementById("toggle-peak-markers");
-  peakToggle.classList.toggle("on", cfg.showPeakMarkers);
-  peakToggle.setAttribute("aria-checked", String(cfg.showPeakMarkers));
-  peakToggle.onclick = () => {
-    cfg.showPeakMarkers = !cfg.showPeakMarkers;
-    saveCfg();
-    peakToggle.classList.toggle("on", cfg.showPeakMarkers);
-    peakToggle.setAttribute("aria-checked", String(cfg.showPeakMarkers));
-    // Redraw immediately rather than waiting on the next data push
-    Object.values(sparks).forEach((s) => s.draw());
-  };
-
   // ── Theme tiles ────────────────────────────────────────────
   const g = document.getElementById("theme-grid");
   g.innerHTML = "";
@@ -2269,6 +2259,64 @@ function setSparkEnabled(cardId, on) {
   requestAnimationFrame(() => autoResize());
 }
 
+// Per-card sparkline peak-marker toggle — used to live as a single global
+// drawer setting, but peaks don't mean much on some series (an ambient
+// case-temp sparkline's "session high" is just whatever the room did),
+// so it's per-card now, same pattern as isSparkEnabled/setSparkEnabled.
+function isPeakEnabled(cardId) {
+  return !cfg.peakOff?.[cardId];
+}
+function setPeakEnabled(cardId, on) {
+  cfg.peakOff ??= {};
+  if (on) delete cfg.peakOff[cardId];
+  else cfg.peakOff[cardId] = true;
+  saveCfg();
+  // Redraw immediately rather than waiting on the next data push — the
+  // spark instance already exists, no need for a full buildCards().
+  const spark = sparks[cardId];
+  if (spark) {
+    spark.showPeaks = on;
+    spark.draw();
+  }
+}
+
+// Manual per-card visibility override. Cards normally appear only when
+// they have live/assigned data — this lets a card with autoLinux rows
+// (which show themselves the moment Linux stats arrive, with no
+// "clear assignment" escape hatch) be suppressed anyway. Hidden cards
+// still render in edit mode, dimmed, with a "Show card" affordance —
+// same show/hide-while-editing pattern as hidden Storage mounts.
+function isCardHidden(cardId) {
+  return !!cfg.cardHidden?.[cardId];
+}
+function setCardHidden(cardId, hidden) {
+  cfg.cardHidden ??= {};
+  if (hidden) cfg.cardHidden[cardId] = true;
+  else delete cfg.cardHidden[cardId];
+  saveCfg();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+}
+
+// Per-card display-label override — mirrors the rename affordance custom
+// rows already have; built-in card titles (CPU/GPU/etc.) couldn't be
+// touched before this.
+function cardLabel(def) {
+  return cfg.cardLabels?.[def.id] || def.lbl;
+}
+function setCardLabel(cardId, label) {
+  cfg.cardLabels ??= {};
+  const def = CARD_DEFS.find((d) => d.id === cardId);
+  const trimmed = (label || "").trim();
+  if (trimmed && trimmed !== def?.lbl) cfg.cardLabels[cardId] = trimmed;
+  else delete cfg.cardLabels[cardId];
+  saveCfg();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+}
+
 // Applies the user's saved drag order to CARD_DEFS — same pattern as
 // customRowsFor()/rowOrder for custom rows. Cards not yet in the saved
 // order (e.g. freshly relevant after a new assignment) fall in at the end.
@@ -2412,6 +2460,10 @@ function buildCards() {
   const linuxHasData = !!linuxLat;
 
   for (const def of orderedCardDefs()) {
+    // Manual hide overrides everything except edit mode, where a hidden
+    // card still renders (dimmed) so there's a way back to "Shown".
+    if (isCardHidden(def.id) && !editMode) continue;
+
     // ── Visibility ────────────────────────────────────────────
     const hasAssigned = def.rows?.some((r) => !r.autoLinux && cfg.slots[r.sid]);
     const hasAutoLinux = def.rows?.some((r) => r.autoLinux) && linuxHasData;
@@ -2435,18 +2487,35 @@ function buildCards() {
 
     const card = el("div", "card");
     card.id = "card-" + def.id;
+    const hidden = isCardHidden(def.id);
+    if (hidden) card.classList.add("card-hidden-preview");
+    // While hidden, the badge is the only affordance — no separate "⋯"
+    // menu competing for the same job (and nothing else in that menu is
+    // worth exposing on a card you've just taken out of the layout).
     card.innerHTML = `<div class="card-hdr ${def.cls}" id="hdr-${def.id}">${
       editMode
         ? '<button class="card-grip" title="Drag to reorder" type="button"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg></button>'
         : ""
-    }<span class="card-ttl">${def.lbl}</span>${
-      editMode
+    }<span class="card-ttl">${esc(cardLabel(def))}</span>${
+      hidden
+        ? '<button class="card-hidden-badge" type="button" title="Click to unhide">Hidden</button>'
+        : ""
+    }${
+      editMode && !hidden
         ? '<button class="card-more" title="Card options" type="button">⋯</button>'
         : ""
     }</div>`;
     c.appendChild(card);
 
-    if (editMode) {
+    const hiddenBadge = card.querySelector(".card-hidden-badge");
+    if (hiddenBadge) {
+      hiddenBadge.onclick = (e) => {
+        e.stopPropagation();
+        setCardHidden(def.id, false);
+      };
+    }
+
+    if (editMode && !hidden) {
       const moreBtn = card.querySelector(".card-more");
       moreBtn.onclick = (e) => {
         e.stopPropagation();
@@ -2455,7 +2524,7 @@ function buildCards() {
         const items = [
           {
             type: "color",
-            label: def.lbl + " color",
+            label: cardLabel(def) + " color",
             value: current,
             onChange: (hex) => {
               if (_tbSetVar) _tbSetVar(varName, hex);
@@ -2465,14 +2534,38 @@ function buildCards() {
         if (def.type === "spark") {
           items.push({
             type: "segmented",
-            value: isSparkEnabled(def.id) ? "on" : "off",
+            current: isSparkEnabled(def.id) ? "on" : "off",
             options: [
               { value: "on", label: "Chart", title: "Show plotted sparkline" },
               { value: "off", label: "Rows", title: "Show as plain sensor rows, no chart" },
             ],
             onSelect: (v) => setSparkEnabled(def.id, v === "on"),
           });
+          items.push({
+            type: "segmented",
+            current: isPeakEnabled(def.id) ? "on" : "off",
+            options: [
+              { value: "on", label: "Peaks", title: "Mark each series' session-high on the chart" },
+              { value: "off", label: "No peaks", title: "Hide the peak markers on this card" },
+            ],
+            onSelect: (v) => setPeakEnabled(def.id, v === "on"),
+          });
         }
+        items.push({
+          label: "Rename",
+          onClick: () => {
+            const nl = prompt("Card name:", cardLabel(def));
+            if (nl !== null) setCardLabel(def.id, nl);
+          },
+        });
+        // Unhiding happens by clicking the "Hidden" badge directly on the
+        // card (this menu doesn't even render while hidden — see above),
+        // so there's no redundant "un-hide" entry to maintain here.
+        items.push({
+          label: "Hide card",
+          danger: true,
+          onClick: () => setCardHidden(def.id, true),
+        });
         _openRowMenu(moreBtn, items);
       };
     }
@@ -2510,6 +2603,7 @@ function buildCards() {
           W: CW,
           H: CH,
           dpr,
+          showPeaks: isPeakEnabled(def.id),
         });
         for (const r of def.rows) {
           if (r.dynamicNorm) sparks[def.id].setDynamic(r.sparkKey, true);
@@ -2929,12 +3023,13 @@ function renderDashboard(devices) {
 //  legend (no separate HTML strip).
 // ═══════════════════════════════════════════════════════════════
 class MultiSpark {
-  constructor(canvas, { cardColor, loadColor, fanLine, W, H, dpr = 1 } = {}) {
+  constructor(canvas, { cardColor, loadColor, fanLine, W, H, dpr = 1, showPeaks = true } = {}) {
     this.cv = canvas;
     this.ctx = canvas.getContext("2d");
     this.ctx.scale(dpr, dpr);
     this.W = W;
     this.H = H;
+    this.showPeaks = showPeaks;
     this.MAX = 60; // data points kept
     this.BAR = 8; // vertical marker every N points
 
@@ -3158,7 +3253,7 @@ class MultiSpark {
       // preference since not everyone wants the extra marks.
       const dot = this.peakDots[key];
       if (dot) {
-        if (cfg.showPeakMarkers && s.peak !== undefined) {
+        if (this.showPeaks && s.peak !== undefined) {
           dot.style.top = yOf(s.peak, s.norm) + "px";
           dot.style.background = s.color;
           dot.style.display = "block";
