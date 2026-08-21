@@ -96,6 +96,25 @@ function applySize(key, rebuild = true) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  ANCHOR CORNER
+// ═══════════════════════════════════════════════════════════════
+function setAnchorCorner(corner) {
+  cfg.anchorCorner = corner;
+  saveCfg();
+  document
+    .getElementById("app")
+    .classList.toggle(
+      "bar-top",
+      corner === "top-left" || corner === "top-right",
+    );
+  document
+    .querySelectorAll(".anchor-btn")
+    .forEach((b) => b.classList.toggle("active", b.dataset.corner === corner));
+  gtksend("anchor:" + corner);
+  requestAnimationFrame(() => autoResize());
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  SLOTS & THRESHOLDS
 // ═══════════════════════════════════════════════════════════════
 const SLOTS = [
@@ -261,6 +280,7 @@ let cfg = {
   peakOff: {},
   cardHidden: {},
   cardLabels: {},
+  anchorCorner: null,
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -1930,6 +1950,27 @@ function initThemeScreen() {
     sb.appendChild(btn);
   }
 
+  // ── Anchor corner ────────────────────────────────────────────
+  const ag = document.getElementById("anchor-grid");
+  ag.innerHTML = "";
+  const CORNERS = [
+    { key: "top-left", dot: "tl" },
+    { key: "top-right", dot: "tr" },
+    { key: "bottom-left", dot: "bl" },
+    { key: "bottom-right", dot: "br" },
+  ];
+  for (const c of CORNERS) {
+    const btn = el("button", "anchor-btn");
+    btn.dataset.corner = c.key;
+    btn.title = c.key.replace("-", " ");
+    if (cfg.anchorCorner === c.key) btn.classList.add("active");
+    const icon = el("div", "anchor-icon");
+    icon.appendChild(el("div", "anchor-dot " + c.dot));
+    btn.appendChild(icon);
+    btn.onclick = () => setAnchorCorner(c.key);
+    ag.appendChild(btn);
+  }
+
   // ── Theme tiles ────────────────────────────────────────────
   const g = document.getElementById("theme-grid");
   g.innerHTML = "";
@@ -3307,22 +3348,18 @@ class MultiSpark {
     cfg.theme === "custom" ? cfg.customThemeCSS : null,
   );
 
-  if (cfg.token) {
-    phase = "connecting";
-    setStatus("spin", "Connecting…");
-    document.getElementById("i-url").value = cfg.baseUrl;
-    document.getElementById("i-tok").value = cfg.token;
-    const btn = document.getElementById("btn-connect");
-    btn.textContent = "Connecting…";
-    btn.disabled = true;
-    showScreen("s-setup");
-    document.getElementById("btn-reset").onclick = () => {
-      if (!confirm("Clear saved CoolerControl settings and token?")) return;
-      localStorage.clear();
-      location.reload();
-    };
-    startSSE();
-  } else {
-    initSetup();
+  await waitBootStep("theme");
+
+  // Sync a previously-chosen anchor corner to Python (which persists
+  // its own copy for resize math) and flip the bar-top layout — both
+  // are no-ops for the common case of no corner chosen yet.
+  if (cfg.anchorCorner) {
+    document
+      .getElementById("app")
+      .classList.toggle(
+        "bar-top",
+        cfg.anchorCorner === "top-left" || cfg.anchorCorner === "top-right",
+      );
+    gtksend("anchor:" + cfg.anchorCorner);
   }
 })();

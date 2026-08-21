@@ -680,6 +680,340 @@ h2 {
     color: var(--txt-muted);
 }
 
+/* ── Anchor / position picker ──────────────────────────────── */
+.anchor-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 14px;
+}
+.anchor-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 11px 0;
+    border: 1px solid var(--bdr);
+    border-radius: var(--rs);
+    background: var(--bg-hover-subtle);
+    cursor: pointer;
+    transition:
+        border-color 0.15s,
+        background 0.15s;
+}
+.anchor-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--bhi);
+}
+.anchor-btn.active {
+    border-color: var(--cpu);
+    background: var(--bg-sel);
+}
+.anchor-icon {
+    position: relative;
+    width: 28px;
+    height: 18px;
+    border: 1.5px solid var(--txt-dim);
+    border-radius: 3px;
+}
+.anchor-btn.active .anchor-icon {
+    border-color: var(--cpu);
+}
+.anchor-dot {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 1.5px;
+    background: var(--txt-dim);
+}
+.anchor-btn.active .anchor-dot {
+    background: var(--cpu);
+}
+.anchor-dot.tl {
+    top: -3px;
+    left: -3px;
+}
+.anchor-dot.tr {
+    top: -3px;
+    right: -3px;
+}
+.anchor-dot.bl {
+    bottom: -3px;
+    left: -3px;
+}
+.anchor-dot.br {
+    bottom: -3px;
+    right: -3px;
+}
+
+/* ── Startup / boot screen ─────────────────────────────────────── */
+
+#boot-screen {
+    position: absolute;
+    inset: 0;
+    z-index: 1000;
+
+    width: 320px;
+    height: 300px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: var(--bg);
+    color: var(--txt);
+
+    opacity: 1;
+    visibility: visible;
+
+    transition:
+        opacity 0.28s ease,
+        visibility 0.28s ease;
+}
+
+#boot-screen.hide {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.boot-inner {
+    width: 230px;
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* ── Small CC Widget mark ─────────────────────────────────────── */
+
+.boot-mark {
+    position: relative;
+
+    width: 42px;
+    height: 42px;
+
+    margin-bottom: 12px;
+}
+
+.boot-mark-ring {
+    position: absolute;
+    inset: 2px;
+
+    border: 1px solid var(--bdr);
+    border-top-color: var(--cpu);
+    border-radius: 50%;
+
+    animation: boot-spin 1.1s linear infinite;
+}
+
+.boot-mark-core {
+    position: absolute;
+    inset: 13px;
+
+    border-radius: 50%;
+    background: var(--cpu);
+
+    animation: boot-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes boot-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes boot-pulse {
+    0%,
+    100% {
+        opacity: 0.45;
+        transform: scale(0.85);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* ── Boot heading ──────────────────────────────────────────────── */
+
+.boot-brand {
+    font-family: var(--font-num);
+    font-size: 16px;
+    letter-spacing: 0.16em;
+    color: var(--txt);
+}
+
+.boot-state {
+    margin-top: 3px;
+
+    font-family: var(--font-code);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+
+    color: var(--txt-dim);
+}
+
+/* ── Startup checklist ────────────────────────────────────────── */
+
+.boot-steps {
+    width: 100%;
+    margin-top: 22px;
+
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.boot-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    font-size: 10.5px;
+    color: var(--txt-muted);
+
+    transition:
+        color 0.18s ease,
+        opacity 0.18s ease;
+}
+
+.boot-step-mark {
+    position: relative;
+
+    width: 7px;
+    height: 7px;
+
+    flex-shrink: 0;
+
+    border: 1px solid var(--txt-muted);
+    border-radius: 50%;
+}
+
+/* Active step */
+
+.boot-step.active {
+    color: var(--txt-dim);
+}
+
+.boot-step.active .boot-step-mark {
+    border-color: var(--cpu);
+    background: var(--cpu);
+}
+
+/* Completed step */
+
+.boot-step.done {
+    color: var(--txt);
+}
+
+.boot-step.done .boot-step-mark {
+    border-color: var(--cpu);
+    background: var(--cpu);
+}
+
+.boot-step.done .boot-step-mark::after {
+    content: "";
+
+    position: absolute;
+
+    width: 3px;
+    height: 5px;
+
+    left: 1px;
+    top: -1px;
+
+    border-right: 1px solid var(--bg);
+    border-bottom: 1px solid var(--bg);
+
+    transform: rotate(45deg);
+}
+
+/* ── Footer ───────────────────────────────────────────────────── */
+
+.boot-footer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    margin-top: 25px;
+
+    font-family: var(--font-code);
+    font-size: 8px;
+    letter-spacing: 0.08em;
+
+    color: var(--txt-muted);
+}
+
+.boot-footer-dot {
+    color: var(--txt-dim);
+}
+
+/* ── Connecting screen — compact, replaces the full form while a
+   connection attempt is in flight so returning users (token already
+   saved) don't see a tall empty-feeling form flash by. ── */
+.connect-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    max-width: 230px;
+    margin: 6px auto 0;
+    text-align: center;
+    padding-bottom: 4px;
+}
+.connect-wrap.hide {
+    display: none;
+}
+.connect-spinner {
+    width: 32px;
+    height: 32px;
+}
+.connect-spinner-ring {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    border: 3px solid var(--bdr);
+    border-top-color: var(--cpu);
+    animation: connect-spin 0.85s linear infinite;
+}
+@keyframes connect-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+.connect-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--txt);
+    letter-spacing: 0.02em;
+}
+.connect-sub {
+    font-size: 10.5px;
+    color: var(--txt-dim);
+    line-height: 1.4;
+    word-break: break-word;
+}
+.connect-wrap .btn-s {
+    width: auto;
+    padding: 6px 18px;
+    margin-top: 5px;
+}
+
+/* ── Bar-top mode ─────────────────────────────────────────────
+   Top-anchored corners move the status bar (drag handle + controls)
+   above the content instead of below it — most people who park the
+   widget near the top of their screen expect the grab handle up
+   there too, and it keeps the controls from drifting far from the
+   anchored edge as the window resizes. ── */
+#app.bar-top #sbar {
+    order: -1;
+    border-top: none;
+    border-bottom: 1px solid var(--bdr);
+}
+
 /* ── Theme screen ──────────────────────────────────────────── */
 .th-sec {
     font-size: 10px;
