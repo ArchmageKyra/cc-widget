@@ -8,94 +8,6 @@
 "use strict";
 
 // ═══════════════════════════════════════════════════════════════
-//  SIZES
-// ═══════════════════════════════════════════════════════════════
-const SIZES = {
-  s: {
-    label: "S",
-    vars: {
-      "--sz-lbl": "11px",
-      "--sz-val": "16px",
-      "--sz-unit": "10px",
-      "--sz-hdr": "12px",
-      "--sz-meta": "11px",
-      "--sz-pct": "16px",
-      "--sz-dot": "8px",
-      "--sz-track": "7px",
-      "--pad-card": "10px",
-      "--pad-row": "3px",
-      "--canvas-w": "162px",
-      "--canvas-h": "92px",
-      "--canvas-lh": "62px",
-      "--dash-w": "440px",
-    },
-    width: 440,
-    canvas: { w: 162, h: 92 },
-  },
-  m: {
-    label: "M",
-    vars: {
-      "--sz-lbl": "12.5px",
-      "--sz-val": "19px",
-      "--sz-unit": "11px",
-      "--sz-hdr": "13.5px",
-      "--sz-meta": "12px",
-      "--sz-pct": "19px",
-      "--sz-dot": "9px",
-      "--sz-track": "8px",
-      "--pad-card": "12px",
-      "--pad-row": "4px",
-      "--canvas-w": "180px",
-      "--canvas-h": "108px",
-      "--canvas-lh": "72px",
-      "--dash-w": "500px",
-    },
-    width: 500,
-    canvas: { w: 180, h: 108 },
-  },
-  l: {
-    label: "L",
-    vars: {
-      "--sz-lbl": "14px",
-      "--sz-val": "22px",
-      "--sz-unit": "12px",
-      "--sz-hdr": "15px",
-      "--sz-meta": "13px",
-      "--sz-pct": "22px",
-      "--sz-dot": "10px",
-      "--sz-track": "9px",
-      "--pad-card": "14px",
-      "--pad-row": "5px",
-      "--canvas-w": "204px",
-      "--canvas-h": "124px",
-      "--canvas-lh": "84px",
-      "--dash-w": "580px",
-    },
-    width: 580,
-    canvas: { w: 204, h: 124 },
-  },
-};
-
-// All var keys managed by size
-const SIZE_VAR_KEYS = Object.keys(SIZES.m.vars);
-
-function applySize(key, rebuild = true) {
-  const sz = SIZES[key] || SIZES.s;
-  const root = document.documentElement;
-  SIZE_VAR_KEYS.forEach((v) => root.style.removeProperty(v));
-  Object.entries(sz.vars).forEach(([k, v]) => root.style.setProperty(k, v));
-  cfg.size = key;
-  saveCfg();
-  document
-    .querySelectorAll(".size-btn")
-    .forEach((b) => b.classList.toggle("active", b.dataset.size === key));
-  if (rebuild && phase === "dashboard") {
-    buildCards();
-    renderDashboard(liveDevices);
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
 //  ANCHOR CORNER
 // ═══════════════════════════════════════════════════════════════
 function setAnchorCorner(corner) {
@@ -850,8 +762,18 @@ function showScreen(id) {
   );
   // Always close picker when changing screens
   closePicker();
-  // Re-measure whenever the dashboard becomes visible
-  if (id === "s-dash") requestAnimationFrame(() => autoResize());
+  // Re-measure content height for whichever screen is now visible —
+  // setup/connecting screens autosize just as much as the dashboard.
+  requestAnimationFrame(() => autoResize());
+}
+
+// Toggles between the full connect form and the compact connecting
+// panel within #s-setup. Kept separate from showScreen() since both
+// panels live inside the same "s-setup" screen.
+function showConnectPanel(connecting) {
+  document.getElementById("setup-form")?.classList.toggle("hide", connecting);
+  document.getElementById("connect-wrap")?.classList.toggle("hide", !connecting);
+  requestAnimationFrame(() => autoResize());
 }
 
 function withAlpha(color, a) {
@@ -1008,7 +930,11 @@ document.getElementById("sbar").addEventListener("mousedown", (e) => {
 //  webview.run_javascript() — no HTTP server needed.
 // ═══════════════════════════════════════════════════════════════
 window.onLinuxStats = function (stats) {
-  if (stats.unavailable) return;
+  if (stats.unavailable) {
+    _resolveLinuxStatsReady?.();
+    _resolveLinuxStatsReady = null;
+    return;
+  }
 
   const channels = [
     {
@@ -1087,6 +1013,9 @@ window.onLinuxStats = function (stats) {
   ];
 
   refreshDevices();
+
+  _resolveLinuxStatsReady?.();
+  _resolveLinuxStatsReady = null;
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -1210,7 +1139,14 @@ function onSSEPacket(payload) {
   ccDevices = payload.devices ?? [];
   refreshDevices();
   if (phase === "connecting") {
+
+    bootStepDone("daemon", () => {
+      bootStep("live", "active");
+      bootState("Starting telemetry");
+    });
+
     phase = "dashboard";
+
     // Check if any CC-assignable slots are already configured
     const hasCCSlots = CARD_DEFS.some((def) =>
       def.rows?.some((r) => !r.autoLinux && r.typeFilter && cfg.slots[r.sid]),
@@ -1220,6 +1156,20 @@ function onSSEPacket(payload) {
     buildCards();
     _sendFolderPaths(); // Re-sync Python with any persisted folder rows
     showScreen("s-dash");
+
+    // Wait for the first Linux stats sample too (it's on its own,
+    // unsynced 2s timer) so the card rebuild it triggers has already
+    // happened before we call this "ready" — otherwise it can land after
+    // the reveal and pop the window again.
+    linuxStatsReady.then(() => {
+      bootStepDone("live", () => {
+        bootState("Online");
+        // Hold the finished state on screen for a beat before starting
+        // the reveal, so it doesn't just flicker past.
+        setTimeout(hideBootScreen, BOOT_READ_DELAY);
+      });
+    });
+
     // Update gear button state after screen transition
     requestAnimationFrame(() => {
       const btn = document.getElementById("bb-cfg");
@@ -1241,6 +1191,18 @@ function setStatus(cls, msg = "") {
     if (!_connectTime) _connectTime = Date.now();
     const up = document.getElementById("sbar-uptime");
     if (up) up.textContent = _fmtUptime(Date.now() - _connectTime);
+  }
+  // A failed attempt during the initial boot connect means the daemon
+  // isn't reachable — surface the retry/cancel panel right away instead
+  // of leaving the user staring at the boot screen until it retries into
+  // eternity (the failsafe timer is just a backstop for this).
+  if (cls === "err" && phase === "connecting") hideBootScreen();
+  const cw = document.getElementById("connect-wrap");
+  if (cw && !cw.classList.contains("hide")) {
+    const title = document.getElementById("connect-title");
+    const sub = document.getElementById("connect-sub");
+    if (title) title.textContent = cls === "err" ? "Having trouble…" : "Connecting…";
+    if (sub && msg) sub.textContent = msg;
   }
 }
 
@@ -1377,11 +1339,145 @@ function _sendFolderPaths() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+//  STARTUP / BOOT UI
+// ═══════════════════════════════════════════════════════════════
+
+const BOOT_MIN_TIME = 450;
+
+// How long to hold the finished dashboard on screen — fully resized,
+// "Online" showing — before the boot screen starts fading. Gives the
+// user a beat to actually register it instead of having it flicker past.
+const BOOT_READ_DELAY = 2000;
+
+const bootStarted = {};
+
+// Resolves once the first Linux stats sample has arrived (or we give up
+// waiting, e.g. psutil isn't installed). Python's stats push runs on its
+// own independent 2s timer, unrelated to the SSE connection — boot can't
+// safely take its "final" measurement until both are in.
+let _resolveLinuxStatsReady;
+const linuxStatsReady = new Promise((resolve) => {
+  _resolveLinuxStatsReady = resolve;
+});
+setTimeout(() => _resolveLinuxStatsReady?.(), 3000);
+
+// Order of the boot checklist and the progress-bar percentage the fill
+// jumps to as each step goes active / completes. Kept as one table so the
+// bar and the checklist can never drift out of sync with each other.
+const BOOT_PROGRESS = {
+  profile: { active: 8, done: 28 },
+  theme: { active: 34, done: 52 },
+  daemon: { active: 58, done: 82 },
+  live: { active: 86, done: 100 },
+};
+
+function _setBootProgress(pct) {
+  const fill = document.getElementById("boot-progress-fill");
+  if (fill) fill.style.width = pct + "%";
+}
+
+function bootStep(name, state = "active") {
+  const el = document.getElementById("boot-step-" + name);
+  const pct = BOOT_PROGRESS[name]?.[state];
+  if (pct !== undefined) _setBootProgress(pct);
+  if (!el) return;
+
+  el.classList.remove("active", "done", "error");
+  el.classList.add(state);
+
+  if (state === "active") {
+    bootStarted[name] = performance.now();
+  }
+}
+
+function bootState(text) {
+  const el = document.getElementById("boot-state");
+  if (el) el.textContent = text.toUpperCase();
+}
+
+// Marks a step "done", holding it "active" for at least BOOT_MIN_TIME so
+// fast synchronous steps (loading config, applying a theme) don't just
+// blip past — every step gets a moment to actually register on screen.
+// callback is optional; waitBootStep() below wraps this as a promise for
+// the common case of awaiting a step before starting the next one.
+function bootStepDone(name, callback) {
+  const started = bootStarted[name] ?? performance.now();
+  const elapsed = performance.now() - started;
+  const remaining = Math.max(0, BOOT_MIN_TIME - elapsed);
+
+  setTimeout(() => {
+    bootStep(name, "done");
+    callback?.();
+  }, remaining);
+}
+
+function waitBootStep(name) {
+  return new Promise((resolve) => bootStepDone(name, resolve));
+}
+
+// How long the boot screen is allowed to sit on screen before it gets
+// dismissed unconditionally. Covers the case where a returning user's
+// daemon never answers (SSE just retries forever) — without this the
+// boot screen would otherwise hang over the connect/retry panel forever
+// with no way for the user to reach it.
+const BOOT_FAILSAFE_MS = 8000;
+let _bootHidden = false;
+let _bootFailsafeTimer = null;
+
+function hideBootScreen() {
+  if (_bootHidden) return;
+  _bootHidden = true;
+  clearTimeout(_bootFailsafeTimer);
+
+  const boot = document.getElementById("boot-screen");
+  if (!boot) return;
+
+  let settled = false;
+  let fallbackTimer = null;
+
+  const reveal = () => {
+    if (settled) return;
+    settled = true;
+    clearTimeout(fallbackTimer);
+    window.__onResizeApplied = null;
+    // Two real animation frames so the browser has actually painted a
+    // settled frame at the new size before the fade starts.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        boot.classList.add("hide");
+        setTimeout(() => boot.remove(), 450);
+      });
+    });
+  };
+
+  // Python calls this the instant GTK's configure-event confirms the
+  // native window has actually reached its target size (see
+  // on_window_configure() in launch.py) — a real signal instead of a
+  // guessed delay. The fallback timer is just a backstop for an older
+  // launch.py that doesn't send it, or the rare case it's dropped.
+  window.__onResizeApplied = reveal;
+  fallbackTimer = setTimeout(reveal, 400);
+
+  autoResize(true);
+}
+
+// ═══════════════════════════════════════════════════════════════
 //  SETUP SCREEN
 // ═══════════════════════════════════════════════════════════════
+// Clears all local config (token, theme, layout, everything) and reloads
+// as a brand-new install. Shared by the first-run setup screen's button
+// and the settings drawer's "Danger Zone" — same action, same confirm,
+// reachable from wherever the user happens to be.
+function resetWidget() {
+  if (!confirm("Clear saved CoolerControl settings and token?")) return;
+  localStorage.clear();
+  location.reload();
+}
+
 function initSetup() {
   phase = "setup";
   stopSSE();
+  showConnectPanel(false);
   document.getElementById("i-url").value = cfg.baseUrl;
   document.getElementById("i-tok").value = cfg.token;
   const btn = document.getElementById("btn-connect");
@@ -1391,7 +1487,8 @@ function initSetup() {
   const _upEl = document.getElementById("sbar-uptime");
   if (_upEl) _upEl.textContent = "";
   showScreen("s-setup");
-  btn.onclick = () => {
+
+  const attemptConnect = () => {
     document.getElementById("setup-err").classList.add("hide");
     cfg.baseUrl = document
       .getElementById("i-url")
@@ -1407,9 +1504,26 @@ function initSetup() {
     setStatus("spin", "Connecting…");
     btn.textContent = "Connecting…";
     btn.disabled = true;
+    document.getElementById("connect-title").textContent = "Connecting…";
+    document.getElementById("connect-sub").textContent =
+      "Reaching " + (cfg.baseUrl || "CoolerControl");
+    showConnectPanel(true);
     startSSE();
     // Note: Linux stats are pushed by Python automatically — no polling needed here
   };
+  btn.onclick = attemptConnect;
+
+  document.getElementById("btn-connect-cancel").onclick = () => {
+    stopSSE();
+    phase = "setup";
+    btn.textContent = "Connect";
+    btn.disabled = false;
+    showConnectPanel(false);
+  };
+
+  // Returning user — a token's already saved, so skip straight to
+  // the compact connecting panel instead of flashing the empty form.
+  if (cfg.token) attemptConnect();
 }
 function showErr(msg) {
   const e = document.getElementById("setup-err");
@@ -1680,8 +1794,8 @@ let _tbGenerateCSS = null;
 let _tbSetVar = null;
 
 function initThemeBuilder() {
-  if (document.getElementById("tb-toggle")._wired) return;
-  document.getElementById("tb-toggle")._wired = true;
+  if (document.getElementById("drawer")._wired) return;
+  document.getElementById("drawer")._wired = true;
 
   const getCSSVar = (n) =>
     getComputedStyle(document.documentElement).getPropertyValue(n).trim();
@@ -1796,7 +1910,7 @@ function initThemeBuilder() {
   }
 
   // ── Wire all color inputs ──────────────────────────────────
-  document.querySelectorAll(".tb-body input[type=color]").forEach((inp) => {
+  document.querySelectorAll('input[type="color"]').forEach((inp) => {
     inp.addEventListener("input", (e) => {
       const varName = e.target.dataset.var;
       bv[varName] = e.target.value;
@@ -1954,10 +2068,10 @@ function initThemeScreen() {
   const ag = document.getElementById("anchor-grid");
   ag.innerHTML = "";
   const CORNERS = [
-    { key: "top-left", dot: "tl" },
-    { key: "top-right", dot: "tr" },
-    { key: "bottom-left", dot: "bl" },
-    { key: "bottom-right", dot: "br" },
+    { key: "top-left", dot: "tl", lbl: "Top Left" },
+    { key: "top-right", dot: "tr", lbl: "Top Right" },
+    { key: "bottom-left", dot: "bl", lbl: "Bottom Left" },
+    { key: "bottom-right", dot: "br", lbl: "Bottom Right" },
   ];
   for (const c of CORNERS) {
     const btn = el("button", "anchor-btn");
@@ -1967,6 +2081,9 @@ function initThemeScreen() {
     const icon = el("div", "anchor-icon");
     icon.appendChild(el("div", "anchor-dot " + c.dot));
     btn.appendChild(icon);
+    const lbl = el("span", "anchor-lbl");
+    lbl.textContent = c.lbl;
+    btn.appendChild(lbl);
     btn.onclick = () => setAnchorCorner(c.key);
     ag.appendChild(btn);
   }
@@ -2812,12 +2929,34 @@ function buildCards() {
 //  GTK window snaps to fit — no scroll, no dead space.
 // ═══════════════════════════════════════════════════════════════
 const DRAWER_W = 280; // matches #drawer's fixed width in monitor.css
+const SETUP_W = 340; // compact width for the setup/connecting screens
 
-function autoResize() {
-  // Don't send a zero-height resize while dashboard is hidden
-  if (document.getElementById("s-dash").classList.contains("hide")) return;
+function autoResize(force = false) {
+  const boot = document.getElementById("boot-screen");
+  if (!force && boot && !boot.classList.contains("hide")) {
+    return;
+  }
+
   const sbarH = document.getElementById("sbar").offsetHeight;
   const borders = 2; // #app top + bottom border
+
+  // Setup / connecting screens — compact, content-driven sizing so a
+  // returning user (auto-connecting) or someone still typing in a
+  // token never sees the tall dashboard-sized window before there's
+  // any dashboard content to justify it.
+  if (document.getElementById("s-dash").classList.contains("hide")) {
+    const connectWrap = document.getElementById("connect-wrap");
+    const panel =
+      connectWrap && !connectWrap.classList.contains("hide")
+        ? connectWrap
+        : document.getElementById("setup-form");
+    if (!panel) return;
+    const screenPad = 24; // .screen { padding: 12px } × 2 sides
+    const h = panel.scrollHeight + screenPad + sbarH + borders;
+    gtksend("resize:" + SETUP_W + ":" + h);
+    return;
+  }
+
   const baseW = (SIZES[cfg.size] || SIZES.s).width;
   const screenPad = 24; // .screen { padding: 12px } × 2 sides
   const cardsH = document.getElementById("cards").scrollHeight;
@@ -3339,10 +3478,33 @@ class MultiSpark {
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
 (async () => {
+
+  // Backstop: whatever happens above (daemon never answers, an unexpected
+  // error, etc.), the boot screen is guaranteed to step aside eventually
+  // rather than trap the user behind it. hideBootScreen() is idempotent,
+  // so this is a no-op once boot finishes normally.
+  _bootFailsafeTimer = setTimeout(hideBootScreen, BOOT_FAILSAFE_MS);
+
+  // Lock the native window to the compact startup size.
+  gtksend("boot");
+
+  // ── Profile ──────────────────────────────────────────────────
+  bootStep("profile", "active");
+  bootState("Loading profile");
+
   loadCfg();
+
+  await waitBootStep("profile");
+
+  // ── Interface ────────────────────────────────────────────────
+  bootStep("theme", "active");
+  bootState("Preparing interface");
+
   initCardSort();
   initRowSort();
-  applySize(cfg.size || "s", false); // apply before theme so vars are set
+
+  applySize(cfg.size || "s", false);
+
   applyTheme(
     cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
     cfg.theme === "custom" ? cfg.customThemeCSS : null,
@@ -3362,4 +3524,23 @@ class MultiSpark {
       );
     gtksend("anchor:" + cfg.anchorCorner);
   }
+
+  document.getElementById("btn-reset").onclick = resetWidget;
+  document.getElementById("btn-reset-drawer").onclick = resetWidget;
+
+  // ── New user ─────────────────────────────────────────────
+  // No daemon to reach yet, so the "daemon"/"live" checklist steps don't
+  // apply — reveal the connect form directly instead of leaving them
+  // stalled mid-checklist behind the boot screen.
+  if (!cfg.token) {
+    initSetup();
+    hideBootScreen();
+    return;
+  }
+
+  // ── Returning user ───────────────────────────────────────
+  bootStep("daemon", "active");
+  bootState("Connecting");
+
+  initSetup();
 })();

@@ -18,9 +18,73 @@
     </head>
     <body>
         <div id="app">
+
+            <!-- ── Startup / boot screen ─────────────────────────────────── -->
+            <div id="boot-screen">
+                <div class="boot-inner">
+
+                    <div class="boot-mark">
+                        <div class="boot-mark-ring"></div>
+                        <div class="boot-mark-core"></div>
+                    </div>
+
+                    <div class="boot-brand">CC WIDGET</div>
+                    <div class="boot-state" id="boot-state">
+                        INITIALIZING
+                    </div>
+
+                    <div class="boot-progress">
+                        <div class="boot-progress-fill" id="boot-progress-fill"></div>
+                    </div>
+
+                    <div class="boot-steps">
+
+                        <div class="boot-step" id="boot-step-profile">
+                            <span class="boot-step-mark"></span>
+                            <span class="boot-step-label">
+                                Loading profile
+                            </span>
+                        </div>
+
+                        <div class="boot-step" id="boot-step-theme">
+                            <span class="boot-step-mark"></span>
+                            <span class="boot-step-label">
+                                Preparing interface
+                            </span>
+                        </div>
+
+                        <div class="boot-step" id="boot-step-daemon">
+                            <span class="boot-step-mark"></span>
+                            <span class="boot-step-label">
+                                Connecting to CoolerControl
+                            </span>
+                        </div>
+
+                        <div class="boot-step" id="boot-step-live">
+                            <span class="boot-step-mark"></span>
+                            <span class="boot-step-label">
+                                Starting telemetry
+                            </span>
+                        </div>
+
+                    </div>
+
+                    <div class="boot-footer">
+                        <span>CC MONITOR</span>
+                        <span class="boot-footer-dot">·</span>
+                        <span>LINUX</span>
+                    </div>
+
+                </div>
+            </div>
+
             <!-- ── Setup ─────────────────────────────────────────────────── -->
             <div id="s-setup" class="screen">
-                <div class="setup-wrap">
+                <div class="setup-wrap" id="setup-form">
+                    <div class="setup-mark">
+                        <div class="setup-mark-ring"></div>
+                        <div class="setup-mark-core"></div>
+                    </div>
                     <h2>Connect to CoolerControl</h2>
                     <p class="hint">
                         Create a token in CC → Settings → Access Protection →
@@ -49,6 +113,21 @@
                         Reset Widget
                     </button>
                     <div id="setup-err" class="errmsg hide"></div>
+                </div>
+                <div class="connect-wrap hide" id="connect-wrap">
+                    <div class="connect-mark">
+                        <div class="connect-mark-ring"></div>
+                        <div class="connect-mark-core"></div>
+                    </div>
+                    <div class="connect-title" id="connect-title">
+                        Connecting…
+                    </div>
+                    <div class="connect-sub" id="connect-sub">
+                        Reaching CoolerControl
+                    </div>
+                    <button class="btn btn-s" id="btn-connect-cancel">
+                        Cancel
+                    </button>
                 </div>
             </div>
 
@@ -87,139 +166,113 @@
                     <div class="th-sec">Theme</div>
                     <div class="theme-grid" id="theme-grid"></div>
 
-                    <div class="theme-custom-area">
-                        <div class="tb-body" id="tb-body">
-                            <!-- Background & Chrome -->
-                            <div class="tb-section">
-                                <div class="tb-sec-hdr" id="tb-toggle">
-                                    Background &amp; Chrome
-                                </div>
-                                <div class="tb-row">
-                                    <div class="tb-swatch" id="tbs-bg">
-                                        <input type="color" data-var="--bg" />
-                                    </div>
-                                    <span class="tb-lbl">Background</span>
-                                    <span
-                                        class="tb-wcag-pill"
-                                        tabindex="0"
-                                        title="WCAG = Web Content Accessibility Guidelines. The badges below measure each text color's contrast against this background — AA needs ≥4.5:1 for body text, ≥3:1 for large text or UI."
-                                        >WCAG</span
-                                    >
-                                    <span class="tb-hex" id="tbh-bg"></span>
-                                </div>
-                                <div class="tb-row">
-                                    <div class="tb-swatch" id="tbs-txt">
-                                        <input type="color" data-var="--txt" />
-                                    </div>
-                                    <span class="tb-lbl">Primary text</span>
-                                    <span class="tb-contrast" id="tbc-txt"></span>
-                                    <span class="tb-hex" id="tbh-txt"></span>
-                                </div>
-                                <div class="tb-row">
-                                    <div class="tb-swatch" id="tbs-txt-dim">
-                                        <input
-                                            type="color"
-                                            data-var="--txt-dim"
-                                        />
-                                    </div>
-                                    <span class="tb-lbl">Secondary text</span>
-                                    <span
-                                        class="tb-contrast"
-                                        id="tbc-txt-dim"
-                                    ></span>
-                                    <span
-                                        class="tb-hex"
-                                        id="tbh-txt-dim"
-                                    ></span>
-                                </div>
-                                <div class="tb-row">
-                                    <div class="tb-swatch" id="tbs-hot">
-                                        <input type="color" data-var="--hot" />
-                                    </div>
-                                    <span class="tb-lbl">Danger / error</span>
-                                    <span class="tb-contrast" id="tbc-hot"></span>
-                                    <span class="tb-hex" id="tbh-hot"></span>
-                                </div>
-                                <div class="tb-radius-row">
-                                    <span class="tb-lbl">Corner radius</span>
-                                    <input
-                                        class="tb-radius-slider"
-                                        id="tb-radius"
-                                        type="range"
-                                        min="0"
-                                        max="18"
-                                        step="1"
-                                    />
-                                    <span
-                                        class="tb-radius-val"
-                                        id="tb-radius-val"
-                                        >10px</span
-                                    >
-                                </div>
+                    <div class="th-sec">Background &amp; Chrome</div>
+                    <div class="tb-group">
+                        <div class="tb-row">
+                            <div class="tb-swatch" id="tbs-bg">
+                                <input type="color" data-var="--bg" />
                             </div>
-
-                            <!-- Warning Ramp -->
-                            <div class="tb-section">
-                                <div class="tb-sec-hdr">
-                                    Warning Ramp (cool → critical)
-                                </div>
-                                <div class="tb-warn-row">
-                                    <div class="tb-warn-pips">
-                                        <div class="tb-warn-pip" id="tbs-w1">
-                                            <input
-                                                type="color"
-                                                data-var="--w1"
-                                            />
-                                        </div>
-                                        <div class="tb-warn-pip" id="tbs-w2">
-                                            <input
-                                                type="color"
-                                                data-var="--w2"
-                                            />
-                                        </div>
-                                        <div class="tb-warn-pip" id="tbs-w3">
-                                            <input
-                                                type="color"
-                                                data-var="--w3"
-                                            />
-                                        </div>
-                                        <div class="tb-warn-pip" id="tbs-w4">
-                                            <input
-                                                type="color"
-                                                data-var="--w4"
-                                            />
-                                        </div>
-                                        <div class="tb-warn-pip" id="tbs-w5">
-                                            <input
-                                                type="color"
-                                                data-var="--w5"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="tb-warn-gradient-wrap">
-                                    <div
-                                        class="tb-warn-gradient"
-                                        id="tb-warn-gradient"
-                                    ></div>
-                                </div>
+                            <span class="tb-lbl">Background</span>
+                            <span
+                                class="tb-wcag-pill"
+                                tabindex="0"
+                                title="WCAG = Web Content Accessibility Guidelines. The badges below measure each text color's contrast against this background — AA needs ≥4.5:1 for body text, ≥3:1 for large text or UI."
+                                >WCAG</span
+                            >
+                            <span class="tb-hex" id="tbh-bg"></span>
+                        </div>
+                        <div class="tb-row">
+                            <div class="tb-swatch" id="tbs-txt">
+                                <input type="color" data-var="--txt" />
                             </div>
+                            <span class="tb-lbl">Primary text</span>
+                            <span class="tb-contrast" id="tbc-txt"></span>
+                            <span class="tb-hex" id="tbh-txt"></span>
+                        </div>
+                        <div class="tb-row">
+                            <div class="tb-swatch" id="tbs-txt-dim">
+                                <input
+                                    type="color"
+                                    data-var="--txt-dim"
+                                />
+                            </div>
+                            <span class="tb-lbl">Secondary text</span>
+                            <span
+                                class="tb-contrast"
+                                id="tbc-txt-dim"
+                            ></span>
+                            <span
+                                class="tb-hex"
+                                id="tbh-txt-dim"
+                            ></span>
+                        </div>
+                        <div class="tb-row">
+                            <div class="tb-swatch" id="tbs-hot">
+                                <input type="color" data-var="--hot" />
+                            </div>
+                            <span class="tb-lbl">Danger / error</span>
+                            <span class="tb-contrast" id="tbc-hot"></span>
+                            <span class="tb-hex" id="tbh-hot"></span>
+                        </div>
+                        <div class="tb-radius-row">
+                            <span class="tb-lbl">Corner radius</span>
+                            <input
+                                class="tb-radius-slider"
+                                id="tb-radius"
+                                type="range"
+                                min="0"
+                                max="18"
+                                step="1"
+                            />
+                            <span
+                                class="tb-radius-val"
+                                id="tb-radius-val"
+                                >10px</span
+                            >
+                        </div>
+                    </div>
 
-                            <!-- Custom CSS -->
-                            <div class="tb-section">
-                                <div class="tb-sec-hdr">Custom CSS</div>
-                                <textarea
-                                    id="custom-css"
-                                    placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
-                                ></textarea>
-                                <button
-                                    class="btn-apply-custom"
-                                    id="btn-theme-apply"
-                                >
-                                    Apply
-                                </button>
+                    <div class="th-sec">
+                        Warning Ramp
+                        <span class="th-sec-note">cool → critical</span>
+                    </div>
+                    <div class="tb-group">
+                        <div class="tb-warn-row">
+                            <div class="tb-warn-pips">
+                                <div class="tb-warn-pip" id="tbs-w1">
+                                    <input type="color" data-var="--w1" />
+                                </div>
+                                <div class="tb-warn-pip" id="tbs-w2">
+                                    <input type="color" data-var="--w2" />
+                                </div>
+                                <div class="tb-warn-pip" id="tbs-w3">
+                                    <input type="color" data-var="--w3" />
+                                </div>
+                                <div class="tb-warn-pip" id="tbs-w4">
+                                    <input type="color" data-var="--w4" />
+                                </div>
+                                <div class="tb-warn-pip" id="tbs-w5">
+                                    <input type="color" data-var="--w5" />
+                                </div>
                             </div>
                         </div>
+                        <div class="tb-warn-gradient-wrap">
+                            <div
+                                class="tb-warn-gradient"
+                                id="tb-warn-gradient"
+                            ></div>
+                        </div>
+                    </div>
+
+                    <div class="th-sec">Custom CSS</div>
+                    <div class="tb-group tb-group-css">
+                        <textarea
+                            id="custom-css"
+                            placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
+                        ></textarea>
+                        <button class="btn btn-p" id="btn-theme-apply">
+                            Apply CSS
+                        </button>
                     </div>
 
                     <div class="th-sec">Connection</div>
@@ -238,6 +291,11 @@
                             />
                         </div>
                     </div>
+
+                    <div class="th-sec">Danger Zone</div>
+                    <button class="btn btn-s" id="btn-reset-drawer">
+                        Reset Widget
+                    </button>
                 </div>
             </div>
 

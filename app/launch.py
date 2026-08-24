@@ -157,6 +157,33 @@ def position_from_anchor(
     # top-left
     return anchor_x, anchor_y
 
+def _apply_geometry(width, height, x, y):
+    """Move and resize in a single X11 request to avoid the visible
+    grow-then-jump flash that separate resize()/move() calls cause.
+
+    move_resize() being one request stops GTK from painting an
+    intermediate frame between the move and the resize, but it doesn't
+    stop X11/the compositor from painting a frame *during* the resize
+    itself, before WebKit has repainted its content at the new size —
+    that's the actual source of the flash on every resize, not just the
+    boot reveal. freeze_updates()/thaw_updates() suppresses painting for
+    that window in between, so the compositor only ever shows a
+    fully-settled frame.
+    """
+    win.set_size_request(-1, -1)
+    gdk_window = win.get_window()
+    if gdk_window is not None:
+        gdk_window.freeze_updates()
+        gdk_window.move_resize(x, y, width, height)
+        # Thaw on the next idle pass rather than immediately — gives
+        # WebKit a chance to reflow/repaint at the new size first, so the
+        # first frame the compositor is allowed to show is already correct.
+        GLib.idle_add(gdk_window.thaw_updates)
+    else:
+        # Not realized yet (shouldn't happen once win.show_all() has run,
+        # but fall back just in case).
+        win.resize(width, height)
+        win.move(x, y)
 
 # Give the process a meaningful application name instead of inheriting
 # "launch.py". This also helps desktop tools identify the application.
@@ -293,7 +320,14 @@ manager = WebKit2.UserContentManager()
 
 win = None
 webview = None
-boot_waiting_for_resize = False
+
+# Set right before a "boot"/"resize:" message triggers _apply_geometry, to
+# (width, height) — cleared once win.get_size() actually reaches it. Lets
+# on_window_configure() tell JS the instant the native window has genuinely
+# reached its target size, rather than acking on the first configure-event
+# of any kind, which can fire on an intermediate/spurious geometry change
+# (common enough under XWayland) before the real resize has landed.
+_resize_target = None
 
 # ============================================================================
 # JavaScript → Python message handling
@@ -302,7 +336,7 @@ boot_waiting_for_resize = False
 def on_message(_manager, result) -> None:
     """Handle commands sent from monitor.html."""
 
-    global _folder_paths, _anchor_corner, boot_waiting_for_resize
+    global _folder_paths, _anchor_corner, _resize_target
 
     try:
         message = result.get_js_value().to_string()
@@ -349,17 +383,10 @@ def on_message(_manager, result) -> None:
             else:
                 x, y = saved_position["x"], saved_position["y"]
 
-            boot_waiting_for_resize = True
+            _resize_target = (width, height)
 
-            def boot_window(
-                width=width,
-                height=height,
-                x=x,
-                y=y,
-            ):
-                win.set_size_request(-1, -1)
-                win.resize(width, height)
-                win.move(x, y)
+            def boot_window(width=width, height=height, x=x, y=y):
+                _apply_geometry(width, height, x, y)
                 return False
 
             GLib.idle_add(boot_window)
@@ -412,15 +439,10 @@ def on_message(_manager, result) -> None:
             else:
                 new_x, new_y = x, y
 
-            def resize_window(
-                width=width,
-                height=height,
-                x=new_x,
-                y=new_y,
-            ):
-                win.set_size_request(-1, -1)
-                win.resize(width, height)
-                win.move(x, y)
+            _resize_target = (width, height)
+
+            def resize_window(width=width, height=height, x=new_x, y=new_y):
+                _apply_geometry(width, height, x, y)
                 return False
 
             GLib.idle_add(resize_window)
@@ -814,21 +836,33 @@ win.connect("destroy", Gtk.main_quit)
 # position persistent even if the application is closed normally after a
 # resize or drag.
 def on_window_configure(_window, _event) -> bool:
-    """Persist geometry and notify JS when the final boot resize lands."""
+    """Persist the current window position whenever GTK reports a geometry
+    change, and — if a resize/boot message is waiting on one — tell the
+    frontend once the native window has genuinely reached its target size.
 
-    global boot_waiting_for_resize
+    configure-event can fire more than once for a single move_resize() call
+    (WM/XWayland settling, intermediate frames, etc.), so acking on the
+    first one to arrive isn't safe — it can report a size that hasn't
+    actually landed yet. Comparing against the real target and only acking
+    on a match is what makes this a trustworthy completion signal rather
+    than just "something happened."
+    """
+
+    global _resize_target
 
     save_window_position()
 
-    if boot_waiting_for_resize:
-        boot_waiting_for_resize = False
-
-        webview.evaluate_javascript(
-            "if(window.onWidgetReady)window.onWidgetReady()",
-            -1,
-            None,
-            None,
-        )
+    if _resize_target is not None and webview is not None:
+        width, height = win.get_size()
+        target_w, target_h = _resize_target
+        if abs(width - target_w) <= 1 and abs(height - target_h) <= 1:
+            _resize_target = None
+            webview.evaluate_javascript(
+                f"window.__onResizeApplied && window.__onResizeApplied({width},{height})",
+                -1,
+                None,
+                None,
+            )
 
     return False
 

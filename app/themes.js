@@ -508,3 +508,88 @@ function applyTheme(key, customCSS = null) {
     }
   });
 }
+
+const SIZES = {
+  s: {
+    label: "S",
+    vars: {
+      "--sz-lbl": "11px",
+      "--sz-val": "16px",
+      "--sz-unit": "10px",
+      "--sz-hdr": "12px",
+      "--sz-meta": "11px",
+      "--sz-pct": "16px",
+      "--sz-dot": "8px",
+      "--sz-track": "7px",
+      "--pad-card": "10px",
+      "--pad-row": "3px",
+      "--canvas-w": "162px",
+      "--canvas-h": "92px",
+      "--canvas-lh": "62px",
+      "--dash-w": "440px",
+    },
+    width: 440,
+    canvas: { w: 162, h: 92 },
+  },
+  m: {
+    label: "M",
+    vars: {
+      "--sz-lbl": "12.5px",
+      "--sz-val": "19px",
+      "--sz-unit": "11px",
+      "--sz-hdr": "13.5px",
+      "--sz-meta": "12px",
+      "--sz-pct": "19px",
+      "--sz-dot": "9px",
+      "--sz-track": "8px",
+      "--pad-card": "12px",
+      "--pad-row": "4px",
+      "--canvas-w": "180px",
+      "--canvas-h": "108px",
+      "--canvas-lh": "72px",
+      "--dash-w": "500px",
+    },
+    width: 500,
+    canvas: { w: 180, h: 108 },
+  },
+  l: {
+    label: "L",
+    vars: {
+      "--sz-lbl": "14px",
+      "--sz-val": "22px",
+      "--sz-unit": "12px",
+      "--sz-hdr": "15px",
+      "--sz-meta": "13px",
+      "--sz-pct": "22px",
+      "--sz-dot": "10px",
+      "--sz-track": "9px",
+      "--pad-card": "14px",
+      "--pad-row": "5px",
+      "--canvas-w": "204px",
+      "--canvas-h": "124px",
+      "--canvas-lh": "84px",
+      "--dash-w": "580px",
+    },
+    width: 580,
+    canvas: { w: 204, h: 124 },
+  },
+};
+
+// All var keys managed by size
+const SIZE_VAR_KEYS = Object.keys(SIZES.m.vars);
+
+function applySize(key, rebuild = true) {
+  const sz = SIZES[key] || SIZES.s;
+  const root = document.documentElement;
+  SIZE_VAR_KEYS.forEach((v) => root.style.removeProperty(v));
+  Object.entries(sz.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  cfg.size = key;
+  saveCfg();
+  document
+    .querySelectorAll(".size-btn")
+    .forEach((b) => b.classList.toggle("active", b.dataset.size === key));
+  if (rebuild && phase === "dashboard") {
+    buildCards();
+    renderDashboard(liveDevices);
+  }
+}
