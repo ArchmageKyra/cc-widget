@@ -192,6 +192,7 @@ let cfg = {
   peakOff: {},
   cardHidden: {},
   cardLabels: {},
+  cardMini: {},
   anchorCorner: null,
 };
 let phase = "setup";
@@ -877,7 +878,9 @@ function gtksend(msg) {
 }
 
 document.getElementById("bb-x").onclick = () => gtksend("close");
-document.getElementById("bb-min").onclick = () => gtksend("minimize");
+document.getElementById("bb-mini-all").onclick = () => {
+  if (!editMode) toggleAllCardsMini();
+};
 document.getElementById("bb-pin").onclick = () => {
   pinned = !pinned;
   gtksend(pinned ? "pin" : "unpin");
@@ -1581,6 +1584,13 @@ function autoAssignLinux() {
 // ═══════════════════════════════════════════════════════════════
 const _ICON_PENCIL = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5l1.5 1.5-7 7L1 11l1-2.5 7-7z"/><line x1="8" y1="2.5" x2="9.5" y2="4"/></svg>`;
 const _ICON_CHECK = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,6 4.5,9.5 10.5,2.5"/></svg>`;
+// Chevron points the way the card will move: up = "click to collapse"
+// (expanded now), down = "click to expand" (collapsed now).
+const _ICON_CHEVRON_UP = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,7.5 6,4 9.5,7.5"/></svg>`;
+const _ICON_CHEVRON_DOWN = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,4.5 6,8 9.5,4.5"/></svg>`;
+// Bulk collapse/expand-all button — same up/down language, doubled.
+const _ICON_CHEVRON_ALL_UP = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,5 6,2 10,5"/><polyline points="2,9.5 6,6.5 10,9.5"/></svg>`;
+const _ICON_CHEVRON_ALL_DOWN = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,2.5 6,5.5 10,2.5"/><polyline points="2,7 6,10 10,7"/></svg>`;
 function setEditMode(on) {
   editMode = on;
   const btn = document.getElementById("bb-cfg");
@@ -2457,6 +2467,166 @@ function setCardHidden(cardId, hidden) {
   requestAnimationFrame(() => autoResize());
 }
 
+// Per-card "mini" collapse — shrinks the whole card down to just its
+// header row (title + a few headline numbers + a severity pill), body
+// hidden. Purely a viewing-density preference, so toggling is cheap:
+// no buildCards() rebuild, just a class flip + resize — the card's
+// canvas/spark instance and its plotted history keep running
+// underneath, unaffected, so expanding back is instant and gap-free.
+// Forced off while editing (see buildCards()) since a collapsed card
+// hides every affordance you'd need to reconfigure it.
+function isCardMini(cardId) {
+  return !!cfg.cardMini?.[cardId];
+}
+function setCardMini(cardId, mini) {
+  cfg.cardMini ??= {};
+  if (mini) cfg.cardMini[cardId] = true;
+  else delete cfg.cardMini[cardId];
+  saveCfg();
+  const card = document.getElementById("card-" + cardId);
+  if (card) card.classList.toggle("mini", mini);
+  const btn = document.getElementById("mini-tog-" + cardId);
+  if (btn) {
+    btn.innerHTML = mini ? _ICON_CHEVRON_DOWN : _ICON_CHEVRON_UP;
+    btn.title = mini ? "Expand" : "Collapse";
+  }
+  _updateMiniAllBtn();
+  requestAnimationFrame(() => autoResize());
+}
+
+// Bulk collapse/expand — what used to be the taskbar-minimize button
+// (not much use in a borderless widget with no taskbar affordance).
+// One state mutation + one DOM/save pass rather than looping
+// setCardMini() per card, so it stays a single localStorage write.
+function toggleAllCardsMini() {
+  const ids = orderedCardDefs()
+    .map((d) => d.id)
+    .filter((id) => document.getElementById("card-" + id) && !isCardHidden(id));
+  if (!ids.length) return;
+  const next = !ids.every((id) => isCardMini(id));
+  cfg.cardMini ??= {};
+  for (const id of ids) {
+    if (next) cfg.cardMini[id] = true;
+    else delete cfg.cardMini[id];
+    const card = document.getElementById("card-" + id);
+    if (card) card.classList.toggle("mini", next);
+    const btn = document.getElementById("mini-tog-" + id);
+    if (btn) {
+      btn.innerHTML = next ? _ICON_CHEVRON_DOWN : _ICON_CHEVRON_UP;
+      btn.title = next ? "Expand" : "Collapse";
+    }
+  }
+  saveCfg();
+  _updateMiniAllBtn();
+  requestAnimationFrame(() => autoResize());
+}
+
+// Keeps the sbar "collapse/expand all" icon honest — e.g. if the user
+// collapses cards one by one until every visible card happens to be
+// mini, the button should already read "Expand all" without needing
+// its own click first.
+function _updateMiniAllBtn() {
+  const btn = document.getElementById("bb-mini-all");
+  if (!btn) return;
+  const ids = orderedCardDefs()
+    .map((d) => d.id)
+    .filter((id) => document.getElementById("card-" + id) && !isCardHidden(id));
+  const allMini = ids.length > 0 && ids.every((id) => isCardMini(id));
+  btn.innerHTML = allMini ? _ICON_CHEVRON_ALL_DOWN : _ICON_CHEVRON_ALL_UP;
+  btn.title = allMini ? "Expand all" : "Collapse all";
+}
+
+// Short (≤4 char) labels for the mini row's headline numbers — the
+// full row.lbl ("FAN AVG", "↓ RX") is too wide for a single collapsed
+// line. Falls back to a stripped/truncated version of row.lbl for
+// anything not listed here (e.g. a future card's rows).
+// Fixed column count for the mini row grid — every card pads to (or
+// truncates at) this many slots so values line up across cards once
+// several are collapsed and stacked (see the render loop in
+// renderDashboard). 3 comfortably covers every card today (CPU/GPU use
+// all 3; MEMORY, NET, CHASSIS, and STORAGE use 2).
+const MINI_SLOTS = 3;
+
+const MINI_LBL = {
+  cpu_temp: "T",
+  cpu_load: "L",
+  cpu_fan: "F",
+  gpu_temp: "T",
+  gpu_load: "L",
+  gpu_fan: "F",
+  lnx_ram_pct: "RAM",
+  lnx_swap_pct: "SWP",
+  lnx_net_rx: "RX",
+  lnx_net_tx: "TX",
+  case_temp: "AMB",
+  case_fan_avg: "FAN",
+};
+function _miniLbl(row) {
+  return (
+    MINI_LBL[row.sid] ||
+    (row.lbl || "").replace(/[^A-Za-z]/g, "").slice(0, 4).toUpperCase() ||
+    "—"
+  );
+}
+
+// Gathers up to 3 headline {lbl, str, level} values for a card's
+// collapsed mini row. `level` (0–5, or null) drives that metric's own
+// severity dot — only warn-mode rows get one; meter-mode (fan) and
+// storage stay null, matching the existing "meter isn't a problem
+// signal" / "storage is excluded from alerts" rules used elsewhere.
+// Spark-type cards just read their own row.sid values (already
+// exactly what the full view shows — temp/load/fan, RAM/SWAP,
+// RX/TX, etc). Storage has no fixed rows (auto-generated per disk), so
+// it gets a bespoke summary instead: busiest visible disk + a count.
+function _miniHeadline(def, devices) {
+  const items = [];
+  if (def.autoDisks) {
+    const linuxDev = devices.find((d) => d.uid === "linux-system");
+    const lat = getLatest(linuxDev);
+    const diskChs =
+      lat?.channels?.filter((ch) => /^Disk .+ Usage$/.test(ch.name)) ?? [];
+    const visible = diskChs.filter((ch) => {
+      const mount = ch.name.replace(/^Disk /, "").replace(/ Usage$/, "");
+      return !(cfg.hiddenMounts ?? []).includes(mount);
+    });
+    if (!visible.length) return items;
+    const busiest = visible.reduce((a, b) =>
+      (b.duty ?? 0) > (a.duty ?? 0) ? b : a,
+    );
+    const mount = busiest.name.replace(/^Disk /, "").replace(/ Usage$/, "");
+    const mountLbl = mount === "/" ? "ROOT" : (mount.split("/").pop() || mount).toUpperCase();
+    items.push({
+      lbl: mountLbl.slice(0, 5),
+      str: Math.round(busiest.duty ?? 0) + "%",
+      level: null,
+    });
+    if (visible.length > 1) {
+      items.push({ lbl: "DISKS", str: String(visible.length), level: null });
+    }
+    return items;
+  }
+  for (const row of def.rows || []) {
+    if (row.computedFanAvg) {
+      const avg = _chassisFanAvg(devices);
+      if (avg !== undefined)
+        items.push({ lbl: _miniLbl(row), str: fmt1(avg, "%"), level: null });
+      continue;
+    }
+    const slot = cfg.slots[row.sid];
+    if (!slot) continue;
+    const v = getSlotValue(devices, slot);
+    if (v === undefined) continue;
+    const sd2 = SLOTS.find((s) => s.id === row.sid);
+    const level = row.mode === "warn" ? warnLevel(row.sid, v) : null;
+    items.push({
+      lbl: _miniLbl(row),
+      str: fmt1(v, sd2?.unit ?? row.unit ?? ""),
+      level,
+    });
+  }
+  return items.slice(0, 3);
+}
+
 // Per-card display-label override — mirrors the rename affordance custom
 // rows already have; built-in card titles (CPU/GPU/etc.) couldn't be
 // touched before this.
@@ -2647,6 +2817,8 @@ function buildCards() {
     card.id = "card-" + def.id;
     const hidden = isCardHidden(def.id);
     if (hidden) card.classList.add("card-hidden-preview");
+    const mini = isCardMini(def.id) && !editMode;
+    card.classList.toggle("mini", mini);
     // While hidden, the badge is the only affordance — no separate "⋯"
     // menu competing for the same job (and nothing else in that menu is
     // worth exposing on a card you've just taken out of the layout).
@@ -2654,7 +2826,8 @@ function buildCards() {
       editMode
         ? '<button class="card-grip" title="Drag to reorder" type="button"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg></button>'
         : ""
-    }<span class="card-ttl">${esc(cardLabel(def))}</span>${
+    }<span class="card-ttl">${esc(cardLabel(def))}</span>
+    <span class="card-mini-vals" id="mini-${def.id}"></span>${
       hidden
         ? '<button class="card-hidden-badge" type="button" title="Click to unhide">Hidden</button>'
         : ""
@@ -2662,8 +2835,20 @@ function buildCards() {
       editMode && !hidden
         ? '<button class="card-more" title="Card options" type="button">⋯</button>'
         : ""
+    }${
+      !editMode && !hidden
+        ? `<button class="card-mini-toggle" id="mini-tog-${def.id}" title="${mini ? "Expand" : "Collapse"}" type="button">${mini ? _ICON_CHEVRON_DOWN : _ICON_CHEVRON_UP}</button>`
+        : ""
     }</div>`;
     c.appendChild(card);
+
+    if (!editMode && !hidden) {
+      const miniBtn = card.querySelector(".card-mini-toggle");
+      miniBtn.onclick = (e) => {
+        e.stopPropagation();
+        setCardMini(def.id, !isCardMini(def.id));
+      };
+    }
 
     const hiddenBadge = card.querySelector(".card-hidden-badge");
     if (hiddenBadge) {
@@ -2920,6 +3105,7 @@ function buildCards() {
     }
   }
 
+  _updateMiniAllBtn();
   requestAnimationFrame(() => autoResize());
 }
 
@@ -2928,7 +3114,7 @@ function buildCards() {
 //  Measures true card content height and notifies Python so the
 //  GTK window snaps to fit — no scroll, no dead space.
 // ═══════════════════════════════════════════════════════════════
-const DRAWER_W = 280; // matches #drawer's fixed width in monitor.css
+const DRAWER_W = 320; // matches #drawer's fixed width in monitor.css
 const SETUP_W = 340; // compact width for the setup/connecting screens
 
 function autoResize(force = false) {
@@ -2983,7 +3169,7 @@ function autoResize(force = false) {
 //  RENDER DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 
-function renderDashboard(devices) {
+function renderDashboard(devices, { pushSparks = false } = {}) {
   // Per-card rollup for the header alert bar — reset every tick and
   // filled in as rows are walked below (named rows + custom rows).
   // Only "warn"-mode severity counts; meter-mode (fan duty) is
@@ -3097,11 +3283,17 @@ function renderDashboard(devices) {
     }
 
     // ── Spark canvas feeds ────────────────────────────────────
+    // Text/dot readouts above already update on every call (SSE
+    // arrival, Linux stats push, etc. — irregular cadence). Actually
+    // appending a new point to the plotted history only happens when
+    // pushSparks is set, i.e. from the fixed 1 Hz ticker below — so
+    // every plotted pixel-step represents exactly one real second,
+    // instead of one step per (irregularly-timed) data event.
     const spark = sparks[def.id];
     if (!spark || !def.rows) continue;
 
     if (def.type === "spark") {
-      spark.tick();
+      if (pushSparks) spark.tick();
       for (const row of def.rows) {
         if (row.computedFanAvg) {
           const avg = _chassisFanAvg(devices);
@@ -3116,13 +3308,16 @@ function renderDashboard(devices) {
                 getRowStyle(row) === "dots-meter" ? "meter" : "warn",
               );
             }
-            spark.setFanNorm(100);
-            spark.push("fan", avg);
+            if (pushSparks) {
+              spark.setFanNorm(100);
+              spark.push("fan", avg);
+            }
           }
           _trackPeak(row.sid, avg);
           _updatePeakTip(row.sid, "%");
           continue;
         }
+        if (!pushSparks) continue; // nothing else in this branch is spark-only
         if (!cfg.slots[row.sid] || !row.sparkKey || row.noPlot) continue;
         const v = getSlotValue(devices, cfg.slots[row.sid]);
         if (row.sparkKey === "fan") {
@@ -3180,12 +3375,38 @@ function renderDashboard(devices) {
     }
   }
 
-  // ── Header alert bar ──────────────────────────────────────────
+  // ── Header alert bar (+ mini-row headline/dots) ────────────────
   // Silent through levels 1–3 (routine fluctuation) — only the top two
   // bands touch the card's own accent bar, and Storage never does.
+  // Mini-row values are kept current on every pass regardless of
+  // collapsed state, so toggling mini is an instant class flip.
+  // Padded to a fixed 3 slots (see MINI_SLOTS) so a card with fewer
+  // headline values than another still lines up column-for-column with
+  // it once both are collapsed and stacked — a real grid, not just
+  // each card's own cluster hugging the right edge at its own width.
   for (const def of CARD_DEFS) {
     const hdr = document.getElementById("hdr-" + def.id);
     if (!hdr) continue;
+
+    const miniVals = document.getElementById("mini-" + def.id);
+    if (miniVals) {
+      const heads = _miniHeadline(def, devices);
+      const slots = Array.from(
+        { length: MINI_SLOTS },
+        (_, i) => heads[i] ?? null,
+      );
+      miniVals.innerHTML = slots
+        .map((it) => {
+          if (!it) return `<span class="mini-val mini-val-empty"></span>`;
+          const bar =
+            it.level == null
+              ? ""
+              : `<span class="mini-bar" style="background:${it.level > 0 ? `var(--w${it.level})` : "var(--dot-off-warn)"}"></span>`;
+          return `<span class="mini-val">${bar}<span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`;
+        })
+        .join("");
+    }
+
     if (def.id === "storage") {
       hdr.classList.remove("hdr-warm", "hdr-hot");
       continue;
@@ -3195,6 +3416,20 @@ function renderDashboard(devices) {
     hdr.classList.toggle("hdr-hot", lvl >= 5);
   }
 }
+
+// ── Fixed-rate sparkline ticker ──────────────────────────────────
+// The dashboard re-renders on every SSE packet and every 2 s Linux
+// stats push — two independent, irregularly-interleaved sources.
+// Sampling the sparkline history on that schedule made each plotted
+// step cover a different, unpredictable slice of real time (some
+// nearly back-to-back, some ~2 s apart), so the trace visibly
+// kinked/trailed off instead of reading as a clean N-second window.
+// Feeding the graphs from their own steady 1 s clock instead means
+// every horizontal step is worth exactly one real second — see
+// MultiSpark's MAX/BAR for how that maps to a clean 60 s window.
+setInterval(() => {
+  if (phase === "dashboard") renderDashboard(liveDevices, { pushSparks: true });
+}, 1000);
 
 // ═══════════════════════════════════════════════════════════════
 //  MULTI-SERIES SPARKLINE — up to 3 series, drawn fan→load→temp so
@@ -3210,8 +3445,8 @@ class MultiSpark {
     this.W = W;
     this.H = H;
     this.showPeaks = showPeaks;
-    this.MAX = 60; // data points kept
-    this.BAR = 8; // vertical marker every N points
+    this.MAX = 61; // data points kept — 60 one-second intervals = a clean 60s/1min window
+    this.BAR = 10; // vertical marker every 10s — 60/10 divides evenly, no leftover at the edge
 
     this.S = {
       temp: {
@@ -3477,7 +3712,15 @@ class MultiSpark {
 // ═══════════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
+// demo-gif.html loads this file with ?demo=1 and drives boot/config
+// itself via window.__seedDemo()/__demoTick() — it needs the real
+// boot sequence to stay completely out of the way (no boot-screen
+// animation, and critically no applySize()/applyTheme() calls firing
+// on their own timers and stomping the seeded dashboard mid-render).
+const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
+
 (async () => {
+  if (DEMO_MODE) return;
 
   // Backstop: whatever happens above (daemon never answers, an unexpected
   // error, etc.), the boot screen is guaranteed to step aside eventually
