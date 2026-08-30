@@ -2880,9 +2880,20 @@ function _miniLbl(row) {
     "—"
   );
 }
+// Compact unit suffix appended straight onto the number — only for
+// symbols short enough not to blow out a 58px slot (°, %). Anything
+// wordier (RPM, KB/s, W) is skipped; the abbreviated label already
+// gives enough context (e.g. "F" for fan implies RPM).
+function _miniUnitSuffix(unit) {
+  if (unit === "°C") return "°";
+  if (unit === "%") return "%";
+  return "";
+}
 
-// Gathers up to 3 headline {lbl, str, bar} values for a card's
-// collapsed mini row. `bar` is always a CSS color — warn-mode metrics
+// Gathers up to 3 headline {lbl, str, bar, full} values for a card's
+// collapsed mini row. `full` is the un-abbreviated row label, shown as
+// a hover tooltip since "T"/"SWP"/"AMB" aren't self-explanatory on
+// first sight. `bar` is always a CSS color — warn-mode metrics
 // (temp/load) get the graduated --w1..--w5 severity ramp; everything
 // else (fan, RX/TX, Storage's summary) gets a flat on/off read using
 // the same --meter / --dot-off-meter convention the full-view meter
@@ -2916,11 +2927,17 @@ function _miniHeadline(def, devices) {
     const mountLbl = mount === "/" ? "ROOT" : (mount.split("/").pop() || mount).toUpperCase();
     items.push({
       lbl: mountLbl.slice(0, 5),
-      str: Math.round(busiest.duty ?? 0) + "%",
+      str: Math.round(busiest.duty ?? 0) + _miniUnitSuffix("%"),
       bar: meterBar(busiest.duty),
+      full: mount === "/" ? "Root — busiest disk" : `${mount} — busiest disk`,
     });
     if (visible.length > 1) {
-      items.push({ lbl: "DISKS", str: String(visible.length), bar: meterBar(visible.length) });
+      items.push({
+        lbl: "DISKS",
+        str: String(visible.length),
+        bar: meterBar(visible.length),
+        full: "Visible disks",
+      });
     }
     return items;
   }
@@ -2928,7 +2945,12 @@ function _miniHeadline(def, devices) {
     if (row.computedFanAvg) {
       const avg = _chassisFanAvg(devices);
       if (avg !== undefined)
-        items.push({ lbl: _miniLbl(row), str: fmt1(avg, "%"), bar: meterBar(avg) });
+        items.push({
+          lbl: _miniLbl(row),
+          str: fmt1(avg, "%") + _miniUnitSuffix("%"),
+          bar: meterBar(avg),
+          full: row.lbl,
+        });
       continue;
     }
     const slot = cfg.slots[row.sid];
@@ -2936,12 +2958,14 @@ function _miniHeadline(def, devices) {
     const v = getSlotValue(devices, slot);
     if (v === undefined) continue;
     const sd2 = SLOTS.find((s) => s.id === row.sid);
+    const unit = sd2?.unit ?? row.unit ?? "";
     const bar =
       row.mode === "warn" ? warnBar(warnLevel(row.sid, v)) : meterBar(getFanDuty(devices, slot) ?? v);
     items.push({
       lbl: _miniLbl(row),
-      str: fmt1(v, sd2?.unit ?? row.unit ?? ""),
+      str: fmt1(v, unit) + _miniUnitSuffix(unit),
       bar,
+      full: row.lbl,
     });
   }
   return items.slice(0, 3);
@@ -3168,6 +3192,13 @@ function buildCards() {
         e.stopPropagation();
         setCardMini(def.id, !isCardMini(def.id));
       };
+      // Whole header toggles, not just the chevron — a tiny 18px button
+      // is a fussy target on a widget this size. The tooltip spans
+      // inside .card-mini-vals still get their own hover title; a click
+      // anywhere else in the header (including on them) just toggles.
+      const hdrEl = card.querySelector(".card-hdr");
+      hdrEl.classList.add("card-hdr-toggleable");
+      hdrEl.onclick = () => setCardMini(def.id, !isCardMini(def.id));
     }
 
     const hiddenBadge = card.querySelector(".card-hidden-badge");
@@ -3718,7 +3749,7 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
       miniVals.innerHTML = slots
         .map((it) => {
           if (!it) return `<span class="mini-val mini-val-empty"></span>`;
-          return `<span class="mini-val"><span class="mini-bar" style="background:${it.bar}"></span><span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`;
+          return `<span class="mini-val" title="${esc(it.full)}"><span class="mini-bar" style="background:${it.bar}"></span><span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`;
         })
         .join("");
     }
