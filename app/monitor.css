@@ -658,6 +658,20 @@ h2 {
     opacity: 1;
     color: var(--txt);
 }
+/* The header itself is now the click target for mini-toggle (see
+   buildCards()) — the chevron button is still there for a visible
+   affordance/icon, but a tiny 18px button alone is a fussy target on
+   a widget this size. */
+.card-hdr-toggleable {
+    cursor: pointer;
+}
+.card-hdr-toggleable:hover {
+    background: var(--bg-hover-subtle);
+}
+.card-hdr-toggleable:hover .card-mini-toggle {
+    opacity: 1;
+    color: var(--txt);
+}
 /* Color-picker row inside the "…" flyout — used by the card-header
    accent-color popover. A display/pick chip (native colour input,
    for anyone who'd rather eyeball it) plus a typeable hex field. */
