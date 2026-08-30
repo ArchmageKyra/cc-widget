@@ -216,6 +216,12 @@ let sessionPeaks = {};
 // uid -> { name, disabled, temps: {key: label}, channels: {key: label} }
 let deviceMeta = {};
 
+// Demo Mode — fake data curves standing in for a live CC connection.
+// See the "DEMO MODE" section below for enterDemoMode()/exitDemoMode().
+let demoMode = false;
+let demoTimer = null;
+let demoCurves = null;
+
 function _fmtUptime(ms) {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
@@ -910,6 +916,7 @@ function setConfigOpen(open) {
       document.getElementById("tc-url").value = cfg.baseUrl;
       document.getElementById("tc-tok").value = cfg.token;
     }
+    _updateDemoButtons();
   }
   requestAnimationFrame(() => autoResize());
 }
@@ -933,6 +940,14 @@ document.getElementById("sbar").addEventListener("mousedown", (e) => {
 //  webview.run_javascript() — no HTTP server needed.
 // ═══════════════════════════════════════════════════════════════
 window.onLinuxStats = function (stats) {
+  // Python's push loop runs unconditionally on its own GLib timer —
+  // ignore its real samples while Demo Mode is faking the dashboard,
+  // otherwise real/fake data would fight over linuxDevices every 2s.
+  if (demoMode) return;
+  applyLinuxStats(stats);
+};
+
+function applyLinuxStats(stats) {
   if (stats.unavailable) {
     _resolveLinuxStatsReady?.();
     _resolveLinuxStatsReady = null;
@@ -1019,7 +1034,7 @@ window.onLinuxStats = function (stats) {
 
   _resolveLinuxStatsReady?.();
   _resolveLinuxStatsReady = null;
-};
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  SSE  (fetch-based — carries Authorization header)
@@ -1516,6 +1531,9 @@ function initSetup() {
   };
   btn.onclick = attemptConnect;
 
+  const demoBtn = document.getElementById("btn-demo");
+  if (demoBtn) demoBtn.onclick = enterDemoMode;
+
   document.getElementById("btn-connect-cancel").onclick = () => {
     stopSSE();
     phase = "setup";
@@ -1532,6 +1550,300 @@ function showErr(msg) {
   const e = document.getElementById("setup-err");
   e.textContent = msg;
   e.classList.remove("hide");
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DEMO MODE
+//  Fakes both data sources (CC's SSE devices and Python's Linux
+//  stats push) with a handful of self-running curves, so the whole
+//  dashboard — and the theme editor over top of it — can be previewed
+//  without a CoolerControl daemon or real sensors. No network/GTK
+//  calls are made; it's pure client-side data generation on a timer.
+// ═══════════════════════════════════════════════════════════════
+const DEMO_TICK_MS = 1500;
+
+// Small helpers shared by the curve generator below.
+function _clamp(v, lo, hi) {
+  return Math.min(hi, Math.max(lo, v));
+}
+function _jitter(amp) {
+  return (Math.random() - 0.5) * 2 * amp;
+}
+
+// One self-advancing curve. `kind` picks the shape:
+//   "sine"   — smooth periodic wave (e.g. a breathing GPU load)
+//   "normal" — gentle mean-reverting drift (e.g. RAM slowly creeping)
+//   "gaming" — bursty: idles low, then jumps into a sustained high-load
+//              plateau for a while before dropping back (e.g. CPU load
+//              while a game is running)
+class DemoCurve {
+  constructor(kind, { min, max, period = 60, target } = {}) {
+    this.kind = kind;
+    this.min = min;
+    this.max = max;
+    this.period = period;
+    this.target = target ?? (min + max) / 2;
+    this.t = Math.random() * period; // stagger multiple curves
+    this.value = this.target;
+    this.burstUntil = 0;
+    this.burstTarget = this.target;
+  }
+  next(dt = DEMO_TICK_MS / 1000) {
+    this.t += dt;
+    const { min, max } = this;
+    if (this.kind === "sine") {
+      const v = (Math.sin((2 * Math.PI * this.t) / this.period) + 1) / 2;
+      this.value = min + v * (max - min);
+    } else if (this.kind === "normal") {
+      const jitter = (max - min) * 0.04;
+      this.value = _clamp(
+        this.value + (this.target - this.value) * 0.05 + _jitter(jitter),
+        min,
+        max,
+      );
+    } else if (this.kind === "gaming") {
+      if (this.t > this.burstUntil) {
+        if (Math.random() < 0.2) {
+          // Start a sustained high-load "gaming session"
+          this.burstUntil = this.t + 8 + Math.random() * 14;
+          this.burstTarget = min + (max - min) * (0.72 + Math.random() * 0.26);
+        } else {
+          // Back to idle for a while
+          this.burstUntil = this.t + 4 + Math.random() * 8;
+          this.burstTarget = min + (max - min) * (Math.random() * 0.2);
+        }
+      }
+      const jitter = (max - min) * 0.06;
+      this.value = _clamp(
+        this.value + (this.burstTarget - this.value) * 0.22 + _jitter(jitter),
+        min,
+        max,
+      );
+    }
+    return this.value;
+  }
+}
+
+function _buildDemoCurves() {
+  return {
+    cpuLoad: new DemoCurve("gaming", { min: 3, max: 98 }),
+    gpuLoad: new DemoCurve("sine", { min: 6, max: 92, period: 45 }),
+    ram: new DemoCurve("normal", { min: 26, max: 80, target: 48 }),
+    swap: new DemoCurve("normal", { min: 0, max: 14, target: 2 }),
+    disk: new DemoCurve("normal", { min: 57, max: 64, target: 60 }),
+    caseTemp: new DemoCurve("sine", { min: 23, max: 33, period: 90 }),
+    netRx: new DemoCurve("gaming", { min: 15, max: 8500 }),
+    netTx: new DemoCurve("gaming", { min: 10, max: 1100 }),
+  };
+}
+
+// Advances every curve one tick and shapes the results into the same
+// shapes buildLeaves()/applyLinuxStats() already know how to consume —
+// nothing downstream needs to know this data isn't real.
+function _computeDemoFrame() {
+  const c = demoCurves;
+
+  const cpuLoad = c.cpuLoad.next();
+  const cpuTemp = _clamp(33 + cpuLoad * 0.42 + _jitter(1.2), 30, 88);
+  const cpuFan = Math.round(_clamp(500 + cpuLoad * 14 + _jitter(40), 400, 2400));
+
+  const gpuLoad = c.gpuLoad.next();
+  const gpuTemp = _clamp(31 + gpuLoad * 0.48 + _jitter(1), 28, 85);
+  const gpuFan = Math.round(_clamp(400 + gpuLoad * 15 + _jitter(40), 300, 2600));
+
+  const caseTemp = c.caseTemp.next();
+
+  const now = new Date().toISOString();
+  const ccDevices = [
+    {
+      uid: "demo-cpu",
+      d_type: "CPU",
+      type_index: 0,
+      status_history: [
+        {
+          timestamp: now,
+          temps: [{ name: "cpu_pkg", temp: +cpuTemp.toFixed(1) }],
+          channels: [{ name: "cpu_fan", rpm: cpuFan }],
+        },
+      ],
+    },
+    {
+      uid: "demo-gpu",
+      d_type: "GPU",
+      type_index: 0,
+      status_history: [
+        {
+          timestamp: now,
+          temps: [{ name: "gpu_core", temp: +gpuTemp.toFixed(1) }],
+          channels: [
+            { name: "gpu_fan", rpm: gpuFan },
+            { name: "gpu_core_load", duty: +gpuLoad.toFixed(1) },
+          ],
+        },
+      ],
+    },
+    {
+      uid: "demo-chassis",
+      d_type: "Liquidctl",
+      type_index: 0,
+      status_history: [
+        {
+          timestamp: now,
+          temps: [{ name: "ambient", temp: +caseTemp.toFixed(1) }],
+          channels: [],
+        },
+      ],
+    },
+  ];
+
+  const ramPct = c.ram.next();
+  const ramTotal = 31.3;
+  const ramUsed = +((ramTotal * ramPct) / 100).toFixed(1);
+  const swapPct = c.swap.next();
+  const swapTotal = 8;
+  const swapUsed = +((swapTotal * swapPct) / 100).toFixed(2);
+  const diskPct = c.disk.next();
+  const diskTotal = 476.9;
+  const diskUsed = +((diskTotal * diskPct) / 100).toFixed(1);
+
+  const linuxStats = {
+    cpu_percent: +cpuLoad.toFixed(1),
+    ram_percent: +ramPct.toFixed(1),
+    ram_used_gb: ramUsed,
+    ram_free_gb: +(ramTotal - ramUsed).toFixed(1),
+    ram_total_gb: ramTotal,
+    swap_percent: +swapPct.toFixed(1),
+    swap_used_gb: swapUsed,
+    swap_total_gb: swapTotal,
+    disks: {
+      "/": {
+        percent: +diskPct.toFixed(1),
+        used_gb: diskUsed,
+        free_gb: +(diskTotal - diskUsed).toFixed(1),
+        total_gb: diskTotal,
+      },
+    },
+    net: {
+      rx_kbps: Math.round(c.netRx.next()),
+      tx_kbps: Math.round(c.netTx.next()),
+    },
+    folder_sizes: {},
+  };
+
+  return { ccDevices, linuxStats };
+}
+
+function demoTick() {
+  const { ccDevices: fakeCc, linuxStats } = _computeDemoFrame();
+  ccDevices = fakeCc;
+  refreshDevices();
+  applyLinuxStats(linuxStats);
+  if (phase === "dashboard") setStatus("ok");
+}
+
+// Restores whatever cfg.slots those sids held before enterDemoMode()
+// overwrote them — undefined means "wasn't assigned", not "leave alone".
+let _demoSlotBackup = null;
+const DEMO_CC_SIDS = ["cpu_temp", "cpu_fan", "gpu_temp", "gpu_load", "gpu_fan", "case_temp"];
+
+// Drawer's Connection-section button doubles as the enter/exit toggle,
+// since it's reachable whether or not a real connection is active. The
+// setup screen's "Try Demo Mode" button only ever needs the one state
+// (that screen isn't shown while demo mode is running), so it's wired
+// once in initSetup() and left alone here.
+function _updateDemoButtons() {
+  const drawerBtn = document.getElementById("btn-demo-drawer");
+  if (!drawerBtn) return;
+  drawerBtn.textContent = demoMode ? "Exit Demo Mode" : "Enter Demo Mode";
+  drawerBtn.onclick = demoMode ? exitDemoMode : enterDemoMode;
+}
+
+function enterDemoMode() {
+  if (demoMode) return;
+  demoMode = true;
+
+  // A real connection may be live right now (entering demo mode "even
+  // if real data exists" doesn't require disconnecting first) — tear
+  // down its SSE loop and stash whatever it had assigned so exiting
+  // can put it back exactly as it was.
+  stopSSE();
+  _demoSlotBackup = {};
+  for (const sid of DEMO_CC_SIDS) _demoSlotBackup[sid] = cfg.slots[sid];
+
+  demoCurves = _buildDemoCurves();
+
+  // Seed one frame up front so the CC-side slots (cpu/gpu/case — not
+  // auto-assigned the way the Linux stats are) have something to bind
+  // to before the first buildCards().
+  const { ccDevices: fakeCc, linuxStats } = _computeDemoFrame();
+  ccDevices = fakeCc;
+  const leaves = buildLeaves(ccDevices);
+  const findLeaf = (uid, kind, name, field) =>
+    leaves.find(
+      (l) =>
+        l.uid === uid &&
+        l.kind === kind &&
+        l.name === name &&
+        (field ? l.field === field : true),
+    );
+  const bind = (sid, uid, kind, name, field) => {
+    const leaf = findLeaf(uid, kind, name, field);
+    if (leaf) cfg.slots[sid] = { ...leaf };
+  };
+  bind("cpu_temp", "demo-cpu", "temp", "cpu_pkg");
+  bind("cpu_fan", "demo-cpu", "channel", "cpu_fan", "rpm");
+  bind("gpu_temp", "demo-gpu", "temp", "gpu_core");
+  bind("gpu_load", "demo-gpu", "channel", "gpu_core_load", "duty");
+  bind("gpu_fan", "demo-gpu", "channel", "gpu_fan", "rpm");
+  bind("case_temp", "demo-chassis", "temp", "ambient");
+
+  refreshDevices();
+  applyLinuxStats(linuxStats); // also runs autoAssignLinux() for cpu_load/ram/swap/net —
+  // harmless no-op if those sids are already assigned from a real connection
+
+  phase = "dashboard";
+  editMode = false;
+  buildCards();
+  showScreen("s-dash");
+  setStatus("ok");
+  if (!_connectTime) _connectTime = Date.now();
+
+  _updateDemoButtons();
+
+  if (demoTimer) clearInterval(demoTimer);
+  demoTimer = setInterval(demoTick, DEMO_TICK_MS);
+}
+
+function exitDemoMode() {
+  if (!demoMode) return;
+  demoMode = false;
+  if (demoTimer) {
+    clearInterval(demoTimer);
+    demoTimer = null;
+  }
+  demoCurves = null;
+  ccDevices = [];
+  linuxDevices = [];
+  liveDevices = [];
+
+  // Put back whatever those slots held before demo mode touched them
+  // (real assignment, or nothing at all) rather than just deleting.
+  if (_demoSlotBackup) {
+    for (const sid of DEMO_CC_SIDS) {
+      if (_demoSlotBackup[sid] === undefined) delete cfg.slots[sid];
+      else cfg.slots[sid] = _demoSlotBackup[sid];
+    }
+    _demoSlotBackup = null;
+  }
+
+  _updateDemoButtons();
+
+  // cfg.token means there's a real daemon to return to — initSetup()
+  // auto-reconnects when one's saved, otherwise it just shows the empty
+  // form. Either way it's the same "fresh start" path boot uses.
+  drawerOpen = false;
+  _drawer?.classList.remove("open");
+  initSetup();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3716,16 +4028,7 @@ class MultiSpark {
 // ═══════════════════════════════════════════════════════════════
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
-// demo-gif.html loads this file with ?demo=1 and drives boot/config
-// itself via window.__seedDemo()/__demoTick() — it needs the real
-// boot sequence to stay completely out of the way (no boot-screen
-// animation, and critically no applySize()/applyTheme() calls firing
-// on their own timers and stomping the seeded dashboard mid-render).
-const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
-
 (async () => {
-  if (DEMO_MODE) return;
-
   // Backstop: whatever happens above (daemon never answers, an unexpected
   // error, etc.), the boot screen is guaranteed to step aside eventually
   // rather than trap the user behind it. hideBootScreen() is idempotent,
@@ -3774,6 +4077,7 @@ const DEMO_MODE = new URLSearchParams(location.search).get("demo") === "1";
 
   document.getElementById("btn-reset").onclick = resetWidget;
   document.getElementById("btn-reset-drawer").onclick = resetWidget;
+  _updateDemoButtons();
 
   // ── New user ─────────────────────────────────────────────
   // No daemon to reach yet, so the "daemon"/"live" checklist steps don't
