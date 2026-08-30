@@ -1829,15 +1829,15 @@ h2 {
     font-weight: 600;
     color: var(--txt);
 }
-/* Per-metric severity bar — same shape/size language as .sr-accent,
-   the little solid/dashed/dotted bar that already sits beside every
-   row in the full view and doubles as that row's sparkline-line
-   legend. Recolored by severity (--w1..--w5) instead of by metric hue,
-   and a fair bit more noticeable than the small dot this replaced.
-   Only warn-mode metrics get one (temp/load); meter-mode (fan) and
-   Storage's summary stay bar-less, matching the existing "meter isn't
-   a problem signal" / "storage is excluded from alerts" rules used
-   throughout the rest of the app. */
+/* Per-metric bar — same shape/size language as .sr-accent, the little
+   solid/dashed/dotted bar that already sits beside every row in the
+   full view and doubles as that row's sparkline-line legend. Warn-mode
+   metrics (temp/load) get the graduated --w1..--w5 severity ramp;
+   everything else (fan, RX/TX, Storage's summary) gets a flat on/off
+   read via --meter/--dot-off-meter — the same convention the full
+   view's meter dots already use (see makeDots) — so every slot has a
+   bar instead of leaving a gap where "statusless" metrics would
+   otherwise have nothing. */
 .mini-bar {
     width: 3px;
     height: 14px;

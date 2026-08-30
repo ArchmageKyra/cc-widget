@@ -2569,17 +2569,24 @@ function _miniLbl(row) {
   );
 }
 
-// Gathers up to 3 headline {lbl, str, level} values for a card's
-// collapsed mini row. `level` (0–5, or null) drives that metric's own
-// severity dot — only warn-mode rows get one; meter-mode (fan) and
-// storage stay null, matching the existing "meter isn't a problem
-// signal" / "storage is excluded from alerts" rules used elsewhere.
+// Gathers up to 3 headline {lbl, str, bar} values for a card's
+// collapsed mini row. `bar` is always a CSS color — warn-mode metrics
+// (temp/load) get the graduated --w1..--w5 severity ramp; everything
+// else (fan, RX/TX, Storage's summary) gets a flat on/off read using
+// the same --meter / --dot-off-meter convention the full-view meter
+// dots already use (see makeDots) — not a severity signal, just "is
+// there something happening here", so every slot reads consistently
+// instead of some having a bar and others leaving a gap.
 // Spark-type cards just read their own row.sid values (already
 // exactly what the full view shows — temp/load/fan, RAM/SWAP,
 // RX/TX, etc). Storage has no fixed rows (auto-generated per disk), so
 // it gets a bespoke summary instead: busiest visible disk + a count.
 function _miniHeadline(def, devices) {
   const items = [];
+  const meterBar = (v) =>
+    typeof v === "number" && v > 0 ? "var(--meter)" : "var(--dot-off-meter)";
+  const warnBar = (lvl) => (lvl > 0 ? `var(--w${lvl})` : "var(--dot-off-warn)");
+
   if (def.autoDisks) {
     const linuxDev = devices.find((d) => d.uid === "linux-system");
     const lat = getLatest(linuxDev);
@@ -2598,10 +2605,10 @@ function _miniHeadline(def, devices) {
     items.push({
       lbl: mountLbl.slice(0, 5),
       str: Math.round(busiest.duty ?? 0) + "%",
-      level: null,
+      bar: meterBar(busiest.duty),
     });
     if (visible.length > 1) {
-      items.push({ lbl: "DISKS", str: String(visible.length), level: null });
+      items.push({ lbl: "DISKS", str: String(visible.length), bar: meterBar(visible.length) });
     }
     return items;
   }
@@ -2609,7 +2616,7 @@ function _miniHeadline(def, devices) {
     if (row.computedFanAvg) {
       const avg = _chassisFanAvg(devices);
       if (avg !== undefined)
-        items.push({ lbl: _miniLbl(row), str: fmt1(avg, "%"), level: null });
+        items.push({ lbl: _miniLbl(row), str: fmt1(avg, "%"), bar: meterBar(avg) });
       continue;
     }
     const slot = cfg.slots[row.sid];
@@ -2617,11 +2624,12 @@ function _miniHeadline(def, devices) {
     const v = getSlotValue(devices, slot);
     if (v === undefined) continue;
     const sd2 = SLOTS.find((s) => s.id === row.sid);
-    const level = row.mode === "warn" ? warnLevel(row.sid, v) : null;
+    const bar =
+      row.mode === "warn" ? warnBar(warnLevel(row.sid, v)) : meterBar(getFanDuty(devices, slot) ?? v);
     items.push({
       lbl: _miniLbl(row),
       str: fmt1(v, sd2?.unit ?? row.unit ?? ""),
-      level,
+      bar,
     });
   }
   return items.slice(0, 3);
@@ -3398,11 +3406,7 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
       miniVals.innerHTML = slots
         .map((it) => {
           if (!it) return `<span class="mini-val mini-val-empty"></span>`;
-          const bar =
-            it.level == null
-              ? ""
-              : `<span class="mini-bar" style="background:${it.level > 0 ? `var(--w${it.level})` : "var(--dot-off-warn)"}"></span>`;
-          return `<span class="mini-val">${bar}<span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`;
+          return `<span class="mini-val"><span class="mini-bar" style="background:${it.bar}"></span><span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`;
         })
         .join("");
     }
