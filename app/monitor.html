@@ -157,16 +157,18 @@
             <!-- ── Settings drawer (pops out to the right of the dashboard) ── -->
             <div id="drawer">
                 <div class="drawer-inner">
-                    <div class="th-sec" style="margin-top: 4px">Size</div>
+                    <div class="grp-hdr" style="margin-top: 3px">Size</div>
                     <div class="size-seg" id="size-btns"></div>
 
-                    <div class="th-sec">Window Position</div>
+                    <div class="grp-hdr">Window Position</div>
                     <div class="anchor-grid" id="anchor-grid"></div>
 
-                    <div class="th-sec">Theme</div>
+                    <div class="grp-hdr">Theme</div>
                     <div class="theme-grid" id="theme-grid"></div>
 
-                    <div class="th-sec">Background &amp; Chrome</div>
+                    <div class="grp-hdr">Theme Editor</div>
+
+                    <div class="sub-hdr">Background &amp; Chrome</div>
                     <div class="tb-group">
                         <div class="tb-row">
                             <div class="tb-swatch" id="tbs-bg">
@@ -232,7 +234,7 @@
                         </div>
                     </div>
 
-                    <div class="th-sec">
+                    <div class="sub-hdr">
                         Warning Ramp
                         <span class="th-sec-note">cool → critical</span>
                     </div>
@@ -264,7 +266,7 @@
                         </div>
                     </div>
 
-                    <div class="th-sec">Custom CSS</div>
+                    <div class="sub-hdr">Custom CSS</div>
                     <div class="tb-group tb-group-css">
                         <textarea
                             id="custom-css"
@@ -275,7 +277,7 @@
                         </button>
                     </div>
 
-                    <div class="th-sec">Connection</div>
+                    <div class="grp-hdr">Connection</div>
                     <div class="theme-conn" id="theme-conn-sec">
                         <div class="field">
                             <label>Daemon URL</label>
@@ -292,7 +294,7 @@
                         </div>
                     </div>
 
-                    <div class="th-sec">Danger Zone</div>
+                    <div class="grp-hdr">Danger Zone</div>
                     <button class="btn btn-s" id="btn-reset-drawer">
                         Reset Widget
                     </button>
@@ -354,16 +356,22 @@
                             <line x1="8" y1="2.5" x2="9.5" y2="4" />
                         </svg>
                     </button>
-                    <button class="bb" id="bb-min" title="Minimize">
+                    <button
+                        class="bb"
+                        id="bb-mini-all"
+                        title="Collapse all"
+                    >
                         <svg
                             class="bb-icon"
                             viewBox="0 0 12 12"
                             fill="none"
                             stroke="currentColor"
-                            stroke-width="1.75"
+                            stroke-width="1.5"
                             stroke-linecap="round"
+                            stroke-linejoin="round"
                         >
-                            <line x1="2" y1="6" x2="10" y2="6" />
+                            <polyline points="2,5 6,2 10,5" />
+                            <polyline points="2,9.5 6,6.5 10,9.5" />
                         </svg>
                     </button>
                     <button class="bb danger" id="bb-x" title="Close">

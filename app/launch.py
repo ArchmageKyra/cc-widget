@@ -352,10 +352,6 @@ def on_message(_manager, result) -> None:
         Gtk.main_quit()
         return
 
-    if message == "minimize":
-        win.iconify()
-        return
-
     if message == "pin":
         win.set_keep_above(True)
         return
