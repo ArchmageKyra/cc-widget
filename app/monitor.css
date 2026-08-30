@@ -404,6 +404,9 @@ h2 {
 .errmsg.hide {
     display: none;
 }
+.btn.hide {
+    display: none;
+}
 
 /* ── Connection (drawer) ───────────────────────────────────────
    Same bordered-container language as .tb-group, so this reads as a
