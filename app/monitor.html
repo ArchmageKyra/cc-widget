@@ -78,62 +78,6 @@
                 </div>
             </div>
 
-            <!-- ── Setup ─────────────────────────────────────────────────── -->
-            <div id="s-setup" class="screen">
-                <div class="setup-wrap" id="setup-form">
-                    <div class="setup-mark">
-                        <div class="setup-mark-ring"></div>
-                        <div class="setup-mark-core"></div>
-                    </div>
-                    <h2>Connect to CoolerControl</h2>
-                    <p class="hint">
-                        Create a token in CC → Settings → Access Protection →
-                        Access Tokens. Config is saved in local storage.
-                    </p>
-                    <div class="field">
-                        <label>Daemon URL</label>
-                        <input
-                            id="i-url"
-                            type="text"
-                            value="http://localhost:11987"
-                        />
-                    </div>
-                    <div class="field">
-                        <label>Bearer Token</label>
-                        <input
-                            id="i-tok"
-                            type="text"
-                            placeholder="cc_…"
-                            autocomplete="off"
-                            spellcheck="false"
-                        />
-                    </div>
-                    <button class="btn btn-p" id="btn-connect">Connect</button>
-                    <button class="btn btn-s" id="btn-demo">
-                        Try Demo Mode
-                    </button>
-                    <button class="btn btn-s" id="btn-reset">
-                        Reset Widget
-                    </button>
-                    <div id="setup-err" class="errmsg hide"></div>
-                </div>
-                <div class="connect-wrap hide" id="connect-wrap">
-                    <div class="connect-mark">
-                        <div class="connect-mark-ring"></div>
-                        <div class="connect-mark-core"></div>
-                    </div>
-                    <div class="connect-title" id="connect-title">
-                        Connecting…
-                    </div>
-                    <div class="connect-sub" id="connect-sub">
-                        Reaching CoolerControl
-                    </div>
-                    <button class="btn btn-s" id="btn-connect-cancel">
-                        Cancel
-                    </button>
-                </div>
-            </div>
-
             <!-- ── Picker overlay (absolute within #app) ─────────────────── -->
             <div id="picker" class="picker-overlay hide">
                 <div class="picker-hdr">
@@ -168,6 +112,9 @@
 
                     <div class="grp-hdr">Theme</div>
                     <div class="theme-grid" id="theme-grid"></div>
+                    <button class="btn btn-s theme-cycle-btn" id="btn-theme-cycle">
+                        Cycle Themes
+                    </button>
 
                     <div class="grp-hdr">Theme Editor</div>
 
@@ -282,6 +229,11 @@
 
                     <div class="grp-hdr">Connection</div>
                     <div class="theme-conn" id="theme-conn-sec">
+                        <p class="conn-hint" id="conn-hint">
+                            Showing sample data. Paste an access token below
+                            to switch to your real hardware — it connects
+                            automatically.
+                        </p>
                         <div class="field">
                             <label>Daemon URL</label>
                             <input id="tc-url" type="text" />
@@ -291,9 +243,14 @@
                             <input
                                 id="tc-tok"
                                 type="text"
+                                placeholder="cc_…"
                                 autocomplete="off"
                                 spellcheck="false"
                             />
+                        </div>
+                        <div class="field">
+                            <label>Demo Scenario</label>
+                            <div class="size-seg" id="demo-scenario-btns"></div>
                         </div>
                         <button class="btn btn-s" id="btn-demo-drawer">
                             Enter Demo Mode
@@ -308,7 +265,7 @@
             </div>
 
             <!-- ── Dashboard ─────────────────────────────────────────────── -->
-            <div id="s-dash" class="screen hide">
+            <div id="s-dash" class="screen">
                 <div class="cards" id="cards"></div>
             </div>
             </div>

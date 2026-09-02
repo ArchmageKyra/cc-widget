@@ -194,6 +194,8 @@ let cfg = {
   cardLabels: {},
   cardMini: {},
   anchorCorner: null,
+  demoScenario: "normal",
+  themeCycling: false,
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -221,6 +223,10 @@ let deviceMeta = {};
 let demoMode = false;
 let demoTimer = null;
 let demoCurves = null;
+let demoScenario = "normal"; // synced from cfg.demoScenario once loadCfg() runs
+let themeCycling = false;
+let themeCycleTimer = null;
+const THEME_CYCLE_MS = 6000;
 
 function _fmtUptime(ms) {
   const s = Math.floor(ms / 1000);
@@ -763,23 +769,13 @@ function _fmtSpan(ms) {
   return `${Math.round(s / 60)}m`;
 }
 
-function showScreen(id) {
-  ["s-setup", "s-dash"].forEach((s) =>
-    document.getElementById(s).classList.toggle("hide", s !== id),
-  );
-  // Always close picker when changing screens
+// Closes the picker and re-measures content height. There's only ever
+// one screen (the dashboard) now, so this is just the shared "something
+// changed, resync the window" step — kept as a named function since
+// several call sites read more clearly this way than a bare pair of
+// calls.
+function showScreen() {
   closePicker();
-  // Re-measure content height for whichever screen is now visible —
-  // setup/connecting screens autosize just as much as the dashboard.
-  requestAnimationFrame(() => autoResize());
-}
-
-// Toggles between the full connect form and the compact connecting
-// panel within #s-setup. Kept separate from showScreen() since both
-// panels live inside the same "s-setup" screen.
-function showConnectPanel(connecting) {
-  document.getElementById("setup-form")?.classList.toggle("hide", connecting);
-  document.getElementById("connect-wrap")?.classList.toggle("hide", !connecting);
   requestAnimationFrame(() => autoResize());
 }
 
@@ -917,14 +913,12 @@ function setConfigOpen(open) {
       document.getElementById("tc-tok").value = cfg.token;
     }
     _updateDemoButtons();
+    _updateConnHint();
   }
   requestAnimationFrame(() => autoResize());
 }
 
-document.getElementById("bb-cfg").onclick = () => {
-  if (phase === "dashboard") setConfigOpen(!drawerOpen);
-  else initSetup();
-};
+document.getElementById("bb-cfg").onclick = () => setConfigOpen(!drawerOpen);
 
 // ── Status bar drag (left zone, not buttons) ───────────────────
 document.getElementById("sbar").addEventListener("mousedown", (e) => {
@@ -1173,7 +1167,7 @@ function onSSEPacket(payload) {
     editMode = !hasCCSlots;
     buildCards();
     _sendFolderPaths(); // Re-sync Python with any persisted folder rows
-    showScreen("s-dash");
+    showScreen();
 
     // Wait for the first Linux stats sample too (it's on its own,
     // unsynced 2s timer) so the card rebuild it triggers has already
@@ -1202,25 +1196,33 @@ function onSSEPacket(payload) {
 }
 
 function setStatus(cls, msg = "") {
-  document.getElementById("sdot").className = "sdot " + cls;
-  document.getElementById("stxt").textContent =
-    cls === "ok" ? "Live" : cls === "err" ? msg : msg || "…";
+  const sdot = document.getElementById("sdot");
+  const stxt = document.getElementById("stxt");
+  // Demo Mode owns the indicator whenever it's running — a fake connection
+  // shouldn't ever read as "Live", so this branch overrides whatever cls
+  // the caller (demoTick's setStatus("ok")) passed in.
+  if (demoMode) {
+    sdot.className = "sdot demo";
+    stxt.textContent = "DEMO · " + (DEMO_SCENARIOS[demoScenario]?.label ?? "Normal");
+    stxt.classList.add("demo-active");
+  } else {
+    sdot.className = "sdot " + cls;
+    stxt.textContent = cls === "ok" ? "Live" : cls === "err" ? msg : msg || "…";
+    stxt.classList.remove("demo-active");
+  }
   if (cls === "ok") {
     if (!_connectTime) _connectTime = Date.now();
     const up = document.getElementById("sbar-uptime");
     if (up) up.textContent = _fmtUptime(Date.now() - _connectTime);
+    _updateConnHint();
   }
   // A failed attempt during the initial boot connect means the daemon
-  // isn't reachable — surface the retry/cancel panel right away instead
-  // of leaving the user staring at the boot screen until it retries into
+  // isn't reachable — surface the dashboard right away instead of
+  // leaving the user staring at the boot screen until it retries into
   // eternity (the failsafe timer is just a backstop for this).
-  if (cls === "err" && phase === "connecting") hideBootScreen();
-  const cw = document.getElementById("connect-wrap");
-  if (cw && !cw.classList.contains("hide")) {
-    const title = document.getElementById("connect-title");
-    const sub = document.getElementById("connect-sub");
-    if (title) title.textContent = cls === "err" ? "Having trouble…" : "Connecting…";
-    if (sub && msg) sub.textContent = msg;
+  if (cls === "err") {
+    if (phase === "connecting") hideBootScreen();
+    _updateConnHint("err");
   }
 }
 
@@ -1480,76 +1482,38 @@ function hideBootScreen() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  SETUP SCREEN
+//  RESET
 // ═══════════════════════════════════════════════════════════════
 // Clears all local config (token, theme, layout, everything) and reloads
-// as a brand-new install. Shared by the first-run setup screen's button
-// and the settings drawer's "Danger Zone" — same action, same confirm,
-// reachable from wherever the user happens to be.
+// as a brand-new install — same action from the drawer's "Danger Zone"
+// regardless of whether a real connection was ever made.
 function resetWidget() {
-  if (!confirm("Clear saved CoolerControl settings and token?")) return;
+  if (!confirm("Clear saved settings and token?")) return;
   localStorage.clear();
   location.reload();
 }
 
-function initSetup() {
-  phase = "setup";
-  stopSSE();
-  showConnectPanel(false);
-  document.getElementById("i-url").value = cfg.baseUrl;
-  document.getElementById("i-tok").value = cfg.token;
-  const btn = document.getElementById("btn-connect");
-  btn.textContent = "Connect";
-  btn.disabled = false;
-  _connectTime = 0;
+// Attempts a real connection using whatever's currently in cfg.baseUrl/
+// cfg.token. Called whenever the drawer's connection fields change to a
+// non-empty token — there's no separate "Connect" screen anymore, so
+// this is the only path into live data. Tears down Demo Mode first if
+// it was running; the dashboard keeps showing the persisted card
+// layout throughout, just with "--" values until the first packet
+// lands and setStatus() flips the indicator to "Live".
+function connectNow() {
+  if (!cfg.token) return;
+  if (demoMode) _teardownDemoState();
+  phase = "connecting";
+  _connectTime = 0; // restart the uptime clock for this connection attempt
   const _upEl = document.getElementById("sbar-uptime");
   if (_upEl) _upEl.textContent = "";
-  showScreen("s-setup");
-
-  const attemptConnect = () => {
-    document.getElementById("setup-err").classList.add("hide");
-    cfg.baseUrl = document
-      .getElementById("i-url")
-      .value.trim()
-      .replace(/\/$/, "");
-    cfg.token = document.getElementById("i-tok").value.trim();
-    if (!cfg.token) {
-      showErr("Token required");
-      return;
-    }
-    saveCfg();
-    phase = "connecting";
-    setStatus("spin", "Connecting…");
-    btn.textContent = "Connecting…";
-    btn.disabled = true;
-    document.getElementById("connect-title").textContent = "Connecting…";
-    document.getElementById("connect-sub").textContent =
-      "Reaching " + (cfg.baseUrl || "CoolerControl");
-    showConnectPanel(true);
-    startSSE();
-    // Note: Linux stats are pushed by Python automatically — no polling needed here
-  };
-  btn.onclick = attemptConnect;
-
-  const demoBtn = document.getElementById("btn-demo");
-  if (demoBtn) demoBtn.onclick = enterDemoMode;
-
-  document.getElementById("btn-connect-cancel").onclick = () => {
-    stopSSE();
-    phase = "setup";
-    btn.textContent = "Connect";
-    btn.disabled = false;
-    showConnectPanel(false);
-  };
-
-  // Returning user — a token's already saved, so skip straight to
-  // the compact connecting panel instead of flashing the empty form.
-  if (cfg.token) attemptConnect();
-}
-function showErr(msg) {
-  const e = document.getElementById("setup-err");
-  e.textContent = msg;
-  e.classList.remove("hide");
+  setStatus("spin", "Connecting…");
+  _updateDemoButtons();
+  _updateConnHint();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+  startSSE();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1559,6 +1523,17 @@ function showErr(msg) {
 //  dashboard — and the theme editor over top of it — can be previewed
 //  without a CoolerControl daemon or real sensors. No network/GTK
 //  calls are made; it's pure client-side data generation on a timer.
+//
+//  Coverage is deliberately broad — one leaf per typeFilter kind
+//  (temp/rpm/duty/watts) plus multiple disks and a couple of fake
+//  folder sizes — so every custom-row assignment path in the picker
+//  has something real to bind to while testing, not just the six
+//  slots the built-in cards auto-fill.
+//
+//  Scenario presets (DEMO_SCENARIOS) swap the load-curve params that
+//  drive cpuLoad/gpuLoad/ram/swap/net; everything derived from load
+//  (temps, fans, power draw) cascades automatically — see
+//  _computeDemoFrame().
 // ═══════════════════════════════════════════════════════════════
 const DEMO_TICK_MS = 1500;
 
@@ -1575,14 +1550,17 @@ function _jitter(amp) {
 //   "normal" — gentle mean-reverting drift (e.g. RAM slowly creeping)
 //   "gaming" — bursty: idles low, then jumps into a sustained high-load
 //              plateau for a while before dropping back (e.g. CPU load
-//              while a game is running)
+//              while a game is running). burstChance controls how
+//              often it picks the high plateau over the idle one —
+//              higher for scenarios that should read as "busy".
 class DemoCurve {
-  constructor(kind, { min, max, period = 60, target } = {}) {
+  constructor(kind, { min, max, period = 60, target, burstChance = 0.2 } = {}) {
     this.kind = kind;
     this.min = min;
     this.max = max;
     this.period = period;
     this.target = target ?? (min + max) / 2;
+    this.burstChance = burstChance;
     this.t = Math.random() * period; // stagger multiple curves
     this.value = this.target;
     this.burstUntil = 0;
@@ -1603,7 +1581,7 @@ class DemoCurve {
       );
     } else if (this.kind === "gaming") {
       if (this.t > this.burstUntil) {
-        if (Math.random() < 0.2) {
+        if (Math.random() < this.burstChance) {
           // Start a sustained high-load "gaming session"
           this.burstUntil = this.t + 8 + Math.random() * 14;
           this.burstTarget = min + (max - min) * (0.72 + Math.random() * 0.26);
@@ -1624,16 +1602,65 @@ class DemoCurve {
   }
 }
 
-function _buildDemoCurves() {
+// Per-scenario overrides for the load-driven curves. Everything else
+// (disks, folders, ambient, NVMe temp) stays constant across scenarios —
+// they're "always there" coverage, not workload-reactive.
+const DEMO_SCENARIOS = {
+  idle: {
+    label: "Idle",
+    cpuLoad: { kind: "normal", min: 2, max: 30, target: 6 },
+    gpuLoad: { kind: "normal", min: 1, max: 18, target: 3 },
+    ram: { min: 20, max: 38, target: 26 },
+    swap: { min: 0, max: 3, target: 0.4 },
+    netRx: { kind: "normal", min: 5, max: 300, target: 35 },
+    netTx: { kind: "normal", min: 2, max: 100, target: 15 },
+  },
+  normal: {
+    label: "Normal",
+    cpuLoad: { kind: "gaming", min: 3, max: 98, burstChance: 0.2 },
+    gpuLoad: { kind: "sine", min: 6, max: 92, period: 45 },
+    ram: { min: 26, max: 80, target: 48 },
+    swap: { min: 0, max: 14, target: 2 },
+    netRx: { kind: "gaming", min: 15, max: 8500, burstChance: 0.2 },
+    netTx: { kind: "gaming", min: 10, max: 1100, burstChance: 0.2 },
+  },
+  gaming: {
+    label: "Gaming",
+    cpuLoad: { kind: "gaming", min: 25, max: 100, burstChance: 0.65 },
+    gpuLoad: { kind: "gaming", min: 30, max: 100, burstChance: 0.7 },
+    ram: { min: 45, max: 88, target: 62 },
+    swap: { min: 0, max: 20, target: 4 },
+    netRx: { kind: "gaming", min: 200, max: 12000, burstChance: 0.55 },
+    netTx: { kind: "gaming", min: 100, max: 2000, burstChance: 0.55 },
+  },
+  stress: {
+    label: "Stress",
+    cpuLoad: { kind: "normal", min: 88, max: 100, target: 97 },
+    gpuLoad: { kind: "normal", min: 85, max: 100, target: 96 },
+    ram: { min: 70, max: 95, target: 88 },
+    swap: { min: 10, max: 45, target: 25 },
+    netRx: { kind: "normal", min: 3000, max: 9500, target: 6000 },
+    netTx: { kind: "normal", min: 400, max: 1800, target: 900 },
+  },
+};
+
+function _buildDemoCurves(scenarioKey = demoScenario) {
+  const s = DEMO_SCENARIOS[scenarioKey] || DEMO_SCENARIOS.normal;
   return {
-    cpuLoad: new DemoCurve("gaming", { min: 3, max: 98 }),
-    gpuLoad: new DemoCurve("sine", { min: 6, max: 92, period: 45 }),
-    ram: new DemoCurve("normal", { min: 26, max: 80, target: 48 }),
-    swap: new DemoCurve("normal", { min: 0, max: 14, target: 2 }),
+    cpuLoad: new DemoCurve(s.cpuLoad.kind, s.cpuLoad),
+    gpuLoad: new DemoCurve(s.gpuLoad.kind, s.gpuLoad),
+    ram: new DemoCurve("normal", s.ram),
+    swap: new DemoCurve("normal", s.swap),
+    netRx: new DemoCurve(s.netRx.kind, s.netRx),
+    netTx: new DemoCurve(s.netTx.kind, s.netTx),
+    // Scenario-independent — always-on coverage for custom-row testing.
     disk: new DemoCurve("normal", { min: 57, max: 64, target: 60 }),
+    diskHome: new DemoCurve("normal", { min: 40, max: 78, target: 55 }),
+    diskData: new DemoCurve("normal", { min: 20, max: 90, target: 45 }),
     caseTemp: new DemoCurve("sine", { min: 23, max: 33, period: 90 }),
-    netRx: new DemoCurve("gaming", { min: 15, max: 8500 }),
-    netTx: new DemoCurve("gaming", { min: 10, max: 1100 }),
+    nvmeTemp: new DemoCurve("normal", { min: 32, max: 58, target: 40 }),
+    folderA: new DemoCurve("normal", { min: 8, max: 20, target: 12 }),
+    folderB: new DemoCurve("normal", { min: 1, max: 6, target: 3 }),
   };
 }
 
@@ -1646,12 +1673,23 @@ function _computeDemoFrame() {
   const cpuLoad = c.cpuLoad.next();
   const cpuTemp = _clamp(33 + cpuLoad * 0.42 + _jitter(1.2), 30, 88);
   const cpuFan = Math.round(_clamp(500 + cpuLoad * 14 + _jitter(40), 400, 2400));
+  const cpuPower = _clamp(15 + cpuLoad * 0.85 + _jitter(3), 10, 105);
 
   const gpuLoad = c.gpuLoad.next();
   const gpuTemp = _clamp(31 + gpuLoad * 0.48 + _jitter(1), 28, 85);
+  const gpuMemTemp = _clamp(gpuTemp - 3 + _jitter(1), 25, 92);
   const gpuFan = Math.round(_clamp(400 + gpuLoad * 15 + _jitter(40), 300, 2600));
+  const gpuPower = _clamp(20 + gpuLoad * 2.4 + _jitter(6), 15, 340);
 
   const caseTemp = c.caseTemp.next();
+  const vrmTemp = _clamp(32 + cpuLoad * 0.38 + _jitter(1.5), 30, 82);
+  const pumpRpm = Math.round(
+    _clamp(1300 + cpuLoad * 3 + gpuLoad * 2 + _jitter(25), 1100, 2300),
+  );
+  const loadPeak = Math.max(cpuLoad, gpuLoad);
+  const caseFan1 = Math.round(_clamp(450 + loadPeak * 8 + _jitter(25), 350, 1500));
+  const caseFan2 = Math.round(_clamp(420 + loadPeak * 7.5 + _jitter(25), 350, 1450));
+  const nvmeTemp = c.nvmeTemp.next();
 
   const now = new Date().toISOString();
   const ccDevices = [
@@ -1663,7 +1701,10 @@ function _computeDemoFrame() {
         {
           timestamp: now,
           temps: [{ name: "cpu_pkg", temp: +cpuTemp.toFixed(1) }],
-          channels: [{ name: "cpu_fan", rpm: cpuFan }],
+          channels: [
+            { name: "cpu_fan", rpm: cpuFan },
+            { name: "cpu_power", watts: +cpuPower.toFixed(1) },
+          ],
         },
       ],
     },
@@ -1674,10 +1715,14 @@ function _computeDemoFrame() {
       status_history: [
         {
           timestamp: now,
-          temps: [{ name: "gpu_core", temp: +gpuTemp.toFixed(1) }],
+          temps: [
+            { name: "gpu_core", temp: +gpuTemp.toFixed(1) },
+            { name: "gpu_mem", temp: +gpuMemTemp.toFixed(1) },
+          ],
           channels: [
             { name: "gpu_fan", rpm: gpuFan },
             { name: "gpu_core_load", duty: +gpuLoad.toFixed(1) },
+            { name: "gpu_power", watts: +gpuPower.toFixed(1) },
           ],
         },
       ],
@@ -1689,7 +1734,26 @@ function _computeDemoFrame() {
       status_history: [
         {
           timestamp: now,
-          temps: [{ name: "ambient", temp: +caseTemp.toFixed(1) }],
+          temps: [
+            { name: "ambient", temp: +caseTemp.toFixed(1) },
+            { name: "vrm", temp: +vrmTemp.toFixed(1) },
+          ],
+          channels: [
+            { name: "pump", rpm: pumpRpm },
+            { name: "case_fan_1", rpm: caseFan1 },
+            { name: "case_fan_2", rpm: caseFan2 },
+          ],
+        },
+      ],
+    },
+    {
+      uid: "demo-storage",
+      d_type: "NVMe",
+      type_index: 0,
+      status_history: [
+        {
+          timestamp: now,
+          temps: [{ name: "nvme_composite", temp: +nvmeTemp.toFixed(1) }],
           channels: [],
         },
       ],
@@ -1702,9 +1766,16 @@ function _computeDemoFrame() {
   const swapPct = c.swap.next();
   const swapTotal = 8;
   const swapUsed = +((swapTotal * swapPct) / 100).toFixed(2);
+
   const diskPct = c.disk.next();
   const diskTotal = 476.9;
   const diskUsed = +((diskTotal * diskPct) / 100).toFixed(1);
+  const diskHomePct = c.diskHome.next();
+  const diskHomeTotal = 931.5;
+  const diskHomeUsed = +((diskHomeTotal * diskHomePct) / 100).toFixed(1);
+  const diskDataPct = c.diskData.next();
+  const diskDataTotal = 1863.0;
+  const diskDataUsed = +((diskDataTotal * diskDataPct) / 100).toFixed(1);
 
   const linuxStats = {
     cpu_percent: +cpuLoad.toFixed(1),
@@ -1722,12 +1793,27 @@ function _computeDemoFrame() {
         free_gb: +(diskTotal - diskUsed).toFixed(1),
         total_gb: diskTotal,
       },
+      "/home": {
+        percent: +diskHomePct.toFixed(1),
+        used_gb: diskHomeUsed,
+        free_gb: +(diskHomeTotal - diskHomeUsed).toFixed(1),
+        total_gb: diskHomeTotal,
+      },
+      "/mnt/data": {
+        percent: +diskDataPct.toFixed(1),
+        used_gb: diskDataUsed,
+        free_gb: +(diskDataTotal - diskDataUsed).toFixed(1),
+        total_gb: diskDataTotal,
+      },
     },
     net: {
       rx_kbps: Math.round(c.netRx.next()),
       tx_kbps: Math.round(c.netTx.next()),
     },
-    folder_sizes: {},
+    folder_sizes: {
+      "/home/user/Downloads": +c.folderA.next().toFixed(1),
+      "/var/log": +c.folderB.next().toFixed(1),
+    },
   };
 
   return { ccDevices, linuxStats };
@@ -1746,16 +1832,68 @@ function demoTick() {
 let _demoSlotBackup = null;
 const DEMO_CC_SIDS = ["cpu_temp", "cpu_fan", "gpu_temp", "gpu_load", "gpu_fan", "case_temp"];
 
-// Drawer's Connection-section button doubles as the enter/exit toggle,
-// since it's reachable whether or not a real connection is active. The
-// setup screen's "Try Demo Mode" button only ever needs the one state
-// (that screen isn't shown while demo mode is running), so it's wired
-// once in initSetup() and left alone here.
+// The drawer's Connection-section button doubles as the enter/exit
+// toggle — it's the only demo control now that the setup screen (and
+// its own separate "Try Demo Mode" button) is gone.
 function _updateDemoButtons() {
   const drawerBtn = document.getElementById("btn-demo-drawer");
-  if (!drawerBtn) return;
-  drawerBtn.textContent = demoMode ? "Exit Demo Mode" : "Enter Demo Mode";
-  drawerBtn.onclick = demoMode ? exitDemoMode : enterDemoMode;
+  if (drawerBtn) {
+    drawerBtn.textContent = demoMode ? "Exit Demo Mode" : "Enter Demo Mode";
+    drawerBtn.onclick = demoMode ? exitDemoMode : enterDemoMode;
+  }
+  document.querySelectorAll("#demo-scenario-btns .size-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.scenario === demoScenario);
+  });
+}
+
+// Keeps the Connection section's lead sentence honest about what's
+// actually on screen right now — sample data, a connection attempt in
+// flight, a real problem, or the real thing. Driven from setStatus()
+// so it self-heals the moment a retry succeeds, not just once.
+function _updateConnHint(errMsg = null) {
+  const hint = document.getElementById("conn-hint");
+  if (!hint) return;
+  if (errMsg) {
+    hint.textContent =
+      "Having trouble connecting — check the URL and token below.";
+  } else if (demoMode) {
+    hint.textContent =
+      "Showing sample data. Paste an access token below to switch to your real hardware — it connects automatically.";
+  } else if (phase === "connecting") {
+    hint.textContent = "Connecting…";
+  } else {
+    hint.textContent =
+      "Connected. Update the URL or token below any time your setup changes.";
+  }
+}
+
+// Draws the eye to the token field for first-time users who've just
+// been dropped into Demo Mode with the drawer freshly opened — a few
+// quick pulses, then it settles back to normal.
+function _flashTokenField() {
+  const inp = document.getElementById("tc-tok");
+  if (!inp) return;
+  inp.classList.add("flash-attn");
+  setTimeout(() => inp.classList.remove("flash-attn"), 2700);
+}
+
+// Switches the active scenario preset. If demo mode is already running,
+// rebuilds the curves in place and forces an immediate tick so the
+// change is felt right away rather than waiting for the next timer fire.
+function setDemoScenario(key) {
+  if (!DEMO_SCENARIOS[key] || key === demoScenario) {
+    demoScenario = key; // still update in case it was a no-op re-click
+    _updateDemoButtons();
+    return;
+  }
+  demoScenario = key;
+  cfg.demoScenario = key;
+  saveCfg();
+  _updateDemoButtons();
+  if (demoMode) {
+    demoCurves = _buildDemoCurves(demoScenario);
+    demoTick();
+  }
 }
 
 function enterDemoMode() {
@@ -1770,7 +1908,7 @@ function enterDemoMode() {
   _demoSlotBackup = {};
   for (const sid of DEMO_CC_SIDS) _demoSlotBackup[sid] = cfg.slots[sid];
 
-  demoCurves = _buildDemoCurves();
+  demoCurves = _buildDemoCurves(demoScenario);
 
   // Seed one frame up front so the CC-side slots (cpu/gpu/case — not
   // auto-assigned the way the Linux stats are) have something to bind
@@ -1802,9 +1940,22 @@ function enterDemoMode() {
   // harmless no-op if those sids are already assigned from a real connection
 
   phase = "dashboard";
+
+  // Entering demo mode always lands on a clean dashboard view — close
+  // the settings drawer and drop out of edit mode even if either was
+  // open when the button was clicked.
   editMode = false;
+  document.getElementById("cards")?.classList.remove("editing");
+  const _cfgBtn = document.getElementById("bb-cfg");
+  if (_cfgBtn) {
+    _cfgBtn.innerHTML = _ICON_PENCIL;
+    _cfgBtn.classList.remove("on");
+  }
+  drawerOpen = false;
+  _drawer?.classList.remove("open");
+
   buildCards();
-  showScreen("s-dash");
+  showScreen();
   setStatus("ok");
   if (!_connectTime) _connectTime = Date.now();
 
@@ -1814,8 +1965,11 @@ function enterDemoMode() {
   demoTimer = setInterval(demoTick, DEMO_TICK_MS);
 }
 
-function exitDemoMode() {
-  if (!demoMode) return;
+// Shared demo-teardown: stops the tick timer, drops the fake devices,
+// and restores whatever cfg.slots held before demo touched them. Used
+// by both exitDemoMode() (drawer's toggle) and connectNow() (entering
+// a real token) — same cleanup either way out of Demo Mode.
+function _teardownDemoState() {
   demoMode = false;
   if (demoTimer) {
     clearInterval(demoTimer);
@@ -1825,9 +1979,6 @@ function exitDemoMode() {
   ccDevices = [];
   linuxDevices = [];
   liveDevices = [];
-
-  // Put back whatever those slots held before demo mode touched them
-  // (real assignment, or nothing at all) rather than just deleting.
   if (_demoSlotBackup) {
     for (const sid of DEMO_CC_SIDS) {
       if (_demoSlotBackup[sid] === undefined) delete cfg.slots[sid];
@@ -1835,15 +1986,33 @@ function exitDemoMode() {
     }
     _demoSlotBackup = null;
   }
+}
 
+function exitDemoMode() {
+  if (!demoMode) return;
+  _teardownDemoState();
+
+  // A token's already saved — reconnect for real instead of just
+  // sitting on a blank dashboard.
+  if (cfg.token) {
+    connectNow();
+    return;
+  }
+
+  // No token yet: nothing to connect to. connectNow() would normally
+  // reset the status indicator via setStatus("spin", …), but there's
+  // no connection attempt happening here, so do it directly.
+  document.getElementById("sdot").className = "sdot";
+  const _stxt = document.getElementById("stxt");
+  if (_stxt) {
+    _stxt.textContent = "—";
+    _stxt.classList.remove("demo-active");
+  }
   _updateDemoButtons();
-
-  // cfg.token means there's a real daemon to return to — initSetup()
-  // auto-reconnects when one's saved, otherwise it just shows the empty
-  // form. Either way it's the same "fresh start" path boot uses.
-  drawerOpen = false;
-  _drawer?.classList.remove("open");
-  initSetup();
+  _updateConnHint();
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2373,6 +2542,49 @@ function initThemeBuilder() {
   syncBuilderFromActive();
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  THEME CYCLING
+//  Auto-advances through THEMES on a timer — a quick way to preview
+//  every theme without clicking through the grid by hand. Skips
+//  "custom" since cycling into a moving target isn't meaningful.
+//  Any manual theme pick (tile click or custom-CSS apply) stops it —
+//  the person just told the app what they want, cycling back over
+//  that a few seconds later would be actively unhelpful.
+// ═══════════════════════════════════════════════════════════════
+function _cycleToNextTheme() {
+  const keys = Object.keys(THEMES);
+  if (!keys.length) return;
+  const idx = (keys.indexOf(cfg.theme) + 1) % keys.length;
+  const key = keys[idx];
+  document
+    .querySelectorAll(".theme-tile")
+    .forEach((t) => t.classList.toggle("active", t.dataset.key === key));
+  applyTheme(key);
+  if (_tbSync) _tbSync();
+}
+
+function _updateThemeCycleButton() {
+  const btn = document.getElementById("btn-theme-cycle");
+  if (!btn) return;
+  btn.textContent = themeCycling ? "Stop Cycling" : "Cycle Themes";
+  btn.classList.toggle("on", themeCycling);
+}
+
+function setThemeCycling(on, { immediate = true } = {}) {
+  themeCycling = on;
+  cfg.themeCycling = on;
+  saveCfg();
+  if (themeCycleTimer) {
+    clearInterval(themeCycleTimer);
+    themeCycleTimer = null;
+  }
+  if (on) {
+    if (immediate) _cycleToNextTheme(); // feels responsive when toggled by hand
+    themeCycleTimer = setInterval(_cycleToNextTheme, THEME_CYCLE_MS);
+  }
+  _updateThemeCycleButton();
+}
+
 function initThemeScreen() {
   // ── Size segmented control ─────────────────────────────────
   const sb = document.getElementById("size-btns");
@@ -2419,6 +2631,7 @@ function initThemeScreen() {
     if (cfg.theme === key) tile.classList.add("active");
     tile.innerHTML = `<div class="theme-swatches">${theme.swatches.map((c) => `<span class="swatch" style="background:${c}"></span>`).join("")}</div><div class="theme-name">${theme.name}</div>`;
     tile.onclick = () => {
+      if (themeCycling) setThemeCycling(false);
       document
         .querySelectorAll(".theme-tile")
         .forEach((t) => t.classList.remove("active"));
@@ -2437,6 +2650,7 @@ function initThemeScreen() {
   if (cfg.theme === "custom") customTile.classList.add("active");
   customTile.innerHTML = `<div class="theme-swatches-custom"><span class="tile-custom-icon">✎</span></div><div class="theme-name">Custom…</div>`;
   customTile.onclick = () => {
+    if (themeCycling) setThemeCycling(false);
     document
       .querySelectorAll(".theme-tile")
       .forEach((t) => t.classList.remove("active"));
@@ -2460,6 +2674,7 @@ function initThemeScreen() {
       alert("Paste a :root { … } block.");
       return;
     }
+    if (themeCycling) setThemeCycling(false);
     applyTheme("custom", css);
     document
       .querySelectorAll(".theme-tile")
@@ -2473,12 +2688,39 @@ function initThemeScreen() {
   const persist = () => {
     const u = document.getElementById("tc-url").value.trim().replace(/\/$/, "");
     const t = document.getElementById("tc-tok").value.trim();
+    const changed = (u && u !== cfg.baseUrl) || (t && t !== cfg.token);
     if (u) cfg.baseUrl = u;
     if (t) cfg.token = t;
     saveCfg();
+    // A token now present, and either it (or the URL) actually changed,
+    // or we're still sitting in Demo Mode — either way there's a real
+    // connection worth attempting. Re-typing the same values doesn't
+    // re-trigger a connect on every blur.
+    if (t && (changed || demoMode)) connectNow();
   };
   document.getElementById("tc-url").onchange = persist;
   document.getElementById("tc-tok").onchange = persist;
+
+  // ── Cycle Themes toggle ──────────────────────────────────────
+  const cycleBtn = document.getElementById("btn-theme-cycle");
+  if (cycleBtn) {
+    cycleBtn.onclick = () => setThemeCycling(!themeCycling);
+    _updateThemeCycleButton();
+  }
+
+  // ── Demo scenario segmented control ─────────────────────────
+  const dsb = document.getElementById("demo-scenario-btns");
+  if (dsb) {
+    dsb.innerHTML = "";
+    for (const [key, scenario] of Object.entries(DEMO_SCENARIOS)) {
+      const btn = el("button", "size-btn");
+      btn.dataset.scenario = key;
+      btn.textContent = scenario.label;
+      btn.classList.toggle("active", demoScenario === key);
+      btn.onclick = () => setDemoScenario(key);
+      dsb.appendChild(btn);
+    }
+  }
 
   // Drawer is shown/hidden by the gear button — no showScreen needed
 }
@@ -3466,7 +3708,6 @@ function buildCards() {
 //  GTK window snaps to fit — no scroll, no dead space.
 // ═══════════════════════════════════════════════════════════════
 const DRAWER_W = 320; // matches #drawer's fixed width in monitor.css
-const SETUP_W = 340; // compact width for the setup/connecting screens
 
 function autoResize(force = false) {
   const boot = document.getElementById("boot-screen");
@@ -3476,23 +3717,6 @@ function autoResize(force = false) {
 
   const sbarH = document.getElementById("sbar").offsetHeight;
   const borders = 2; // #app top + bottom border
-
-  // Setup / connecting screens — compact, content-driven sizing so a
-  // returning user (auto-connecting) or someone still typing in a
-  // token never sees the tall dashboard-sized window before there's
-  // any dashboard content to justify it.
-  if (document.getElementById("s-dash").classList.contains("hide")) {
-    const connectWrap = document.getElementById("connect-wrap");
-    const panel =
-      connectWrap && !connectWrap.classList.contains("hide")
-        ? connectWrap
-        : document.getElementById("setup-form");
-    if (!panel) return;
-    const screenPad = 24; // .screen { padding: 12px } × 2 sides
-    const h = panel.scrollHeight + screenPad + sbarH + borders;
-    gtksend("resize:" + SETUP_W + ":" + h);
-    return;
-  }
 
   const baseW = (SIZES[cfg.size] || SIZES.s).width;
   const screenPad = 24; // .screen { padding: 12px } × 2 sides
@@ -4074,6 +4298,8 @@ class MultiSpark {
   bootState("Loading profile");
 
   loadCfg();
+  demoScenario = cfg.demoScenario || "normal";
+  if (cfg.themeCycling) setThemeCycling(true, { immediate: false });
 
   await waitBootStep("profile");
 
@@ -4106,23 +4332,37 @@ class MultiSpark {
     gtksend("anchor:" + cfg.anchorCorner);
   }
 
-  document.getElementById("btn-reset").onclick = resetWidget;
   document.getElementById("btn-reset-drawer").onclick = resetWidget;
   _updateDemoButtons();
 
   // ── New user ─────────────────────────────────────────────
-  // No daemon to reach yet, so the "daemon"/"live" checklist steps don't
-  // apply — reveal the connect form directly instead of leaving them
-  // stalled mid-checklist behind the boot screen.
+  // No token ever saved means there's no daemon to reach yet — rather
+  // than dropping a first-time user on a bare connect form, launch
+  // straight into Demo Mode so the dashboard is alive and worth
+  // exploring immediately, with the settings drawer already open to
+  // the field they'd need next.
   if (!cfg.token) {
-    initSetup();
+    enterDemoMode();
+    setConfigOpen(true);
+    // Let the drawer's slide-in transition settle before drawing the
+    // eye to the token field — flashing mid-animation reads as glitchy.
+    setTimeout(_flashTokenField, 500);
     hideBootScreen();
     return;
   }
 
   // ── Returning user ───────────────────────────────────────
+  // No separate "connecting" screen anymore — the dashboard renders
+  // immediately from the saved card layout (values sit at "--" until
+  // the first packet lands), while the real connection catches up in
+  // the background behind the boot checklist.
   bootStep("daemon", "active");
   bootState("Connecting");
 
-  initSetup();
+  phase = "connecting";
+  setStatus("spin", "Connecting…");
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+  startSSE();
 })();

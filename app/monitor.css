@@ -232,89 +232,12 @@ body {
     min-height: 0;
 }
 
-/* ── Setup ─────────────────────────────────────────────────── */
-.setup-wrap {
-    max-width: 300px;
-    margin: 20px auto 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-}
-.setup-wrap h2,
-.setup-wrap .hint,
-.setup-wrap .field,
-.setup-wrap .btn,
-.setup-wrap .errmsg {
-    width: 100%;
-    text-align: left;
-}
-/* A calm, non-spinning-fast sibling of .boot-mark — same visual DNA
-   (comet-trail ring + pulsing core) so the first screen a new user
-   lands on still feels like part of the sequence that preceded it,
-   just at rest rather than mid-boot. */
-.setup-mark {
-    position: relative;
-    width: 40px;
-    height: 40px;
-    margin-bottom: 14px;
-}
-.setup-mark::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid var(--bdr);
-    border-radius: 50%;
-}
-.setup-mark-ring {
-    position: absolute;
-    inset: 3px;
-    border-radius: 50%;
-    background: conic-gradient(
-        from 0deg,
-        transparent 0deg,
-        var(--cpu) 55deg,
-        transparent 130deg
-    );
-    -webkit-mask: radial-gradient(
-        farthest-side,
-        transparent calc(100% - 2px),
-        #000 calc(100% - 2px)
-    );
-    mask: radial-gradient(
-        farthest-side,
-        transparent calc(100% - 2px),
-        #000 calc(100% - 2px)
-    );
-    filter: drop-shadow(0 0 3px var(--cpu));
-    animation: boot-spin 3.4s linear infinite;
-}
-.setup-mark-core {
-    position: absolute;
-    inset: 13px;
-    border-radius: 50%;
-    background: var(--cpu);
-    filter: drop-shadow(0 0 4px var(--cpu));
-    animation: boot-pulse 2.2s ease-in-out infinite;
-}
-h2 {
-    font-size: 14px;
-    font-weight: 600;
-    margin-bottom: 6px;
-}
-.hint {
-    font-size: 11.5px;
-    color: var(--txt-dim);
-    line-height: 1.55;
-    margin-bottom: 14px;
-}
-.hint code {
-    font-family: var(--font-code);
+/* ── Connection hint (drawer) ─────────────────────────────── */
+.conn-hint {
     font-size: 11px;
-    background: var(--bg-code);
-    padding: 1px 5px;
-    border-radius: 3px;
-    color: var(--cpu);
+    color: var(--txt-dim);
+    line-height: 1.5;
+    margin-bottom: 10px;
 }
 .field {
     margin-bottom: 11px;
@@ -349,6 +272,22 @@ h2 {
 .field input:focus {
     border-color: var(--bdr-accent);
     box-shadow: 0 0 0 3px var(--bg-sel);
+}
+/* First-run attention flash on the token field — draws the eye to
+   where a new user actually needs to act, a few pulses then settles. */
+@keyframes token-flash {
+    0%,
+    100% {
+        border-color: var(--bhi);
+        box-shadow: none;
+    }
+    50% {
+        border-color: var(--cpu);
+        box-shadow: 0 0 0 4px var(--bdr-accent);
+    }
+}
+.field input.flash-attn {
+    animation: token-flash 0.85s ease-in-out 3;
 }
 .btn {
     border: none;
@@ -391,18 +330,18 @@ h2 {
     color: var(--hot);
     border-color: var(--bdr-err);
 }
-.errmsg {
-    margin-top: 10px;
-    padding: 8px 10px;
-    background: var(--bg-err);
-    border: 1px solid var(--bdr-err);
-    border-radius: var(--rs);
-    color: var(--hot);
-    font-size: 11.5px;
-    line-height: 1.4;
+/* Cycle Themes reuses .btn-s but isn't a destructive action, so it
+   gets its own neutral hover + a distinct "running" state instead of
+   the shared red danger hover. */
+.theme-cycle-btn:hover {
+    background: var(--bg-hover);
+    color: var(--txt);
+    border-color: var(--bhi);
 }
-.errmsg.hide {
-    display: none;
+.theme-cycle-btn.on {
+    background: var(--bg-sel);
+    color: var(--cpu);
+    border-color: var(--bdr-accent);
 }
 .btn.hide {
     display: none;
@@ -1259,88 +1198,6 @@ h2 {
     opacity: 0.6;
 }
 
-/* ── Connecting screen — compact, replaces the full form while a
-   connection attempt is in flight so returning users (token already
-   saved) don't see a tall empty-feeling form flash by. ── */
-.connect-wrap {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 9px;
-    max-width: 230px;
-    margin: 6px auto 0;
-    text-align: center;
-    padding-bottom: 4px;
-}
-.connect-wrap.hide {
-    display: none;
-}
-/* Same comet-trail ring + pulsing core as .boot-mark/.setup-mark, just
-   smaller — the "connecting" state reads as a continuation of boot
-   rather than a different piece of UI. */
-.connect-mark {
-    position: relative;
-    width: 34px;
-    height: 34px;
-    margin-bottom: 2px;
-}
-.connect-mark::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid var(--bdr);
-    border-radius: 50%;
-}
-.connect-mark-ring {
-    position: absolute;
-    inset: 2px;
-    border-radius: 50%;
-    background: conic-gradient(
-        from 0deg,
-        transparent 0deg,
-        var(--cpu) 55deg,
-        transparent 130deg
-    );
-    -webkit-mask: radial-gradient(
-        farthest-side,
-        transparent calc(100% - 2px),
-        #000 calc(100% - 2px)
-    );
-    mask: radial-gradient(
-        farthest-side,
-        transparent calc(100% - 2px),
-        #000 calc(100% - 2px)
-    );
-    filter: drop-shadow(0 0 3px var(--cpu));
-    animation: boot-spin 1.3s linear infinite;
-}
-.connect-mark-core {
-    position: absolute;
-    inset: 11px;
-    border-radius: 50%;
-    background: var(--cpu);
-    filter: drop-shadow(0 0 4px var(--cpu));
-    animation: boot-pulse 1.6s ease-in-out infinite;
-}
-.connect-title {
-    font-size: 12.5px;
-    font-weight: 700;
-    color: var(--txt);
-    letter-spacing: 0.02em;
-}
-.connect-sub {
-    font-size: 10.5px;
-    color: var(--txt-dim);
-    line-height: 1.4;
-    word-break: break-word;
-}
-.connect-wrap .btn-s {
-    width: auto;
-    padding: 6px 18px;
-    margin-top: 5px;
-}
-
 /* ── Bar-top mode ─────────────────────────────────────────────
    Top-anchored corners move the status bar (drag handle + controls)
    above the content instead of below it — most people who park the
@@ -2169,6 +2026,14 @@ h2 {
 .sdot.spin {
     background: var(--fan);
     animation: pulse 1s infinite;
+}
+.sdot.demo {
+    background: var(--net);
+}
+#stxt.demo-active {
+    color: var(--net);
+    font-weight: 700;
+    letter-spacing: 0.02em;
 }
 .sbar-uptime {
     font-family: var(--font-num);
