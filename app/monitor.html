@@ -110,11 +110,51 @@
                     <div class="grp-hdr">Window Position</div>
                     <div class="anchor-grid" id="anchor-grid"></div>
 
-                    <div class="grp-hdr">Theme</div>
+                    <div class="grp-hdr grp-hdr-row">
+                        <span>Theme</span>
+                        <span class="grp-hdr-actions">
+                            <button
+                                class="grp-hdr-icon-btn"
+                                id="btn-theme-shuffle"
+                                title="Pick a random theme every time the widget starts"
+                            >
+                                <svg
+                                    viewBox="0 0 12 12"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.3"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path d="M1.5 3h2l5 6h2" />
+                                    <path d="M1.5 9h2l1.8-2.2" />
+                                    <path d="M6.7 5.2 8.5 3h2" />
+                                    <path d="M9 1.5 10.5 3 9 4.5" />
+                                    <path d="M9 7.5 10.5 9 9 10.5" />
+                                </svg>
+                            </button>
+                            <button
+                                class="grp-hdr-icon-btn"
+                                id="btn-theme-cycle"
+                                title="Auto-cycle through themes every few seconds"
+                            >
+                                <svg
+                                    viewBox="0 0 12 12"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.3"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <path d="M1.5 6a4.5 4.5 0 0 1 7.6-3.2" />
+                                    <path d="M10.5 6a4.5 4.5 0 0 1-7.6 3.2" />
+                                    <path d="M9.6 1.5v2.3h-2.3" />
+                                    <path d="M2.4 10.5v-2.3h2.3" />
+                                </svg>
+                            </button>
+                        </span>
+                    </div>
                     <div class="theme-grid" id="theme-grid"></div>
-                    <button class="btn btn-s theme-cycle-btn" id="btn-theme-cycle">
-                        Cycle Themes
-                    </button>
 
                     <div class="grp-hdr">Theme Editor</div>
 
@@ -216,24 +256,53 @@
                         </div>
                     </div>
 
-                    <div class="sub-hdr">Custom CSS</div>
-                    <div class="tb-group tb-group-css">
-                        <textarea
-                            id="custom-css"
-                            placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
-                        ></textarea>
-                        <button class="btn btn-p" id="btn-theme-apply">
-                            Apply CSS
-                        </button>
-                    </div>
+                    <details class="tb-share">
+                        <summary class="sub-hdr tb-share-summary">
+                            <span>Share Theme</span>
+                            <svg
+                                class="tb-share-arrow"
+                                viewBox="0 0 12 12"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="1.7"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            >
+                                <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                            </svg>
+                        </summary>
+                        <div class="tb-group tb-group-css">
+                            <p class="tb-share-hint">
+                                Always mirrors the theme above. Copy it to
+                                send to a friend, or paste one they sent you
+                                and load it.
+                            </p>
+                            <textarea
+                                id="custom-css"
+                                placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
+                            ></textarea>
+                            <div class="tb-share-btns">
+                                <button
+                                    class="btn btn-s btn-neutral-hover"
+                                    id="btn-theme-copy"
+                                >
+                                    Copy
+                                </button>
+                                <button class="btn btn-p" id="btn-theme-apply">
+                                    Load Theme
+                                </button>
+                            </div>
+                        </div>
+                    </details>
 
-                    <div class="grp-hdr">Connection</div>
+                    <div class="grp-hdr grp-hdr-row">
+                        <span>Connection</span>
+                        <span class="conn-status" id="conn-status" title="">
+                            <span class="sdot" id="conn-status-dot"></span>
+                            <span id="conn-status-text">—</span>
+                        </span>
+                    </div>
                     <div class="theme-conn" id="theme-conn-sec">
-                        <p class="conn-hint" id="conn-hint">
-                            Showing sample data. Paste an access token below
-                            to switch to your real hardware — it connects
-                            automatically.
-                        </p>
                         <div class="field">
                             <label>Daemon URL</label>
                             <input id="tc-url" type="text" />
@@ -248,8 +317,12 @@
                                 spellcheck="false"
                             />
                         </div>
+                    </div>
+
+                    <div class="grp-hdr">Demo Mode</div>
+                    <div class="theme-conn">
                         <div class="field">
-                            <label>Demo Scenario</label>
+                            <label>Scenario</label>
                             <div class="size-seg" id="demo-scenario-btns"></div>
                         </div>
                         <button class="btn btn-s" id="btn-demo-drawer">
@@ -258,6 +331,13 @@
                     </div>
 
                     <div class="grp-hdr">Danger Zone</div>
+                    <button
+                        class="btn btn-s btn-neutral-hover"
+                        id="btn-soft-reset-drawer"
+                        title="Clears only the saved token — theme, layout, and sensor assignments stay put"
+                    >
+                        Simulate First Launch
+                    </button>
                     <button class="btn btn-s" id="btn-reset-drawer">
                         Reset Widget
                     </button>

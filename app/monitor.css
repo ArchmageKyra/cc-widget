@@ -232,12 +232,25 @@ body {
     min-height: 0;
 }
 
-/* ── Connection hint (drawer) ─────────────────────────────── */
-.conn-hint {
-    font-size: 11px;
+/* ── Connection status (drawer) ───────────────────────────────
+   Mirrors the sbar's dot + text exactly (same .sdot classes, same
+   short strings) instead of keeping its own separate wordy copy —
+   hover for the longer explanation via the wrapper's title attr.
+   Lives inline in the "Connection" .grp-hdr-row now, so no block
+   spacing of its own — just a compact readout beside the label. */
+.conn-status {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: normal;
     color: var(--txt-dim);
-    line-height: 1.5;
-    margin-bottom: 10px;
+    cursor: default;
+}
+.conn-status .sdot {
+    flex-shrink: 0;
 }
 .field {
     margin-bottom: 11px;
@@ -330,18 +343,13 @@ body {
     color: var(--hot);
     border-color: var(--bdr-err);
 }
-/* Cycle Themes reuses .btn-s but isn't a destructive action, so it
-   gets its own neutral hover + a distinct "running" state instead of
-   the shared red danger hover. */
-.theme-cycle-btn:hover {
+/* Opt-in modifier for .btn-s buttons that aren't destructive (Simulate
+   First Launch, etc.) — neutral hover instead of the shared red
+   danger treatment every other .btn-s gets. */
+.btn-neutral-hover:hover {
     background: var(--bg-hover);
     color: var(--txt);
     border-color: var(--bhi);
-}
-.theme-cycle-btn.on {
-    background: var(--bg-sel);
-    color: var(--cpu);
-    border-color: var(--bdr-accent);
 }
 .btn.hide {
     display: none;
@@ -1232,6 +1240,52 @@ body {
 .grp-hdr:first-child {
     margin-top: 3px;
 }
+/* Header variant that carries small icon-button actions on the right
+   (Theme's Shuffle/Cycle toggles) instead of being plain text. */
+.grp-hdr-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.grp-hdr-actions {
+    display: flex;
+    gap: 2px;
+    margin-left: 8px;
+}
+.grp-hdr-icon-btn {
+    background: none;
+    border: none;
+    color: var(--txt-dim);
+    opacity: 0.55;
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    flex-shrink: 0;
+    transition:
+        opacity 0.12s,
+        background 0.12s,
+        color 0.12s;
+}
+.grp-hdr-icon-btn:hover {
+    opacity: 1;
+    background: var(--bg-hover);
+    color: var(--txt);
+}
+.grp-hdr-icon-btn.on {
+    opacity: 1;
+    color: var(--cpu);
+    background: var(--bg-sel);
+}
+.grp-hdr-icon-btn svg {
+    width: 12px;
+    height: 12px;
+    pointer-events: none;
+}
 .sub-hdr {
     font-size: 9.5px;
     font-weight: 700;
@@ -1562,6 +1616,52 @@ body {
 }
 .tb-group-css .btn-p {
     margin-top: 8px;
+}
+
+/* ── Share Theme (collapsible) ────────────────────────────────
+   <details>/<summary> gives native collapse behavior for free — no
+   JS needed to toggle it. Summary reuses .sub-hdr's exact type scale
+   so it reads as a peer of "Background & Chrome" / "Warning Ramp",
+   just clickable. */
+.tb-share {
+    margin-bottom: 4px;
+}
+.tb-share-summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+}
+.tb-share-summary::-webkit-details-marker {
+    display: none;
+}
+.tb-share-arrow {
+    width: 11px;
+    height: 11px;
+    color: var(--txt-dim);
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+.tb-share[open] .tb-share-arrow {
+    transform: rotate(180deg);
+}
+.tb-share-hint {
+    font-size: 10.5px;
+    color: var(--txt-dim);
+    line-height: 1.5;
+    margin-bottom: 8px;
+}
+.tb-share-btns {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+.tb-share-btns .btn {
+    flex: 1;
+    width: auto;
+    margin-top: 0;
 }
 
 /* ── Dashboard ─────────────────────────────────────────────── */

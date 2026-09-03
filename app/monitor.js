@@ -196,6 +196,7 @@ let cfg = {
   anchorCorner: null,
   demoScenario: "normal",
   themeCycling: false,
+  themeShuffleOnBoot: false,
 };
 let phase = "setup";
 let _connectTime = 0; // epoch ms when SSE first went live
@@ -913,7 +914,6 @@ function setConfigOpen(open) {
       document.getElementById("tc-tok").value = cfg.token;
     }
     _updateDemoButtons();
-    _updateConnHint();
   }
   requestAnimationFrame(() => autoResize());
 }
@@ -1201,29 +1201,68 @@ function setStatus(cls, msg = "") {
   // Demo Mode owns the indicator whenever it's running — a fake connection
   // shouldn't ever read as "Live", so this branch overrides whatever cls
   // the caller (demoTick's setStatus("ok")) passed in.
+  let dotClass, text;
   if (demoMode) {
-    sdot.className = "sdot demo";
-    stxt.textContent = "DEMO · " + (DEMO_SCENARIOS[demoScenario]?.label ?? "Normal");
-    stxt.classList.add("demo-active");
+    dotClass = "demo";
+    text = "DEMO · " + (DEMO_SCENARIOS[demoScenario]?.label ?? "Normal");
   } else {
-    sdot.className = "sdot " + cls;
-    stxt.textContent = cls === "ok" ? "Live" : cls === "err" ? msg : msg || "…";
-    stxt.classList.remove("demo-active");
+    dotClass = cls;
+    text = cls === "ok" ? "Live" : cls === "err" ? msg : msg || "…";
   }
+  sdot.className = "sdot " + dotClass;
+  stxt.textContent = text;
+  stxt.classList.toggle("demo-active", demoMode);
+
+  // The drawer's Connection section mirrors this exactly — same dot
+  // class, same short text — instead of keeping its own separate,
+  // wordier copy that could drift out of sync.
+  const csdot = document.getElementById("conn-status-dot");
+  const cstxt = document.getElementById("conn-status-text");
+  if (csdot) csdot.className = "sdot " + dotClass;
+  if (cstxt) cstxt.textContent = text;
+  _updateConnTooltip(dotClass);
+
   if (cls === "ok") {
     if (!_connectTime) _connectTime = Date.now();
     const up = document.getElementById("sbar-uptime");
     if (up) up.textContent = _fmtUptime(Date.now() - _connectTime);
-    _updateConnHint();
   }
   // A failed attempt during the initial boot connect means the daemon
   // isn't reachable — surface the dashboard right away instead of
   // leaving the user staring at the boot screen until it retries into
   // eternity (the failsafe timer is just a backstop for this).
-  if (cls === "err") {
-    if (phase === "connecting") hideBootScreen();
-    _updateConnHint("err");
-  }
+  if (cls === "err" && phase === "connecting") hideBootScreen();
+}
+
+// Longer explanation on hover, for anyone who wants more than the
+// short mirrored text — new users especially.
+function _updateConnTooltip(dotClass) {
+  const wrap = document.getElementById("conn-status");
+  if (!wrap) return;
+  const tips = {
+    demo: "Showing sample data. Paste a token below to connect your real hardware.",
+    ok: "Connected to your daemon.",
+    err: "Couldn't reach the daemon — check the URL and token below.",
+    spin: "Attempting to connect…",
+  };
+  wrap.title = tips[dotClass] || "";
+}
+
+// Resets both the sbar and drawer indicators to their idle "—" state —
+// used when there's genuinely no connection attempt in flight (e.g.
+// leaving Demo Mode with no token to reconnect with), which isn't one
+// of setStatus()'s ok/err/spin cases.
+function _resetConnIndicator() {
+  const sdot = document.getElementById("sdot");
+  const stxt = document.getElementById("stxt");
+  sdot.className = "sdot";
+  stxt.textContent = "—";
+  stxt.classList.remove("demo-active");
+  const csdot = document.getElementById("conn-status-dot");
+  const cstxt = document.getElementById("conn-status-text");
+  if (csdot) csdot.className = "sdot";
+  if (cstxt) cstxt.textContent = "—";
+  _updateConnTooltip(null);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1484,6 +1523,23 @@ function hideBootScreen() {
 // ═══════════════════════════════════════════════════════════════
 //  RESET
 // ═══════════════════════════════════════════════════════════════
+// Clears just the saved connection token — the app boots exactly like
+// a brand-new install (Demo Mode, drawer auto-open, token field flash)
+// without touching theme, layout, sizing, or any sensor assignments.
+// Dev-only convenience for testing the first-run experience against
+// real settings instead of a wiped profile.
+function softResetWidget() {
+  if (
+    !confirm(
+      "Simulate a first launch? This clears only your saved connection token — theme, layout, and sensor assignments stay put.",
+    )
+  )
+    return;
+  cfg.token = "";
+  saveCfg();
+  location.reload();
+}
+
 // Clears all local config (token, theme, layout, everything) and reloads
 // as a brand-new install — same action from the drawer's "Danger Zone"
 // regardless of whether a real connection was ever made.
@@ -1509,7 +1565,6 @@ function connectNow() {
   if (_upEl) _upEl.textContent = "";
   setStatus("spin", "Connecting…");
   _updateDemoButtons();
-  _updateConnHint();
   buildCards();
   renderDashboard(liveDevices);
   requestAnimationFrame(() => autoResize());
@@ -1846,27 +1901,6 @@ function _updateDemoButtons() {
   });
 }
 
-// Keeps the Connection section's lead sentence honest about what's
-// actually on screen right now — sample data, a connection attempt in
-// flight, a real problem, or the real thing. Driven from setStatus()
-// so it self-heals the moment a retry succeeds, not just once.
-function _updateConnHint(errMsg = null) {
-  const hint = document.getElementById("conn-hint");
-  if (!hint) return;
-  if (errMsg) {
-    hint.textContent =
-      "Having trouble connecting — check the URL and token below.";
-  } else if (demoMode) {
-    hint.textContent =
-      "Showing sample data. Paste an access token below to switch to your real hardware — it connects automatically.";
-  } else if (phase === "connecting") {
-    hint.textContent = "Connecting…";
-  } else {
-    hint.textContent =
-      "Connected. Update the URL or token below any time your setup changes.";
-  }
-}
-
 // Draws the eye to the token field for first-time users who've just
 // been dropped into Demo Mode with the drawer freshly opened — a few
 // quick pulses, then it settles back to normal.
@@ -2001,15 +2035,9 @@ function exitDemoMode() {
 
   // No token yet: nothing to connect to. connectNow() would normally
   // reset the status indicator via setStatus("spin", …), but there's
-  // no connection attempt happening here, so do it directly.
-  document.getElementById("sdot").className = "sdot";
-  const _stxt = document.getElementById("stxt");
-  if (_stxt) {
-    _stxt.textContent = "—";
-    _stxt.classList.remove("demo-active");
-  }
+  // no connection attempt happening here, so reset it to idle directly.
+  _resetConnIndicator();
   _updateDemoButtons();
-  _updateConnHint();
   buildCards();
   renderDashboard(liveDevices);
   requestAnimationFrame(() => autoResize());
@@ -2543,19 +2571,20 @@ function initThemeBuilder() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-//  THEME CYCLING
-//  Auto-advances through THEMES on a timer — a quick way to preview
-//  every theme without clicking through the grid by hand. Skips
-//  "custom" since cycling into a moving target isn't meaningful.
-//  Any manual theme pick (tile click or custom-CSS apply) stops it —
-//  the person just told the app what they want, cycling back over
-//  that a few seconds later would be actively unhelpful.
+//  THEME CYCLING & SHUFFLE
+//  Cycle: auto-advances through THEMES on a timer — a quick way to
+//  preview every theme without clicking through the grid by hand.
+//  Shuffle: picks one random theme at boot, so every launch has a
+//  different look without anything running continuously.
+//  Both skip "custom" since landing on a moving target isn't
+//  meaningful. Any manual theme pick (tile click or custom-CSS apply)
+//  stops Cycle — the person just told the app what they want, cycling
+//  back over that a few seconds later would be actively unhelpful.
 // ═══════════════════════════════════════════════════════════════
-function _cycleToNextTheme() {
-  const keys = Object.keys(THEMES);
-  if (!keys.length) return;
-  const idx = (keys.indexOf(cfg.theme) + 1) % keys.length;
-  const key = keys[idx];
+
+// Shared by both features — applies `key`, syncs the tile grid and
+// builder to match, same as clicking a tile by hand.
+function _applyThemeChoice(key) {
   document
     .querySelectorAll(".theme-tile")
     .forEach((t) => t.classList.toggle("active", t.dataset.key === key));
@@ -2563,11 +2592,33 @@ function _cycleToNextTheme() {
   if (_tbSync) _tbSync();
 }
 
-function _updateThemeCycleButton() {
-  const btn = document.getElementById("btn-theme-cycle");
-  if (!btn) return;
-  btn.textContent = themeCycling ? "Stop Cycling" : "Cycle Themes";
-  btn.classList.toggle("on", themeCycling);
+function _randomThemeKey() {
+  const keys = Object.keys(THEMES);
+  return keys[Math.floor(Math.random() * keys.length)];
+}
+
+function _cycleToNextTheme() {
+  const keys = Object.keys(THEMES);
+  if (!keys.length) return;
+  const idx = (keys.indexOf(cfg.theme) + 1) % keys.length;
+  _applyThemeChoice(keys[idx]);
+}
+
+function _updateThemeToggleButtons() {
+  const cycleBtn = document.getElementById("btn-theme-cycle");
+  if (cycleBtn) {
+    cycleBtn.classList.toggle("on", themeCycling);
+    cycleBtn.title = themeCycling
+      ? "Stop auto-cycling themes"
+      : "Auto-cycle through themes every few seconds";
+  }
+  const shuffleBtn = document.getElementById("btn-theme-shuffle");
+  if (shuffleBtn) {
+    shuffleBtn.classList.toggle("on", cfg.themeShuffleOnBoot);
+    shuffleBtn.title = cfg.themeShuffleOnBoot
+      ? "Random theme on launch — on"
+      : "Pick a random theme every time the widget starts";
+  }
 }
 
 function setThemeCycling(on, { immediate = true } = {}) {
@@ -2582,7 +2633,16 @@ function setThemeCycling(on, { immediate = true } = {}) {
     if (immediate) _cycleToNextTheme(); // feels responsive when toggled by hand
     themeCycleTimer = setInterval(_cycleToNextTheme, THEME_CYCLE_MS);
   }
-  _updateThemeCycleButton();
+  _updateThemeToggleButtons();
+}
+
+function setThemeShuffleOnBoot(on) {
+  cfg.themeShuffleOnBoot = on;
+  saveCfg();
+  _updateThemeToggleButtons();
+  // Instant preview so toggling feels responsive, same as Cycle — the
+  // real effect (a fresh random pick) happens on the next launch.
+  if (on) _applyThemeChoice(_randomThemeKey());
 }
 
 function initThemeScreen() {
@@ -2664,14 +2724,14 @@ function initThemeScreen() {
   // ── Theme Builder ──────────────────────────────────────────
   initThemeBuilder();
 
-  // ── Custom CSS ─────────────────────────────────────────────
+  // ── Share Theme (Copy / Load) ────────────────────────────────
   if (cfg.customThemeCSS)
     document.getElementById("custom-css").value = cfg.customThemeCSS;
 
   document.getElementById("btn-theme-apply").onclick = () => {
     const css = document.getElementById("custom-css").value.trim();
     if (!css.includes("{") || !css.includes("}")) {
-      alert("Paste a :root { … } block.");
+      alert("Paste a shared theme's :root { … } block first.");
       return;
     }
     if (themeCycling) setThemeCycling(false);
@@ -2681,6 +2741,42 @@ function initThemeScreen() {
       .forEach((t) => t.classList.toggle("active", t.dataset.key === "custom"));
     if (_tbSync) _tbSync();
   };
+
+  // Copies the box's current contents so it can be pasted somewhere
+  // else (Discord, a text file, whatever). Tries the classic
+  // execCommand path first — it's synchronous and needs no permission
+  // prompt, which matters in an embedded WebKitGTK view where the
+  // modern async Clipboard API may not be wired up at all. Falls back
+  // to that API, and finally to "the text is already selected, copy
+  // it yourself" if neither works.
+  const copyBtn = document.getElementById("btn-theme-copy");
+  if (copyBtn) {
+    copyBtn.onclick = () => {
+      const ta = document.getElementById("custom-css");
+      ta.select();
+      ta.setSelectionRange(0, 999999);
+      let ok = false;
+      try {
+        ok = document.execCommand("copy");
+      } catch {
+        ok = false;
+      }
+      const flash = (label) => {
+        copyBtn.textContent = label;
+        setTimeout(() => (copyBtn.textContent = "Copy"), 1400);
+      };
+      if (ok) {
+        flash("Copied!");
+      } else if (navigator.clipboard?.writeText) {
+        navigator.clipboard
+          .writeText(ta.value)
+          .then(() => flash("Copied!"))
+          .catch(() => flash("Select & Copy"));
+      } else {
+        flash("Select & Copy");
+      }
+    };
+  }
 
   // ── Connection fields ──────────────────────────────────────
   document.getElementById("tc-url").value = cfg.baseUrl;
@@ -2701,12 +2797,13 @@ function initThemeScreen() {
   document.getElementById("tc-url").onchange = persist;
   document.getElementById("tc-tok").onchange = persist;
 
-  // ── Cycle Themes toggle ──────────────────────────────────────
+  // ── Theme cycle / shuffle toggles ────────────────────────────
   const cycleBtn = document.getElementById("btn-theme-cycle");
-  if (cycleBtn) {
-    cycleBtn.onclick = () => setThemeCycling(!themeCycling);
-    _updateThemeCycleButton();
-  }
+  if (cycleBtn) cycleBtn.onclick = () => setThemeCycling(!themeCycling);
+  const shuffleBtn = document.getElementById("btn-theme-shuffle");
+  if (shuffleBtn)
+    shuffleBtn.onclick = () => setThemeShuffleOnBoot(!cfg.themeShuffleOnBoot);
+  _updateThemeToggleButtons();
 
   // ── Demo scenario segmented control ─────────────────────────
   const dsb = document.getElementById("demo-scenario-btns");
@@ -3759,6 +3856,30 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
   for (const def of CARD_DEFS) {
     // ── Named rows (standard + autoLinux) ────────────────────
     for (const row of def.rows || []) {
+      // Computed rows (currently just Chassis's FAN AVG) have no real
+      // cfg.slots entry to guard on below, and — unlike every other
+      // row — used to only get a value from the sparkline-feed loop
+      // further down, which never runs at all once the card's display
+      // is switched to "Rows" (no MultiSpark instance exists to feed).
+      // Handling it here instead means it updates regardless of
+      // Chart/Rows mode, same as everything else.
+      if (row.computedFanAvg) {
+        const avg = _chassisFanAvg(devices);
+        const sv = document.getElementById("sv-" + row.sid);
+        const sd = document.getElementById("sd-" + row.sid);
+        if (sv) sv.textContent = fmt1(avg, "%");
+        if (avg !== undefined) {
+          if (sd) {
+            sd.innerHTML = makeDots(
+              dutyLevel(avg),
+              getRowStyle(row) === "dots-meter" ? "meter" : "warn",
+            );
+          }
+        }
+        _trackPeak(row.sid, avg);
+        _updatePeakTip(row.sid, "%");
+        continue;
+      }
       if (!cfg.slots[row.sid]) continue;
 
       const slot = cfg.slots[row.sid];
@@ -3871,25 +3992,17 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
       if (pushSparks) spark.tick();
       for (const row of def.rows) {
         if (row.computedFanAvg) {
-          const avg = _chassisFanAvg(devices);
-          const sv = document.getElementById("sv-" + row.sid);
-          const sd = document.getElementById("sd-" + row.sid);
-          if (sv) sv.textContent = fmt1(avg, "%");
-          if (avg !== undefined) {
-            const lvl = dutyLevel(avg);
-            if (sd) {
-              sd.innerHTML = makeDots(
-                lvl,
-                getRowStyle(row) === "dots-meter" ? "meter" : "warn",
-              );
-            }
-            if (pushSparks) {
+          // Value/dots/peak already handled in the always-runs loop
+          // above — this branch is spark-canvas-only, so it's a no-op
+          // whenever the card has no chart (Rows mode) or this isn't a
+          // tick frame.
+          if (pushSparks) {
+            const avg = _chassisFanAvg(devices);
+            if (avg !== undefined) {
               spark.setFanNorm(100);
               spark.push("fan", avg);
             }
           }
-          _trackPeak(row.sid, avg);
-          _updatePeakTip(row.sid, "%");
           continue;
         }
         if (!pushSparks) continue; // nothing else in this branch is spark-only
@@ -4312,10 +4425,17 @@ class MultiSpark {
 
   applySize(cfg.size || "s", false);
 
-  applyTheme(
-    cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
-    cfg.theme === "custom" ? cfg.customThemeCSS : null,
-  );
+  // Shuffle-on-boot picks a fresh random theme every launch instead of
+  // whatever was last saved; skips "custom" the same way Cycle does —
+  // there's no stable preset to land on for a moving target.
+  if (cfg.themeShuffleOnBoot) {
+    applyTheme(_randomThemeKey());
+  } else {
+    applyTheme(
+      cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
+      cfg.theme === "custom" ? cfg.customThemeCSS : null,
+    );
+  }
 
   await waitBootStep("theme");
 
@@ -4332,6 +4452,7 @@ class MultiSpark {
     gtksend("anchor:" + cfg.anchorCorner);
   }
 
+  document.getElementById("btn-soft-reset-drawer").onclick = softResetWidget;
   document.getElementById("btn-reset-drawer").onclick = resetWidget;
   _updateDemoButtons();
 
