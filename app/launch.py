@@ -826,30 +826,63 @@ win.set_resizable(True)
 win.set_app_paintable(True)
 win.set_visual(win.get_screen().get_rgba_visual())
 
+# Most GTK themes draw a drop shadow around top-level windows using an
+# RGBA visual (needed above for our transparent corners), via the
+# ".background" CSS node — even when undecorated. That shadow is a
+# plain rectangle; it knows nothing about our own CSS --r corner
+# radius, so it shows up as a squared-off halo poking out past our
+# rounded corners. Barely visible at a small radius, glaring at a large
+# one. Stripping it here keeps our own CSS as the only source of the
+# window's visual shape.
+_shadow_css = Gtk.CssProvider()
+_shadow_css.load_from_data(b"""
+window.background {
+    background-color: transparent;
+    box-shadow: none;
+    border-style: none;
+    margin: 0;
+}
+""")
+Gtk.StyleContext.add_provider_for_screen(
+    win.get_screen(),
+    _shadow_css,
+    Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+)
+
 win.connect("destroy", Gtk.main_quit)
 
 # Save position whenever GTK reports a geometry change. This keeps the
 # position persistent even if the application is closed normally after a
 # resize or drag.
 def on_window_configure(_window, _event) -> bool:
-    """Persist the current window position whenever GTK reports a geometry
-    change, and — if a resize/boot message is waiting on one — tell the
-    frontend once the native window has genuinely reached its target size.
+    """Persist the current window position whenever GTK reports a *settled*
+    geometry change, and — if a resize/boot message is waiting on one —
+    tell the frontend once the native window has genuinely reached its
+    target size.
 
-    configure-event can fire more than once for a single move_resize() call
-    (WM/XWayland settling, intermediate frames, etc.), so acking on the
-    first one to arrive isn't safe — it can report a size that hasn't
-    actually landed yet. Comparing against the real target and only acking
-    on a match is what makes this a trustworthy completion signal rather
-    than just "something happened."
+    configure-event can fire more than once for a single move_resize()
+    call (WM/XWayland settling, intermediate frames, etc.), so acting on
+    the first one to arrive isn't safe — it can report a size that hasn't
+    actually landed yet. That matters for saving, not just the JS ack:
+    an anchored window's saved position is *computed* from the current
+    width/height (see get_anchor_position()), so persisting from a
+    transitional frame bakes in a slightly-wrong anchor point. Boot alone
+    resizes the window at least twice, so on every single launch that
+    could nudge the saved position — which is exactly how a "drifts a
+    little further each launch" bug happens. Gating the save on the same
+    target-match check already used for the ack fixes both at once.
     """
 
     global _resize_target
 
-    save_window_position()
+    width, height = win.get_size()
+    settled = _resize_target is None or (
+        abs(width - _resize_target[0]) <= 1 and abs(height - _resize_target[1]) <= 1
+    )
+    if settled:
+        save_window_position()
 
     if _resize_target is not None and webview is not None:
-        width, height = win.get_size()
         target_w, target_h = _resize_target
         if abs(width - target_w) <= 1 and abs(height - target_h) <= 1:
             _resize_target = None

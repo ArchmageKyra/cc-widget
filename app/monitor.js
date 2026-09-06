@@ -131,6 +131,9 @@ const WARN_T = {
 const BASELINE_WINDOW_MS = 30 * 60 * 1000;
 const _baselineHist = {}; // sid -> [{t, v}, …] oldest-first
 
+// Rolling 30-min minimum for a sensor — "relative" warn levels (ambient
+// temps that have no fixed safe number, only a safe *rise* from
+// whatever's normal right now) compare against this instead of 0.
 function _relBaseline(sid, val) {
   const hist = (_baselineHist[sid] ??= []);
   const now = Date.now();
@@ -142,6 +145,8 @@ function _relBaseline(sid, val) {
   return min;
 }
 
+// Dispatches to absolute (val vs fixed thresholds) or relative (delta
+// vs _relBaseline) scoring depending on the sensor's WARN_T spec.
 function warnLevel(slotId, val) {
   const spec = WARN_T[slotId];
   if (!spec) return 2;
@@ -496,6 +501,8 @@ const _STYLE_TITLES = {
   "dots-meter": "Meter dots",
   "num-only": "Number only",
 };
+// Builds a "⋯" menu's segmented-control entry for cycling a row's
+// display style — shared by the custom-row and hardcoded-row menus.
 function _styleSegItem(row) {
   const options = _rowStyleOptions(row);
   if (!options.length) return null;
@@ -1699,6 +1706,8 @@ const DEMO_SCENARIOS = {
   },
 };
 
+// Builds one DemoCurve per data channel, seeded from the given
+// scenario's load params (falls back to "normal" for an unknown key).
 function _buildDemoCurves(scenarioKey = demoScenario) {
   const s = DEMO_SCENARIOS[scenarioKey] || DEMO_SCENARIOS.normal;
   return {
@@ -1874,6 +1883,8 @@ function _computeDemoFrame() {
   return { ccDevices, linuxStats };
 }
 
+// One fake-data frame in, fed through the exact same pipeline real CC/
+// Linux data goes through — nothing downstream can tell the difference.
 function demoTick() {
   const { ccDevices: fakeCc, linuxStats } = _computeDemoFrame();
   ccDevices = fakeCc;
@@ -3458,6 +3469,10 @@ function initRowSort() {
   });
 }
 
+// Full dashboard rebuild: tears down and re-creates every card's DOM
+// from CARD_DEFS + cfg (slots, custom rows, mini/hidden/order state).
+// Called on any structural change (theme, size, edit toggle, row add/
+// remove/reorder) — renderDashboard() then fills in live values.
 function buildCards() {
   const c = document.getElementById("cards");
   c.innerHTML = "";

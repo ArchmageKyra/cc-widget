@@ -92,6 +92,10 @@
     --canvas-w: 162px;
     --canvas-h: 92px;
     --canvas-lh: 62px;
+    --sz-mini-lbl: 9.5px;
+    --sz-mini-val: 13px;
+    --sz-mini-w: 64px;
+    --sz-mini-bar: 16px;
 }
 
 html,
@@ -112,7 +116,17 @@ body {
     width: 100%;
     height: 100%;
     background: var(--bg);
-    border: 1px solid var(--bhi);
+    /* Border kept transparent (not removed) so it still occupies its 1px
+       of box-sizing: border-box space — autoResize()'s height math
+       accounts for exactly this. The visible line is drawn via an inset
+       box-shadow instead of border-color: a *stroked* border on a large
+       border-radius anti-aliases unevenly, rendering visibly dimmer
+       along the curved corners than the straight edges. An inset
+       shadow is rasterized as a filled shape minus an inset copy rather
+       than stroked along the path, so it stays a consistent brightness
+       all the way around regardless of how large --r gets. */
+    border: 1px solid transparent;
+    box-shadow: inset 0 0 0 1px var(--bhi);
     border-radius: var(--r);
     overflow: hidden;
 }
@@ -505,8 +519,14 @@ body {
 }
 
 /* ── Edit mode ─────────────────────────────────────────────── */
+/* Combines with .card's own inset border-shadow (single box-shadow
+   property, so both need listing together or the second would replace
+   the first instead of layering over it) — inset line stays, plus an
+   outer highlight ring while editing. */
 .cards.editing .card {
-    box-shadow: 0 0 0 1px var(--bhi);
+    box-shadow:
+        inset 0 0 0 1px var(--bdr),
+        0 0 0 1px var(--bhi);
 }
 .sr.assignable {
     cursor: pointer;
@@ -1620,9 +1640,10 @@ body {
 
 /* ── Share Theme (collapsible) ────────────────────────────────
    <details>/<summary> gives native collapse behavior for free — no
-   JS needed to toggle it. Summary reuses .sub-hdr's exact type scale
-   so it reads as a peer of "Background & Chrome" / "Warning Ramp",
-   just clickable. */
+   JS needed to toggle it. Summary is boxed in the same bordered-chip
+   language as .tb-group/.theme-tile (not just plain .sub-hdr text)
+   so it visibly reads as something you click, and joins seamlessly
+   with the body below into one continuous box while open. */
 .tb-share {
     margin-bottom: 4px;
 }
@@ -1633,9 +1654,26 @@ body {
     align-items: center;
     justify-content: space-between;
     user-select: none;
+    margin: 10px 0 0;
+    padding: 7px 9px;
+    border: 1px solid var(--bdr);
+    border-radius: var(--rs);
+    background: var(--bg-hover-subtle);
+    transition:
+        background 0.12s,
+        border-color 0.12s;
+}
+.tb-share-summary:hover {
+    background: var(--bg-hover);
+    border-color: var(--bhi);
 }
 .tb-share-summary::-webkit-details-marker {
     display: none;
+}
+.tb-share[open] .tb-share-summary {
+    border-radius: var(--rs) var(--rs) 0 0;
+    border-bottom: none;
+    padding-bottom: 8px; /* compensate the dropped 1px border so height holds steady */
 }
 .tb-share-arrow {
     width: 11px;
@@ -1663,6 +1701,13 @@ body {
     width: auto;
     margin-top: 0;
 }
+/* Body sits directly under the open summary — square off its top
+   corners and pull it flush (no double border/gap at the shared seam)
+   so the two pieces read as one continuous box. */
+.tb-share[open] .tb-group-css {
+    margin-top: -1px;
+    border-radius: 0 0 var(--rs) var(--rs);
+}
 
 /* ── Dashboard ─────────────────────────────────────────────── */
 .cards {
@@ -1672,7 +1717,10 @@ body {
 }
 .card {
     background: var(--bg-card);
-    border: 1px solid var(--bdr);
+    /* Same fix as #app above — inset box-shadow instead of a stroked
+       border so large --rs values don't dim out along the curve. */
+    border: 1px solid transparent;
+    box-shadow: inset 0 0 0 1px var(--bdr);
     border-radius: var(--rs);
     overflow: hidden;
 }
@@ -1778,28 +1826,30 @@ body {
    every card's 1st/2nd/3rd value lands at the same x position instead
    of each row hugging its own natural width. Cards with fewer values
    than MINI_SLOTS get an empty, same-width cell rather than
-   compacting — the "fill left to right" part. Widened from an earlier
-   pass that clipped labels like "ROOT" — freed up by the title no
-   longer flexing to fill space (see .card-ttl). */
+   compacting — the "fill left to right" part. Label/number sizes and
+   this width all come from --sz-mini-* (see SIZES in themes.js) so
+   mini mode actually scales with the S/M/L size preset like everything
+   else does, instead of sitting at one hardcoded tiny size regardless
+   of it. */
 .mini-val,
 .mini-val-empty {
     display: flex;
     align-items: center;
     gap: 4px;
-    width: 58px;
+    width: var(--sz-mini-w);
     flex-shrink: 0;
     white-space: nowrap;
     overflow: hidden;
 }
 .mini-val-lbl {
-    font-size: 8px;
+    font-size: var(--sz-mini-lbl);
     font-weight: 700;
     letter-spacing: 0.04em;
     color: var(--txt-dim);
 }
 .mini-val-num {
     font-family: var(--font-num);
-    font-size: 11px;
+    font-size: var(--sz-mini-val);
     font-weight: 600;
     color: var(--txt);
 }
@@ -1814,7 +1864,7 @@ body {
    otherwise have nothing. */
 .mini-bar {
     width: 3px;
-    height: 14px;
+    height: var(--sz-mini-bar);
     border-radius: 2px;
     flex-shrink: 0;
 }
