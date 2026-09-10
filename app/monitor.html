@@ -434,7 +434,15 @@
             </div>
         </div>
         <!-- #app -->
+        <!-- Load order matters: these are classic scripts sharing one global
+             scope (no bundler, no modules) — each file below can use anything
+             defined in an earlier one. app-modes.js must load last; its boot
+             IIFE is what actually starts the app. -->
         <script src="themes.js"></script>
-        <script src="monitor.js"></script>
+        <script src="state.js"></script>
+        <script src="platform-linux.js"></script>
+        <script src="ui-widgets.js"></script>
+        <script src="dashboard.js"></script>
+        <script src="app-modes.js"></script>
     </body>
 </html>

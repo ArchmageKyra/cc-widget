@@ -482,7 +482,7 @@ const THEMES = {
 let _lastThemeVars = [];
 
 function applyTheme(key, customCSS = null) {
-  const css = customCSS ?? THEMES[key]?.css ?? THEMES["deep-space"].css;
+  const css = customCSS ?? THEMES[key]?.css ?? THEMES["misty-metal"].css;
   const root = document.documentElement;
 
   // Remove vars from the previous theme before applying the new one
