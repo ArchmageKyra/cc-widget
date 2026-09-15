@@ -334,10 +334,18 @@ function customRowsFor(cardId) {
 
 function addCustomRow(cardId, leaf) {
   const sid = `custom_${cardId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  // Fan/duty channels get "meter" mode (dutyLevel off the live duty%).
+  // "warn" mode only makes sense for metrics with a WARN_T threshold
+  // table (temps, load%) — every custom row used to get "warn"
+  // regardless of sensor kind, so rpm/duty rows went through
+  // warnLevel() instead of dutyLevel()+getFanDuty(). A generated custom
+  // sid is never a WARN_T key, so warnLevel() short-circuits to a
+  // constant level 2 — dots frozen no matter what the fan was doing.
+  const isFanLike = leaf.kind === "channel" && (leaf.field === "rpm" || leaf.field === "duty");
   const row = {
     sid,
     lbl: shortLabel(leaf.label) || leaf.name,
-    mode: "warn",
+    mode: isFanLike ? "meter" : "warn",
     noPlot: true,
     custom: true,
     typeFilter: ALL_SENSOR_TYPES,
@@ -347,6 +355,7 @@ function addCustomRow(cardId, leaf) {
   cfg.rowOrder ??= {};
   (cfg.rowOrder[cardId] ??= []).push(sid);
   cfg.slots[sid] = { ...leaf };
+  return sid;
 }
 
 function moveCustomRow(cardId, sid, dir) {
@@ -579,12 +588,47 @@ function openPicker(
 <span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
 
         row.onclick = () => {
+          let targetSid = slotId;
           if (newRowCard) {
-            addCustomRow(newRowCard, leaf);
+            targetSid = addCustomRow(newRowCard, leaf);
           } else {
             cfg.slots[slotId] = { ...leaf };
+            // Remapping an existing custom row — re-derive mode from the
+            // new leaf's kind so a row moved onto/off a fan channel gets
+            // dutyLevel()/meter dots instead of being stuck on whatever
+            // mode it was created with (see addCustomRow for the same fix).
+            if (slotId?.startsWith("custom_")) {
+              const isFanLike =
+                leaf.kind === "channel" &&
+                (leaf.field === "rpm" || leaf.field === "duty");
+              for (const rows of Object.values(cfg.customRows ?? {})) {
+                const r = rows.find((x) => x.sid === slotId);
+                if (r) {
+                  r.mode = isFanLike ? "meter" : "warn";
+                  break;
+                }
+              }
+            }
           }
           saveCfg();
+
+          // RPM channel assigned — offer to pair it with a duty channel
+          // (or a manual max-RPM ceiling) even when one was auto-detected
+          // on the same channel object, since the auto-detected duty
+          // isn't always trustworthy (e.g. shares a name but controls a
+          // different fan). See openDutyPairingStep().
+          const hasNativeDuty = leaves.some(
+            (l) =>
+              l.kind === "channel" &&
+              l.uid === leaf.uid &&
+              l.name === leaf.name &&
+              l.field === "duty",
+          );
+          if (leaf.field === "rpm") {
+            openDutyPairingStep(targetSid, hasNativeDuty);
+            return;
+          }
+
           closePicker();
           buildCards();
           renderDashboard(liveDevices);
@@ -667,10 +711,120 @@ function openPicker(
   document.getElementById("picker").classList.remove("hide");
 }
 
+// Second picker step shown right after assigning an RPM channel. Lets
+// the user point at the channel that actually reports this fan's duty%
+// — common on motherboard/hwmon fan headers where rpm and duty show up
+// as two different channels, sometimes even under a different device —
+// or enter a manual max-RPM ceiling instead. Always offered, even when
+// a duty field was auto-detected on the same channel object, since a
+// same-named duty field isn't always trustworthy (e.g. it can belong to
+// a different physical fan than the rpm reading). Only one source is
+// ever active at a time — picking one clears any previous override.
+function openDutyPairingStep(targetSid, hasNativeDuty) {
+  document.getElementById("picker-title").textContent =
+    "Match Duty Channel (optional)";
+  const body = document.getElementById("picker-body");
+  body.innerHTML = "";
+
+  const finish = () => {
+    closePicker();
+    buildCards();
+    renderDashboard(liveDevices);
+    requestAnimationFrame(() => autoResize());
+  };
+  const clearOverrides = () => {
+    const s = cfg.slots[targetSid];
+    if (s) {
+      delete s.pairedDuty;
+      delete s.manualMaxRpm;
+    }
+  };
+
+  if (hasNativeDuty) {
+    const auto = el("div", "picker-clr");
+    auto.innerHTML = `<span>✓ Use auto-detected duty channel</span>`;
+    auto.onclick = () => {
+      clearOverrides();
+      saveCfg();
+      finish();
+    };
+    body.appendChild(auto);
+  } else {
+    const skip = el("div", "picker-clr");
+    skip.innerHTML = `<span>Skip — estimate from RPM instead</span>`;
+    skip.onclick = () => {
+      clearOverrides();
+      saveCfg();
+      finish();
+    };
+    body.appendChild(skip);
+  }
+
+  const manual = el("div", "picker-add");
+  manual.textContent = "+ Enter max RPM manually";
+  manual.onclick = () => {
+    const raw = prompt(
+      "Max RPM for this fan at 100% duty (e.g. from its spec sheet):",
+      "",
+    );
+    if (raw === null) return; // cancelled — stay on this step
+    const max = parseFloat(raw);
+    if (!Number.isFinite(max) || max <= 0) {
+      alert("Enter a positive number.");
+      return;
+    }
+    clearOverrides();
+    cfg.slots[targetSid].manualMaxRpm = max;
+    saveCfg();
+    finish();
+  };
+  body.appendChild(manual);
+
+  // The auto-detected duty (if any) is already offered above — exclude
+  // it here so it isn't listed twice.
+  const rpmSlot = cfg.slots[targetSid];
+  const dutyLeaves = buildLeaves(liveDevices).filter(
+    (l) =>
+      l.kind === "channel" &&
+      l.field === "duty" &&
+      !(l.uid === rpmSlot?.uid && l.name === rpmSlot?.name),
+  );
+
+  if (!dutyLeaves.length) {
+    const emp = el("div", "picker-empty");
+    emp.textContent = hasNativeDuty
+      ? "No other duty channels found"
+      : "No duty channels found — enter a max RPM above, or skip to estimate automatically";
+    body.appendChild(emp);
+  } else {
+    const byDev = {};
+    for (const leaf of dutyLeaves) (byDev[leaf.dLbl] ??= []).push(leaf);
+    for (const [devLbl, devLeaves] of Object.entries(byDev)) {
+      const sec = el("div", "picker-sec");
+      sec.textContent = devLbl;
+      body.appendChild(sec);
+      for (const leaf of devLeaves) {
+        const row = el("div", "picker-leaf");
+        row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.sensorName ?? leaf.name)}</span>
+<span class="picker-leaf-val">${fmt1(leaf.value, leaf.unit)}</span>
+<span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
+        row.onclick = () => {
+          clearOverrides();
+          cfg.slots[targetSid].pairedDuty = { uid: leaf.uid, name: leaf.name };
+          saveCfg();
+          finish();
+        };
+        body.appendChild(row);
+      }
+    }
+  }
+
+  document.getElementById("picker").classList.remove("hide");
+}
+
 function closePicker() {
   pickerCtx = null;
   document.getElementById("picker")?.classList.add("hide");
 }
 
 document.getElementById("picker-close").onclick = () => closePicker();
-

@@ -17,43 +17,60 @@
 "use strict";
 
 const THEMES = {
-  "final-frontier": {
-    name: "Final Frontier",
-    swatches: ["#050507", "#9c9cff", "#ffcc66", "#ff9c41", "#cc99cc"],
+  "misty-metal": {
+    name: "Misty Metal",
+    swatches: ["#1E1E22", "#0A84FF", "#32D74B", "#FF9F0A", "#BF5AF2"],
     css: `:root{
-  --bg:#050507;
-  --txt:#f2efe9;
-  --txt-dim:#b9afc7;
-  --txt-muted:#372f4a;
-  --hot:#ff4136;
+  --bg:#1E1E22;
+  --txt:#EAEAEC;
+  --txt-dim:#9A9AA2;
+  --txt-muted:#3A3A40;
+  --hot:#FF453A;
 
-  --bdr:rgba(153,153,255,.10);
-  --bhi:rgba(153,153,255,.20);
+  --bg-bar:rgba(255,255,255,.045);
+  --bg-overlay:rgba(255,255,255,.035);
+  --bg-card:rgba(255,255,255,.045);
+  --bg-card-hdr:rgba(255,255,255,.035);
+  --bg-input:rgba(255,255,255,.06);
+  --bg-canvas:rgba(0,0,0,.22);
+  --bg-code:rgba(255,255,255,.07);
+  --bg-hover:rgba(255,255,255,.07);
+  --bg-hover-subtle:rgba(255,255,255,.035);
+  --bg-active:rgba(255,255,255,.09);
+  --bg-sel:rgba(10,132,255,.16);
+  --bg-danger:rgba(255,69,58,.16);
+  --bg-err:rgba(255,69,58,.10);
+  --track-bg:rgba(255,255,255,.08);
 
-  --r:20px; --rs:12px;
+  --bdr:rgba(255,255,255,.09);
+  --bhi:rgba(255,255,255,.17);
+  --bdr-accent:rgba(10,132,255,.32);
+  --bdr-err:rgba(255,69,58,.26);
 
-  --cpu:#9c9cff;
-  --gpu:#ffcc66;
-  --fan:#ff9c41;
-  --ssd:#cc99cc;
-  --ram:#f0a8a8;
-  --net:#66ccff;
+  --r:16px; --rs:9px;
 
-  --w1:#5ce0a0;
-  --w2:#ffcc66;
-  --w3:#ff9c41;
-  --w4:#ff6b4a;
-  --w5:#ff4136;
+  --cpu:#0A84FF;
+  --gpu:#32D74B;
+  --fan:#FF9F0A;
+  --ssd:#8280FF;
+  --ram:#BF5AF2;
+  --net:#64D2FF;
 
-  --meter:rgba(156,156,255,.55);
-  --dot-off-warn:rgba(242,239,233,.15);
-  --dot-off-meter:rgba(242,239,233,.10);
-  --spark-grid:rgba(204,153,204,.08);
-  --spark-vtick:rgba(204,153,204,.05);
+  --w1:#32D74B;
+  --w2:#FFD60A;
+  --w3:#FF9F0A;
+  --w4:#FF6961;
+  --w5:#FF453A;
 
-  --font-ui:"Antonio",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-  --font-num:"Share Tech Mono",ui-monospace,monospace;
-  --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
+  --meter:rgba(10,132,255,.50);
+  --dot-off-warn:rgba(234,234,236,.12);
+  --dot-off-meter:rgba(234,234,236,.07);
+  --spark-grid:rgba(255,255,255,.07);
+  --spark-vtick:rgba(255,255,255,.04);
+
+  --font-ui:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;
+  --font-num:"SF Mono","Menlo",ui-monospace,monospace;
+  --font-code:"SF Mono","Menlo","JetBrains Mono",ui-monospace,monospace;
 }`,
   },
 
@@ -417,60 +434,43 @@ const THEMES = {
 }`,
   },
 
-  "misty-metal": {
-    name: "Misty Metal",
-    swatches: ["#1E1E22", "#0A84FF", "#32D74B", "#FF9F0A", "#BF5AF2"],
+  "final-frontier": {
+    name: "Final Frontier",
+    swatches: ["#050507", "#9c9cff", "#ffcc66", "#ff9c41", "#cc99cc"],
     css: `:root{
-  --bg:#1E1E22;
-  --txt:#EAEAEC;
-  --txt-dim:#9A9AA2;
-  --txt-muted:#3A3A40;
-  --hot:#FF453A;
+  --bg:#050507;
+  --txt:#f2efe9;
+  --txt-dim:#b9afc7;
+  --txt-muted:#372f4a;
+  --hot:#ff4136;
 
-  --bg-bar:rgba(255,255,255,.045);
-  --bg-overlay:rgba(255,255,255,.035);
-  --bg-card:rgba(255,255,255,.045);
-  --bg-card-hdr:rgba(255,255,255,.035);
-  --bg-input:rgba(255,255,255,.06);
-  --bg-canvas:rgba(0,0,0,.22);
-  --bg-code:rgba(255,255,255,.07);
-  --bg-hover:rgba(255,255,255,.07);
-  --bg-hover-subtle:rgba(255,255,255,.035);
-  --bg-active:rgba(255,255,255,.09);
-  --bg-sel:rgba(10,132,255,.16);
-  --bg-danger:rgba(255,69,58,.16);
-  --bg-err:rgba(255,69,58,.10);
-  --track-bg:rgba(255,255,255,.08);
+  --bdr:rgba(153,153,255,.10);
+  --bhi:rgba(153,153,255,.20);
 
-  --bdr:rgba(255,255,255,.09);
-  --bhi:rgba(255,255,255,.17);
-  --bdr-accent:rgba(10,132,255,.32);
-  --bdr-err:rgba(255,69,58,.26);
+  --r:20px; --rs:12px;
 
-  --r:16px; --rs:9px;
+  --cpu:#9c9cff;
+  --gpu:#ffcc66;
+  --fan:#ff9c41;
+  --ssd:#cc99cc;
+  --ram:#f0a8a8;
+  --net:#66ccff;
 
-  --cpu:#0A84FF;
-  --gpu:#32D74B;
-  --fan:#FF9F0A;
-  --ssd:#8280FF;
-  --ram:#BF5AF2;
-  --net:#64D2FF;
+  --w1:#5ce0a0;
+  --w2:#ffcc66;
+  --w3:#ff9c41;
+  --w4:#ff6b4a;
+  --w5:#ff4136;
 
-  --w1:#32D74B;
-  --w2:#FFD60A;
-  --w3:#FF9F0A;
-  --w4:#FF6961;
-  --w5:#FF453A;
+  --meter:rgba(156,156,255,.55);
+  --dot-off-warn:rgba(242,239,233,.15);
+  --dot-off-meter:rgba(242,239,233,.10);
+  --spark-grid:rgba(204,153,204,.08);
+  --spark-vtick:rgba(204,153,204,.05);
 
-  --meter:rgba(10,132,255,.50);
-  --dot-off-warn:rgba(234,234,236,.12);
-  --dot-off-meter:rgba(234,234,236,.07);
-  --spark-grid:rgba(255,255,255,.07);
-  --spark-vtick:rgba(255,255,255,.04);
-
-  --font-ui:"SF Pro Display","SF Pro Text",-apple-system,BlinkMacSystemFont,"Inter",system-ui,sans-serif;
-  --font-num:"SF Mono","Menlo",ui-monospace,monospace;
-  --font-code:"SF Mono","Menlo","JetBrains Mono",ui-monospace,monospace;
+  --font-ui:"Antonio",-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-num:"Share Tech Mono",ui-monospace,monospace;
+  --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
 }`,
   },
 };

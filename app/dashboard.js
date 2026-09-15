@@ -1057,7 +1057,7 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
         const lvl =
           row.mode === "warn"
             ? warnLevel(row.sid, v)
-            : dutyLevel(getFanDuty(devices, slot));
+            : fanDotLevel(v, getFanDuty(devices, slot), row.sid);
         if (sd) {
           sd.innerHTML = makeDots(
             lvl,
@@ -1214,7 +1214,7 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
         const lvl =
           row.mode === "warn"
             ? warnLevel(row.sid, v)
-            : dutyLevel(getFanDuty(devices, slot));
+            : fanDotLevel(v, getFanDuty(devices, slot), row.sid);
         if (sd) {
           sd.innerHTML = makeDots(
             lvl,
@@ -1559,4 +1559,3 @@ class MultiSpark {
     }
   }
 }
-

@@ -447,10 +447,62 @@ function getSlotValue(devices, slot) {
   if (!ch) return undefined;
   return slot.field ? ch[slot.field] : (ch.rpm ?? ch.duty ?? ch.watts);
 }
+// Resolves a fan's duty% for meter dots / FAN AVG. CoolerControl mostly
+// reports rpm+duty as two fields on one channel object (liquidctl/smart
+// devices) — the direct lookup below covers that. Motherboard/hwmon fan
+// headers often split rpm and duty into genuinely separate channels
+// (sometimes under a different device uid entirely) with no reliable
+// naming convention to guess a pairing from — a previous attempt to
+// auto-match by shared index digits / stripped name words was unreliable
+// across hardware, so instead the picker asks, on every RPM assignment,
+// which duty channel (if any) belongs to the same physical fan — even
+// when one was auto-detected, since a same-named duty field isn't
+// always trustworthy. Explicit user choices always win over whatever
+// was auto-detected:
+//   1. slot.pairedDuty  — user-picked duty channel
+//   2. slot.manualMaxRpm — user-entered spec-sheet ceiling, synthesizes
+//      duty% as (rpm / max * 100); a real measurement, not a guess
+//   3. native duty on the same channel object (auto-detected)
+// Only fans with none of the three fall back to the RPM-relative
+// estimate in fanDotLevel() below, same idea as the sparkline's own
+// trackFanMax().
 function getFanDuty(devices, slot) {
   if (slot.kind !== "channel") return undefined;
+
+  if (slot.pairedDuty) {
+    const dev = devices.find((d) => d.uid === slot.pairedDuty.uid);
+    const ch = getLatest(dev)?.channels?.find(
+      (c) => c.name === slot.pairedDuty.name,
+    );
+    if (ch?.duty !== undefined) return ch.duty;
+  }
+
+  if (typeof slot.manualMaxRpm === "number" && slot.manualMaxRpm > 0) {
+    const rpm = getSlotValue(devices, slot);
+    if (typeof rpm === "number") {
+      return Math.max(0, Math.min(100, (rpm / slot.manualMaxRpm) * 100));
+    }
+  }
+
   const dev = devices.find((d) => d.uid === slot.uid);
-  return getLatest(dev)?.channels?.find((c) => c.name === slot.name)?.duty;
+  const native = getLatest(dev)?.channels?.find((c) => c.name === slot.name)
+    ?.duty;
+  if (native !== undefined) return native;
+
+  return undefined;
+}
+
+// Meter-dot level for a fan row. Real duty% (native channel or a
+// user-paired one via the picker) always wins when available; otherwise
+// this estimates intensity from how close the current RPM is to the
+// highest RPM seen so far this session for this row — sessionPeaks is
+// already tracked per-row by _trackPeak() on every render, so no
+// separate tracker is needed here.
+function fanDotLevel(v, duty, sid) {
+  if (typeof duty === "number") return dutyLevel(duty);
+  if (typeof v !== "number" || isNaN(v) || v <= 0) return 0;
+  const peak = Math.max(sessionPeaks[sid] ?? 0, v);
+  return Math.min(5, Math.max(1, Math.ceil((v / peak) * 5)));
 }
 
 // ── Chassis fan average — the custom rows a user adds to the Chassis
@@ -581,4 +633,3 @@ function setEditMode(on) {
   renderDashboard(liveDevices);
   requestAnimationFrame(() => autoResize());
 }
-
