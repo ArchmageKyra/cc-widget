@@ -194,7 +194,7 @@ function _buildSrRow(row, accentColor, dashStyle = "solid") {
   // Order: [accent] [lbl flex:1] [val] [unit] [dots]
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
-<span class="sr-lbl">${row.lbl}</span>
+<span class="sr-lbl">${esc(row.lbl)}</span>
 <span class="sr-val" id="sv-${row.sid}">--</span>
 <span class="sr-unit">${unit}</span>
 ${row.mode && getRowStyle(row) !== "num-only" ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;

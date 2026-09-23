@@ -156,9 +156,23 @@
                     </div>
                     <div class="theme-grid" id="theme-grid"></div>
 
-                    <div class="grp-hdr">Theme Editor</div>
+                    <details class="grp-details" id="theme-editor-details">
+                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
+                        <span>Theme Editor</span>
+                        <svg
+                            class="grp-hdr-arrow"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                        </svg>
+                    </summary>
 
-                    <div class="sub-hdr">Background &amp; Chrome</div>
+                    <div class="sub-hdr tb-group-hdr">Background &amp; Chrome</div>
                     <div class="tb-group">
                         <div class="tb-row">
                             <div class="tb-swatch" id="tbs-bg">
@@ -224,9 +238,10 @@
                         </div>
                     </div>
 
-                    <div class="sub-hdr">
-                        Warning Ramp
-                        <span class="th-sec-note">cool → critical</span>
+                    <div class="sub-hdr tb-group-hdr">
+                        <span>Warning Ramp
+                            <span class="th-sec-note">cool → critical</span>
+                        </span>
                     </div>
                     <div class="tb-group">
                         <div class="tb-warn-row">
@@ -257,7 +272,7 @@
                     </div>
 
                     <details class="tb-share">
-                        <summary class="sub-hdr tb-share-summary">
+                        <summary class="sub-hdr tb-group-hdr tb-share-summary">
                             <span>Share Theme</span>
                             <svg
                                 class="tb-share-arrow"
@@ -294,14 +309,30 @@
                             </div>
                         </div>
                     </details>
+                    </details>
 
-                    <div class="grp-hdr grp-hdr-row">
-                        <span>Connection</span>
-                        <span class="conn-status" id="conn-status" title="">
-                            <span class="sdot" id="conn-status-dot"></span>
-                            <span id="conn-status-text">—</span>
+                    <details class="grp-details" id="connection-details">
+                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
+                        <span class="grp-hdr-title-group">
+                            <span>Connection</span>
+                            <span class="grp-hdr-divider">|</span>
+                            <span class="conn-status" id="conn-status" title="">
+                                <span class="sdot" id="conn-status-dot"></span>
+                                <span id="conn-status-text">—</span>
+                            </span>
                         </span>
-                    </div>
+                        <svg
+                            class="grp-hdr-arrow"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                        </svg>
+                    </summary>
                     <div class="theme-conn">
                         <div class="field">
                             <label>Daemon URL</label>
@@ -309,17 +340,65 @@
                         </div>
                         <div class="field">
                             <label>Bearer Token</label>
-                            <input
-                                id="tc-tok"
-                                type="text"
-                                placeholder="cc_…"
-                                autocomplete="off"
-                                spellcheck="false"
-                            />
+                            <div class="tok-field">
+                                <input
+                                    id="tc-tok"
+                                    type="password"
+                                    placeholder="cc_…"
+                                    autocomplete="off"
+                                    spellcheck="false"
+                                />
+                                <button
+                                    class="tok-eye"
+                                    id="tc-tok-eye"
+                                    type="button"
+                                    title="Show token"
+                                ></button>
+                            </div>
                         </div>
                     </div>
+                    </details>
 
-                    <div class="grp-hdr">Demo Mode</div>
+                    <div class="grp-hdr">Backup</div>
+                    <div class="btn-row">
+                        <button
+                            class="btn btn-s btn-neutral-hover"
+                            id="btn-export-settings"
+                            title="Save your theme, layout, and window position to a file"
+                        >
+                            Export Settings
+                        </button>
+                        <button
+                            class="btn btn-s btn-neutral-hover"
+                            id="btn-import-settings"
+                            title="Load theme, layout, and window position from a file"
+                        >
+                            Import Settings
+                        </button>
+                    </div>
+
+                    <div class="grp-hdr">Danger Zone</div>
+                    <button class="btn btn-s" id="btn-reset-drawer">
+                        Reset Widget
+                    </button>
+
+                    <details class="grp-details" id="dev-mode-details">
+                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
+                        <span>Dev Mode</span>
+                        <svg
+                            class="grp-hdr-arrow"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                        </svg>
+                    </summary>
+
+                    <div class="sub-hdr">Demo Mode</div>
                     <div class="theme-conn">
                         <div class="field">
                             <label>Scenario</label>
@@ -330,7 +409,7 @@
                         </button>
                     </div>
 
-                    <div class="grp-hdr">Danger Zone</div>
+                    <div class="sub-hdr">First-Launch Simulation</div>
                     <button
                         class="btn btn-s btn-neutral-hover"
                         id="btn-soft-reset-drawer"
@@ -338,9 +417,7 @@
                     >
                         Simulate First Launch
                     </button>
-                    <button class="btn btn-s" id="btn-reset-drawer">
-                        Reset Widget
-                    </button>
+                    </details>
                 </div>
             </div>
 
@@ -391,12 +468,21 @@
                             viewBox="0 0 12 12"
                             fill="none"
                             stroke="currentColor"
-                            stroke-width="1.5"
-                            stroke-linecap="round"
+                            stroke-linecap="butt"
                             stroke-linejoin="round"
                         >
-                            <path d="M9 1.5l1.5 1.5-7 7L1 11l1-2.5 7-7z" />
-                            <line x1="8" y1="2.5" x2="9.5" y2="4" />
+                            <circle cx="6" cy="6" r="3" stroke-width="1" />
+                            <circle cx="6" cy="6" r="1" stroke-width="1" />
+                            <g stroke-width="1.3">
+                                <line x1="6" y1="2.5" x2="6" y2="1.5" />
+                                <line x1="6" y1="9.5" x2="6" y2="10.5" />
+                                <line x1="2.5" y1="6" x2="1.5" y2="6" />
+                                <line x1="9.5" y1="6" x2="10.5" y2="6" />
+                                <line x1="3.7" y1="3.7" x2="3" y2="3" />
+                                <line x1="8.3" y1="8.3" x2="9" y2="9" />
+                                <line x1="8.3" y1="3.7" x2="9" y2="3" />
+                                <line x1="3.7" y1="8.3" x2="3" y2="9" />
+                            </g>
                         </svg>
                     </button>
                     <button
@@ -430,6 +516,41 @@
                             <line x1="10" y1="2" x2="2" y2="10" />
                         </svg>
                     </button>
+                </div>
+            </div>
+
+            <!-- ── Generic text-input modal (replaces native prompt()) ──────
+                 Shared by any "type a short string" flow — row rename, a
+                 folder's display label, manual max-RPM entry, etc. Wired up
+                 by showTextPrompt() in state.js. -->
+            <div id="text-modal" class="text-modal-overlay hide">
+                <div class="text-modal-box">
+                    <div class="text-modal-title" id="text-modal-title"></div>
+                    <div class="field">
+                        <label id="text-modal-label"></label>
+                        <input
+                            id="text-modal-input"
+                            type="text"
+                            autocomplete="off"
+                            spellcheck="false"
+                        />
+                    </div>
+                    <div
+                        class="text-modal-error"
+                        id="text-modal-error"
+                        hidden
+                    ></div>
+                    <div class="btn-row">
+                        <button
+                            class="btn btn-s btn-neutral-hover"
+                            id="text-modal-cancel"
+                        >
+                            Cancel
+                        </button>
+                        <button class="btn btn-p" id="text-modal-ok">
+                            OK
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

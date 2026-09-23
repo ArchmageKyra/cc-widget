@@ -475,18 +475,120 @@ def on_message(_manager, result) -> None:
 
             _anchor_corner = corner
 
-            with open(WINDOW_POS_FILE, "w") as file:
-                json.dump(
-                    {
-                        "x": anchor_x,
-                        "y": anchor_y,
-                        "corner": corner,
-                    },
-                    file,
-                )
+            _write_window_position(anchor_x, anchor_y, corner)
 
         except Exception as exc:
             print("Anchor error:", exc)
+
+        return
+
+    # ------------------------------------------------------------------------
+    # Folder picker (native GTK dialog, replaces the old prompt()-based
+    # free-text path entry)
+    # ------------------------------------------------------------------------
+
+    if message == "pick-folder":
+        path = _choose_folder_path()
+        if not path:
+            return
+
+        javascript = (
+            "if(window.onFolderPicked)"
+            f"window.onFolderPicked({json.dumps(path)})"
+        )
+        webview.evaluate_javascript(javascript, -1, None, None)
+
+        return
+
+    # ------------------------------------------------------------------------
+    # Settings export / import
+    #
+    # JS holds the "ccm" config blob in memory (it's what's in
+    # localStorage); Python holds window_pos.json. Export merges both
+    # into one file; import reverses that — write window_pos.json back
+    # via the same atomic helper the app itself uses, reposition the
+    # live window immediately, then hand the ccm blob back to JS to
+    # write into localStorage and reload.
+    # ------------------------------------------------------------------------
+
+    if message.startswith("export-settings:"):
+        try:
+            ccm = json.loads(message.split(":", 1)[1])
+        except Exception as exc:
+            print("Export parse error:", exc)
+            return
+
+        path = _choose_export_path()
+        if not path:
+            return
+
+        bundle = {
+            "export_version": 1,
+            "ccm": ccm,
+            "window_pos": load_window_position(),
+        }
+
+        try:
+            tmp_path = path + ".tmp"
+            with open(tmp_path, "w") as file:
+                json.dump(bundle, file, indent=2)
+            os.replace(tmp_path, path)
+        except Exception as exc:
+            print("Export write error:", exc)
+            _js_alert("Couldn't save the settings file — see the terminal for details.")
+
+        return
+
+    if message == "import-settings":
+        path = _choose_import_path()
+        if not path:
+            return
+
+        try:
+            with open(path, "r") as file:
+                bundle = json.load(file)
+        except Exception as exc:
+            print("Import read error:", exc)
+            _js_alert("Couldn't read that file.")
+            return
+
+        if not isinstance(bundle, dict) or "ccm" not in bundle:
+            _js_alert("That doesn't look like a cc-widget settings file.")
+            return
+
+        win_pos = bundle.get("window_pos")
+        if isinstance(win_pos, dict):
+            x = win_pos.get("x", 1500)
+            y = win_pos.get("y", 50)
+            corner = win_pos.get("corner")
+            if corner not in ANCHOR_CORNERS:
+                corner = None
+
+            _write_window_position(x, y, corner)
+            _anchor_corner = corner
+
+            try:
+                width, height = win.get_size()
+
+                if corner:
+                    new_x, new_y = position_from_anchor(corner, x, y, width, height)
+                else:
+                    new_x, new_y = x, y
+
+                def reposition_window(width=width, height=height, x=new_x, y=new_y):
+                    _apply_geometry(width, height, x, y)
+                    return False
+
+                GLib.idle_add(reposition_window)
+
+            except Exception as exc:
+                print("Import reposition error:", exc)
+
+        javascript = (
+            "if(window.onSettingsImported)"
+            f"window.onSettingsImported({json.dumps(bundle['ccm'])})"
+        )
+        webview.evaluate_javascript(javascript, -1, None, None)
 
         return
 
@@ -705,6 +807,129 @@ def push_stats() -> bool:
 # Window position persistence
 # ============================================================================
 
+def _write_window_position(x: int, y: int, corner) -> None:
+    """
+    Atomically write the window position/anchor file.
+
+    Writes to a temp file in the same directory then renames it into
+    place — os.replace() is an atomic operation on POSIX, so a crash or
+    kill mid-write leaves either the old file or the new one intact,
+    never a truncated/corrupt one.
+    """
+
+    tmp_path = WINDOW_POS_FILE + ".tmp"
+
+    with open(tmp_path, "w") as file:
+        json.dump({"x": x, "y": y, "corner": corner}, file)
+
+    os.replace(tmp_path, WINDOW_POS_FILE)
+
+
+def _choose_export_path() -> str:
+    """Native 'Save As' dialog for exporting settings. Returns a path,
+    or None if the user cancelled."""
+
+    dialog = Gtk.FileChooserDialog(
+        title="Export Settings",
+        parent=win,
+        action=Gtk.FileChooserAction.SAVE,
+    )
+    dialog.add_buttons(
+        "_Cancel",
+        Gtk.ResponseType.CANCEL,
+        "_Save",
+        Gtk.ResponseType.OK,
+    )
+    dialog.set_current_name("cc-widget-settings.json")
+    dialog.set_do_overwrite_confirmation(True)
+
+    json_filter = Gtk.FileFilter()
+    json_filter.set_name("JSON files")
+    json_filter.add_pattern("*.json")
+    dialog.add_filter(json_filter)
+
+    path = None
+    if dialog.run() == Gtk.ResponseType.OK:
+        path = dialog.get_filename()
+        if path and not path.endswith(".json"):
+            path += ".json"
+
+    dialog.destroy()
+    return path
+
+
+def _choose_import_path() -> str:
+    """Native 'Open' dialog for importing settings. Returns a path,
+    or None if the user cancelled."""
+
+    dialog = Gtk.FileChooserDialog(
+        title="Import Settings",
+        parent=win,
+        action=Gtk.FileChooserAction.OPEN,
+    )
+    dialog.add_buttons(
+        "_Cancel",
+        Gtk.ResponseType.CANCEL,
+        "_Open",
+        Gtk.ResponseType.OK,
+    )
+
+    json_filter = Gtk.FileFilter()
+    json_filter.set_name("JSON files")
+    json_filter.add_pattern("*.json")
+    dialog.add_filter(json_filter)
+
+    path = None
+    if dialog.run() == Gtk.ResponseType.OK:
+        path = dialog.get_filename()
+
+    dialog.destroy()
+    return path
+
+
+def _choose_folder_path() -> str:
+    """Native 'select folder' dialog for the folder-size watch feature.
+    Returns an absolute path, or None if the user cancelled. GTK's
+    SELECT_FOLDER mode only ever returns a real, existing directory —
+    there's no equivalent of a typo'd free-text path to validate."""
+
+    dialog = Gtk.FileChooserDialog(
+        title="Select Folder to Monitor",
+        parent=win,
+        action=Gtk.FileChooserAction.SELECT_FOLDER,
+    )
+    dialog.add_buttons(
+        "_Cancel",
+        Gtk.ResponseType.CANCEL,
+        "_Select",
+        Gtk.ResponseType.OK,
+    )
+
+    path = None
+    if dialog.run() == Gtk.ResponseType.OK:
+        path = dialog.get_filename()
+
+    dialog.destroy()
+    return path
+
+
+def _js_alert(text: str) -> None:
+    """Fire a JS alert() in the webview — reuses the app's existing
+    alert() idiom (already used for a couple of other drawer validation
+    messages) instead of introducing a second, GTK-native error-dialog
+    pattern just for this."""
+
+    if webview is None:
+        return
+
+    webview.evaluate_javascript(
+        f"alert({json.dumps(text)})",
+        -1,
+        None,
+        None,
+    )
+
+
 def load_window_position() -> dict:
     """Load the last saved window position and anchor configuration."""
 
@@ -755,15 +980,7 @@ def save_window_position() -> None:
         else:
             save_x, save_y = x, y
 
-        with open(WINDOW_POS_FILE, "w") as file:
-            json.dump(
-                {
-                    "x": save_x,
-                    "y": save_y,
-                    "corner": _anchor_corner,
-                },
-                file,
-            )
+        _write_window_position(save_x, save_y, _anchor_corner)
 
     except Exception:
         # Window destruction/configuration can race with position saving.

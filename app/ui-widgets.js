@@ -425,8 +425,12 @@ function _renderCustomRowSection(def, container) {
         if (seg) items.push(seg);
         items.push({
           label: "Rename",
-          onClick: () => {
-            const nl = prompt("Label:", row.lbl);
+          onClick: async () => {
+            const nl = await showTextPrompt({
+              title: "Rename Row",
+              label: "Label",
+              defaultValue: row.lbl,
+            });
             if (nl && nl.trim()) {
               row.lbl = nl.trim();
               saveCfg();
@@ -441,19 +445,20 @@ function _renderCustomRowSection(def, container) {
           items.push({
             label: "Change path…",
             onClick: () => {
-              const newPath = prompt("Folder path:", row.path);
-              if (!newPath?.trim() || newPath.trim() === row.path) return;
-              row.path = newPath.trim();
-              cfg.slots[row.sid] = {
-                ...cfg.slots[row.sid],
-                name: `Folder ${row.path}`,
-                label: `Folder: ${row.path}`,
-              };
-              saveCfg();
-              _sendFolderPaths();
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
+              pickFolder((newPath) => {
+                if (newPath === row.path) return;
+                row.path = newPath;
+                cfg.slots[row.sid] = {
+                  ...cfg.slots[row.sid],
+                  name: `Folder ${newPath}`,
+                  label: `Folder: ${newPath}`,
+                };
+                saveCfg();
+                _sendFolderPaths();
+                buildCards();
+                renderDashboard(liveDevices);
+                requestAnimationFrame(() => autoResize());
+              });
             },
           });
         } else {
@@ -650,60 +655,64 @@ function openPicker(
     const folderOpt = el("div", "picker-add");
     folderOpt.textContent = "+ Monitor folder path…";
     folderOpt.onclick = () => {
-      const rawPath = prompt("Folder path to monitor:", "/home");
-      if (!rawPath?.trim()) return;
-      const path = rawPath.trim();
-      const defaultLbl = path === "/" ? "root" : path.split("/").pop() || path;
-      const rawLbl = prompt("Label:", defaultLbl);
-      if (rawLbl === null) return; // user cancelled
-      const lbl = rawLbl.trim() || defaultLbl;
+      pickFolder(async (path) => {
+        const defaultLbl =
+          path === "/" ? "root" : path.split("/").pop() || path;
+        const rawLbl = await showTextPrompt({
+          title: "Label This Folder",
+          label: "Label",
+          defaultValue: defaultLbl,
+        });
+        if (rawLbl === null) return; // user cancelled
+        const lbl = rawLbl.trim() || defaultLbl;
 
-      const slot = {
-        uid: "linux-system",
-        kind: "channel",
-        name: `Folder ${path}`,
-        field: "watts",
-        unit: "GB",
-        dLbl: "Linux",
-        label: `Folder: ${path}`,
-      };
-
-      if (newRowCard) {
-        // Creating a brand-new custom row
-        const sid = `custom_${newRowCard}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-        const row = {
-          sid,
-          lbl,
-          noPlot: true,
-          custom: true,
-          kind: "folder",
-          path,
+        const slot = {
+          uid: "linux-system",
+          kind: "channel",
+          name: `Folder ${path}`,
+          field: "watts",
+          unit: "GB",
+          dLbl: "Linux",
+          label: `Folder: ${path}`,
         };
-        cfg.customRows ??= {};
-        (cfg.customRows[newRowCard] ??= []).push(row);
-        cfg.rowOrder ??= {};
-        (cfg.rowOrder[newRowCard] ??= []).push(sid);
-        cfg.slots[sid] = slot;
-      } else {
-        // Remapping an existing custom row
-        cfg.slots[slotId] = slot;
-        // Mark the row as a folder row and record its path
-        for (const rows of Object.values(cfg.customRows ?? {})) {
-          const r = rows.find((x) => x.sid === slotId);
-          if (r) {
-            r.kind = "folder";
-            r.path = path;
-            break;
+
+        if (newRowCard) {
+          // Creating a brand-new custom row
+          const sid = `custom_${newRowCard}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+          const row = {
+            sid,
+            lbl,
+            noPlot: true,
+            custom: true,
+            kind: "folder",
+            path,
+          };
+          cfg.customRows ??= {};
+          (cfg.customRows[newRowCard] ??= []).push(row);
+          cfg.rowOrder ??= {};
+          (cfg.rowOrder[newRowCard] ??= []).push(sid);
+          cfg.slots[sid] = slot;
+        } else {
+          // Remapping an existing custom row
+          cfg.slots[slotId] = slot;
+          // Mark the row as a folder row and record its path
+          for (const rows of Object.values(cfg.customRows ?? {})) {
+            const r = rows.find((x) => x.sid === slotId);
+            if (r) {
+              r.kind = "folder";
+              r.path = path;
+              break;
+            }
           }
         }
-      }
 
-      saveCfg();
-      closePicker();
-      _sendFolderPaths();
-      buildCards();
-      renderDashboard(liveDevices);
-      requestAnimationFrame(() => autoResize());
+        saveCfg();
+        closePicker();
+        _sendFolderPaths();
+        buildCards();
+        renderDashboard(liveDevices);
+        requestAnimationFrame(() => autoResize());
+      });
     };
     body.appendChild(folderOpt);
   }
@@ -762,17 +771,17 @@ function openDutyPairingStep(targetSid, hasNativeDuty) {
 
   const manual = el("div", "picker-add");
   manual.textContent = "+ Enter max RPM manually";
-  manual.onclick = () => {
-    const raw = prompt(
-      "Max RPM for this fan at 100% duty (e.g. from its spec sheet):",
-      "",
-    );
+  manual.onclick = async () => {
+    const raw = await showTextPrompt({
+      title: "Manual Max RPM",
+      label: "Max RPM at 100% duty (e.g. from its spec sheet)",
+      validate: (v) => {
+        const n = parseFloat(v);
+        return Number.isFinite(n) && n > 0 ? null : "Enter a positive number.";
+      },
+    });
     if (raw === null) return; // cancelled — stay on this step
     const max = parseFloat(raw);
-    if (!Number.isFinite(max) || max <= 0) {
-      alert("Enter a positive number.");
-      return;
-    }
     clearOverrides();
     cfg.slots[targetSid].manualMaxRpm = max;
     saveCfg();

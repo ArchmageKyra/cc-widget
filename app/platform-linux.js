@@ -44,6 +44,23 @@ function gtksend(msg) {
   } catch {}
 }
 
+// Folder-picker round trip: ask Python to pop a native GTK "select
+// folder" dialog, and get the chosen path back via onFolderPicked().
+// A single pending-callback slot is enough — the GTK dialog is modal,
+// so there's never more than one pick in flight at a time.
+let _pendingFolderPick = null;
+
+function pickFolder(onPicked) {
+  _pendingFolderPick = onPicked;
+  gtksend("pick-folder");
+}
+
+window.onFolderPicked = function (path) {
+  const cb = _pendingFolderPick;
+  _pendingFolderPick = null;
+  if (path && cb) cb(path);
+};
+
 document.getElementById("bb-x").onclick = () => gtksend("close");
 document.getElementById("bb-pin").onclick = () => {
   pinned = !pinned;
@@ -313,11 +330,10 @@ function onSSEPacket(payload) {
       });
     });
 
-    // Update gear button state after screen transition
+    // Sync gear button's active state after screen transition
     requestAnimationFrame(() => {
       const btn = document.getElementById("bb-cfg");
       if (btn) {
-        btn.innerHTML = editMode ? _ICON_CHECK : _ICON_PENCIL;
         btn.classList.toggle("on", editMode);
       }
       if (editMode) document.getElementById("cards")?.classList.add("editing");
@@ -496,4 +512,3 @@ function autoResize(force = false) {
   const h = contentH + sbarH + borders;
   gtksend("resize:" + w + ":" + h);
 }
-

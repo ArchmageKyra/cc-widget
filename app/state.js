@@ -307,6 +307,76 @@ const el = (tag, cls = "") => {
 const cssVar = (v) =>
   getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// In-app replacement for the browser's native prompt() — styled to
+// match the drawer instead of popping an OS-chrome dialog. Returns a
+// Promise resolving to the entered string, or null if cancelled.
+// `validate(value)`, if given, returns an error string to keep the
+// modal open with that message, or a falsy value to accept.
+function showTextPrompt({
+  title = "",
+  label = "",
+  defaultValue = "",
+  placeholder = "",
+  validate = null,
+} = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("text-modal");
+    const titleEl = document.getElementById("text-modal-title");
+    const labelEl = document.getElementById("text-modal-label");
+    const input = document.getElementById("text-modal-input");
+    const errorEl = document.getElementById("text-modal-error");
+    const okBtn = document.getElementById("text-modal-ok");
+    const cancelBtn = document.getElementById("text-modal-cancel");
+
+    titleEl.textContent = title;
+    labelEl.textContent = label;
+    input.value = defaultValue;
+    input.placeholder = placeholder;
+    errorEl.hidden = true;
+    errorEl.textContent = "";
+
+    const cleanup = () => {
+      overlay.classList.add("hide");
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      overlay.onclick = null;
+      input.onkeydown = null;
+    };
+
+    const submit = () => {
+      const value = input.value;
+      const err = validate?.(value);
+      if (err) {
+        errorEl.textContent = err;
+        errorEl.hidden = false;
+        return;
+      }
+      cleanup();
+      resolve(value);
+    };
+
+    const cancel = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    okBtn.onclick = submit;
+    cancelBtn.onclick = cancel;
+    // Click-outside-to-cancel, same as dismissing a native dialog.
+    overlay.onclick = (e) => {
+      if (e.target === overlay) cancel();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === "Enter") submit();
+      if (e.key === "Escape") cancel();
+    };
+
+    overlay.classList.remove("hide");
+    input.focus();
+    input.select();
+  });
+}
 const fmt1 = (v, u) =>
   typeof v !== "number"
     ? "--"
@@ -605,11 +675,6 @@ const shortLabel = (lbl) => (lbl ? lbl.split("→").pop().trim() : "");
 // ═══════════════════════════════════════════════════════════════
 //  EDIT MODE
 // ═══════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════
-//  EDIT MODE
-// ═══════════════════════════════════════════════════════════════
-const _ICON_PENCIL = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 1.5l1.5 1.5-7 7L1 11l1-2.5 7-7z"/><line x1="8" y1="2.5" x2="9.5" y2="4"/></svg>`;
-const _ICON_CHECK = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,6 4.5,9.5 10.5,2.5"/></svg>`;
 // Chevron points the way the card will move: up = "click to collapse"
 // (expanded now), down = "click to expand" (collapsed now).
 const _ICON_CHEVRON_UP = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2.5,7.5 6,4 9.5,7.5"/></svg>`;
@@ -617,11 +682,17 @@ const _ICON_CHEVRON_DOWN = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none"
 // Bulk collapse/expand-all button — same up/down language, doubled.
 const _ICON_CHEVRON_ALL_UP = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,5 6,2 10,5"/><polyline points="2,9.5 6,6.5 10,9.5"/></svg>`;
 const _ICON_CHEVRON_ALL_DOWN = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,2.5 6,5.5 10,2.5"/><polyline points="2,7 6,10 10,7"/></svg>`;
+// Token-field visibility toggle. _ICON_EYE = masked (click to reveal),
+// _ICON_EYE_OFF = revealed (click to mask again) — a slash rather than
+// a color change, since a password field has no accent-highlight
+// state of its own the way a toolbar button does (see bb-cfg/bb-pin/
+// bb-lock, which all just recolor via .on instead of swapping icons).
+const _ICON_EYE = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6c1.4-2.6 3.2-3.9 5-3.9s3.6 1.3 5 3.9c-1.4 2.6-3.2 3.9-5 3.9S2.4 8.6 1 6z"/><circle cx="6" cy="6" r="1.4"/></svg>`;
+const _ICON_EYE_OFF = `<svg class="bb-icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M1 6c1.4-2.6 3.2-3.9 5-3.9s3.6 1.3 5 3.9c-1.4 2.6-3.2 3.9-5 3.9S2.4 8.6 1 6z"/><circle cx="6" cy="6" r="1.4"/><line x1="1.3" y1="1.3" x2="10.7" y2="10.7"/></svg>`;
 function setEditMode(on) {
   editMode = on;
   const btn = document.getElementById("bb-cfg");
   if (btn) {
-    btn.innerHTML = on ? _ICON_CHECK : _ICON_PENCIL;
     btn.classList.toggle("on", on);
   }
   document.getElementById("cards")?.classList.toggle("editing", on);

@@ -300,6 +300,39 @@ body {
     border-color: var(--bdr-accent);
     box-shadow: 0 0 0 3px var(--bg-sel);
 }
+/* Token field's show/hide toggle — sits inside the input's own box
+   rather than beside it, so the field doesn't visually grow relative
+   to every other .field input in this panel. */
+.tok-field {
+    position: relative;
+}
+.tok-field input {
+    padding-right: 30px;
+}
+.tok-eye {
+    position: absolute;
+    top: 50%;
+    right: 3px;
+    transform: translateY(-50%);
+    width: 21px;
+    height: 21px;
+    background: none;
+    border: none;
+    color: var(--txt-dim);
+    opacity: 0.55;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition:
+        opacity 0.12s,
+        color 0.12s;
+}
+.tok-eye:hover {
+    opacity: 1;
+    color: var(--txt);
+}
 /* First-run attention flash on the token field — draws the eye to
    where a new user actually needs to act, a few pulses then settles. */
 @keyframes token-flash {
@@ -364,6 +397,19 @@ body {
     background: var(--bg-hover);
     color: var(--txt);
     border-color: var(--bhi);
+}
+/* Side-by-side pair of .btn-s buttons (Export/Import Settings) — .btn-s
+   is width:100% by default for the normal stacked case, so this row
+   overrides that to split the space evenly instead. */
+.btn-row {
+    display: flex;
+    gap: 8px;
+}
+.btn-row .btn-s,
+.btn-row .btn-p {
+    width: auto;
+    flex: 1;
+    margin-top: 0;
 }
 .btn.hide {
     display: none;
@@ -1241,8 +1287,10 @@ body {
 /* ── Theme screen ──────────────────────────────────────────── */
 /* Two-tier header hierarchy for the settings drawer.
    .grp-hdr  — top-level sections (Size, Window Position, Theme,
-               Theme Editor, Connection, Danger Zone). Brighter,
-               bottom-ruled.
+               Theme Editor, Connection, Backup, Danger Zone, Dev
+               Mode). Brighter, bottom-ruled. Theme Editor, Connection,
+               and Dev Mode are collapsible (.grp-details/
+               .grp-hdr-toggle below) — everything else stays flat.
    .sub-hdr  — sub-groups nested *inside* one grp-hdr (e.g. Background
                & Chrome / Warning Ramp / CSS all live under one
                "Theme Editor" grp-hdr). Dimmer, no rule, tighter margin —
@@ -1267,10 +1315,78 @@ body {
     align-items: center;
     justify-content: space-between;
 }
+/* Collapsible top-level sections (Theme Editor, Dev Mode) — a plain
+   <details>/<summary> so the collapse behavior is free, but the
+   summary keeps the exact same look as every non-collapsible .grp-hdr
+   (just with a click target and an arrow) rather than adopting the
+   separate boxed-chip look .tb-share uses one level down.
+
+   The gap above a collapsible section is set here, on .grp-details
+   itself, rather than left to the summary's own .grp-hdr top margin —
+   a <summary>'s margin collapsing through its <details> parent isn't
+   consistent across engines, and here it was rendering visibly
+   tighter than a plain .grp-hdr's gap. Setting it explicitly and
+   zeroing the summary's own top margin makes the gap a fixed
+   property of the block instead of something that depends on
+   collapse behavior. */
+.grp-details {
+    margin-top: 15px;
+}
+.grp-details > .grp-hdr-toggle {
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+    margin-top: 0;
+}
+.grp-details > .grp-hdr-toggle::-webkit-details-marker {
+    display: none;
+}
+.grp-hdr-arrow {
+    width: 11px;
+    height: 11px;
+    color: var(--txt-dim);
+    flex-shrink: 0;
+    transition: transform 0.15s;
+}
+.grp-details[open] > .grp-hdr-toggle .grp-hdr-arrow {
+    transform: rotate(180deg);
+}
+.grp-hdr-toggle:hover .grp-hdr-arrow {
+    color: var(--txt);
+}
 .grp-hdr-actions {
     display: flex;
     gap: 2px;
     margin-left: 8px;
+}
+/* Groups a header's title with inline meta content (currently just
+   Connection's status dot+text) so they move together as one flex
+   item, leaving the caret as the only thing pinned to the far right —
+   keeps "Live" readable right after the label instead of stranded
+   next to the arrow with nothing tying it to what it's reporting on. */
+.grp-hdr-title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.grp-hdr-divider {
+    color: var(--txt-dim);
+    opacity: 0.45;
+    font-weight: 400;
+}
+/* A lone full-width button (Reset Widget) directly followed by the
+   next section header is the one spot in this drawer where the
+   standard 15px gap reads as too tight — its unbroken border spans
+   almost the full panel width right up against the header text,
+   unlike a .btn-row pair which breaks that line up. Verified this is
+   the *only* boundary shaped like this today; if that changes, this
+   rule naturally covers any new case with the same shape too. */
+.btn-s + .grp-hdr,
+.btn-s + .grp-details,
+.btn-p + .grp-hdr,
+.btn-p + .grp-details {
+    margin-top: 22px;
 }
 .grp-hdr-icon-btn {
     background: none;
@@ -1427,12 +1543,29 @@ body {
 }
 
 /* ── Theme Builder groups ─────────────────────────────────────
-   Background & Chrome / Warning Ramp / Custom CSS all live together
-   under one "Theme Editor" .grp-hdr, each introduced by a lighter
-   .sub-hdr — one flat, consistently-styled container per group, same
-   border/radius/fill as every other selectable-option surface in the
-   drawer (.anchor-btn, .theme-tile), so nothing here reads as a
-   separate, older sub-panel. */
+   Background & Chrome / Warning Ramp / Share Theme all live together
+   under one "Theme Editor" .grp-hdr. Each one's own header is the top
+   edge of its box, not a floating label above a separate box — same
+   merged-header language for all three, Share Theme included, so
+   nothing here reads as an older, less-finished sub-panel than the
+   rest of the drawer. */
+.tb-group-hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin: 10px 0 0;
+    padding: 7px 9px;
+    border: 1px solid var(--bdr);
+    border-radius: var(--rs) var(--rs) 0 0;
+    border-bottom: none;
+    background: var(--bg-hover-subtle);
+}
+/* The box below sits flush against its header, sharing one seam
+   instead of doubling the border there. */
+.tb-group-hdr + .tb-group {
+    margin-top: -1px;
+    border-radius: 0 0 var(--rs) var(--rs);
+}
 .tb-group {
     border: 1px solid var(--bdr);
     border-radius: var(--rs);
@@ -1647,18 +1780,21 @@ body {
 .tb-share {
     margin-bottom: 4px;
 }
+/* Everything Share Theme's summary has in common with Background &
+   Chrome / Warning Ramp's headers (border, radius, padding, bg, the
+   flex layout) comes from .tb-group-hdr. This only adds what's
+   actually different here: it's clickable, and — unlike the other
+   two, which always have their box visible right below — closed it
+   has no box below at all, so closed it needs to look like a
+   complete standalone box (all four corners, full border) rather
+   than a header with its bottom edge cut off. */
 .tb-share-summary {
     cursor: pointer;
     list-style: none;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     user-select: none;
-    margin: 10px 0 0;
-    padding: 7px 9px;
-    border: 1px solid var(--bdr);
     border-radius: var(--rs);
-    background: var(--bg-hover-subtle);
+    border-bottom: 1px solid var(--bdr);
+    padding-bottom: 7px;
     transition:
         background 0.12s,
         border-color 0.12s;
@@ -1701,13 +1837,45 @@ body {
     width: auto;
     margin-top: 0;
 }
-/* Body sits directly under the open summary — square off its top
-   corners and pull it flush (no double border/gap at the shared seam)
-   so the two pieces read as one continuous box. */
-.tb-share[open] .tb-group-css {
-    margin-top: -1px;
-    border-radius: 0 0 var(--rs) var(--rs);
+
+/* ── Generic text-input modal (replaces native prompt()) ──────
+   Small centered dialog instead of the full-panel .picker-overlay —
+   this is a one-field yes/no interaction, not a browsing UI. Reuses
+   .field/.field input for the input itself (see monitor.html) rather
+   than redefining input styling a second time. */
+.text-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
+.text-modal-overlay.hide {
+    display: none;
+}
+.text-modal-box {
+    width: 230px;
+    background: var(--bg);
+    border: 1px solid var(--bdr);
+    border-radius: var(--r);
+    padding: 14px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+}
+.text-modal-title {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--txt);
+    margin-bottom: 10px;
+}
+.text-modal-error {
+    font-size: 10px;
+    color: var(--hot);
+    margin: -4px 0 8px;
+    line-height: 1.4;
+}
+
 
 /* ── Dashboard ─────────────────────────────────────────────── */
 .cards {
