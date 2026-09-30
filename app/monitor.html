@@ -104,6 +104,9 @@
             <!-- ── Settings drawer (pops out to the right of the dashboard) ── -->
             <div id="drawer">
                 <div class="drawer-inner">
+                    <div class="zone-hdr">Appearance</div>
+                    <div class="zone-group">
+
                     <div class="grp-hdr" style="margin-top: 3px">Size</div>
                     <div class="size-seg" id="size-btns"></div>
 
@@ -156,160 +159,181 @@
                     </div>
                     <div class="theme-grid" id="theme-grid"></div>
 
-                    <details class="grp-details" id="theme-editor-details">
-                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
-                        <span>Theme Editor</span>
-                        <svg
-                            class="grp-hdr-arrow"
-                            viewBox="0 0 12 12"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.7"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        >
-                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
-                        </svg>
-                    </summary>
-
-                    <div class="sub-hdr tb-group-hdr">Background &amp; Chrome</div>
-                    <div class="tb-group">
-                        <div class="tb-row">
-                            <div class="tb-swatch" id="tbs-bg">
-                                <input type="color" data-var="--bg" />
-                            </div>
-                            <span class="tb-lbl">Background</span>
-                            <span
-                                class="tb-wcag-pill"
-                                tabindex="0"
-                                title="WCAG = Web Content Accessibility Guidelines. The badges below measure each text color's contrast against this background — AA needs ≥4.5:1 for body text, ≥3:1 for large text or UI."
-                                >WCAG</span
-                            >
-                            <span class="tb-hex" id="tbh-bg"></span>
+                    <!-- Theme Editor is not a section of its own — it's
+                         whatever "Custom…" above actually is, so it only
+                         renders when Custom is the active tile (see the
+                         theme-tile click handlers in app-modes.js). No
+                         header of its own: the Theme grid above already
+                         says what this is. -->
+                    <div id="theme-editor-inline" class="hide">
+                        <div class="sub-hdr tb-group-hdr">
+                            Background &amp; Chrome
                         </div>
-                        <div class="tb-row">
-                            <div class="tb-swatch" id="tbs-txt">
-                                <input type="color" data-var="--txt" />
-                            </div>
-                            <span class="tb-lbl">Primary text</span>
-                            <span class="tb-contrast" id="tbc-txt"></span>
-                            <span class="tb-hex" id="tbh-txt"></span>
-                        </div>
-                        <div class="tb-row">
-                            <div class="tb-swatch" id="tbs-txt-dim">
-                                <input
-                                    type="color"
-                                    data-var="--txt-dim"
-                                />
-                            </div>
-                            <span class="tb-lbl">Secondary text</span>
-                            <span
-                                class="tb-contrast"
-                                id="tbc-txt-dim"
-                            ></span>
-                            <span
-                                class="tb-hex"
-                                id="tbh-txt-dim"
-                            ></span>
-                        </div>
-                        <div class="tb-row">
-                            <div class="tb-swatch" id="tbs-hot">
-                                <input type="color" data-var="--hot" />
-                            </div>
-                            <span class="tb-lbl">Danger / error</span>
-                            <span class="tb-contrast" id="tbc-hot"></span>
-                            <span class="tb-hex" id="tbh-hot"></span>
-                        </div>
-                        <div class="tb-radius-row">
-                            <span class="tb-lbl">Corner radius</span>
-                            <input
-                                class="tb-radius-slider"
-                                id="tb-radius"
-                                type="range"
-                                min="0"
-                                max="18"
-                                step="1"
-                            />
-                            <span
-                                class="tb-radius-val"
-                                id="tb-radius-val"
-                                >10px</span
-                            >
-                        </div>
-                    </div>
-
-                    <div class="sub-hdr tb-group-hdr">
-                        <span>Warning Ramp
-                            <span class="th-sec-note">cool → critical</span>
-                        </span>
-                    </div>
-                    <div class="tb-group">
-                        <div class="tb-warn-row">
-                            <div class="tb-warn-pips">
-                                <div class="tb-warn-pip" id="tbs-w1">
-                                    <input type="color" data-var="--w1" />
+                        <div class="tb-group">
+                            <div class="tb-row">
+                                <div class="tb-swatch" id="tbs-bg">
+                                    <input type="color" data-var="--bg" />
                                 </div>
-                                <div class="tb-warn-pip" id="tbs-w2">
-                                    <input type="color" data-var="--w2" />
-                                </div>
-                                <div class="tb-warn-pip" id="tbs-w3">
-                                    <input type="color" data-var="--w3" />
-                                </div>
-                                <div class="tb-warn-pip" id="tbs-w4">
-                                    <input type="color" data-var="--w4" />
-                                </div>
-                                <div class="tb-warn-pip" id="tbs-w5">
-                                    <input type="color" data-var="--w5" />
-                                </div>
-                            </div>
-                        </div>
-                        <div class="tb-warn-gradient-wrap">
-                            <div
-                                class="tb-warn-gradient"
-                                id="tb-warn-gradient"
-                            ></div>
-                        </div>
-                    </div>
-
-                    <details class="tb-share">
-                        <summary class="sub-hdr tb-group-hdr tb-share-summary">
-                            <span>Share Theme</span>
-                            <svg
-                                class="tb-share-arrow"
-                                viewBox="0 0 12 12"
-                                fill="none"
-                                stroke="currentColor"
-                                stroke-width="1.7"
-                                stroke-linecap="round"
-                                stroke-linejoin="round"
-                            >
-                                <polyline points="2.5,4.5 6,8 9.5,4.5" />
-                            </svg>
-                        </summary>
-                        <div class="tb-group tb-group-css">
-                            <p class="tb-share-hint">
-                                Always mirrors the theme above. Copy it to
-                                send to a friend, or paste one they sent you
-                                and load it.
-                            </p>
-                            <textarea
-                                id="custom-css"
-                                placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
-                            ></textarea>
-                            <div class="tb-share-btns">
-                                <button
-                                    class="btn btn-s btn-neutral-hover"
-                                    id="btn-theme-copy"
+                                <span class="tb-lbl">Background</span>
+                                <span
+                                    class="tb-wcag-pill"
+                                    tabindex="0"
+                                    title="WCAG = Web Content Accessibility Guidelines. The badges below measure each text color's contrast against this background — AA needs ≥4.5:1 for body text, ≥3:1 for large text or UI."
+                                    >WCAG</span
                                 >
-                                    Copy
-                                </button>
-                                <button class="btn btn-p" id="btn-theme-apply">
-                                    Load Theme
-                                </button>
+                                <span class="tb-hex" id="tbh-bg"></span>
+                            </div>
+                            <div class="tb-row">
+                                <div class="tb-swatch" id="tbs-txt">
+                                    <input type="color" data-var="--txt" />
+                                </div>
+                                <span class="tb-lbl">Primary text</span>
+                                <span class="tb-contrast" id="tbc-txt"></span>
+                                <span class="tb-hex" id="tbh-txt"></span>
+                            </div>
+                            <div class="tb-row">
+                                <div class="tb-swatch" id="tbs-txt-dim">
+                                    <input
+                                        type="color"
+                                        data-var="--txt-dim"
+                                    />
+                                </div>
+                                <span class="tb-lbl">Secondary text</span>
+                                <span
+                                    class="tb-contrast"
+                                    id="tbc-txt-dim"
+                                ></span>
+                                <span
+                                    class="tb-hex"
+                                    id="tbh-txt-dim"
+                                ></span>
+                            </div>
+                            <div class="tb-row">
+                                <div class="tb-swatch" id="tbs-hot">
+                                    <input type="color" data-var="--hot" />
+                                </div>
+                                <span class="tb-lbl">Danger / error</span>
+                                <span class="tb-contrast" id="tbc-hot"></span>
+                                <span class="tb-hex" id="tbh-hot"></span>
+                            </div>
+                            <div class="tb-radius-row">
+                                <span class="tb-lbl">Corner radius</span>
+                                <input
+                                    class="tb-radius-slider"
+                                    id="tb-radius"
+                                    type="range"
+                                    min="0"
+                                    max="18"
+                                    step="1"
+                                />
+                                <span
+                                    class="tb-radius-val"
+                                    id="tb-radius-val"
+                                    >10px</span
+                                >
                             </div>
                         </div>
-                    </details>
-                    </details>
+
+                        <div class="sub-hdr tb-group-hdr">
+                            <span
+                                >Warning Ramp
+                                <span class="th-sec-note"
+                                    >cool → critical</span
+                                >
+                            </span>
+                        </div>
+                        <div class="tb-group">
+                            <div class="tb-warn-row">
+                                <div class="tb-warn-pips">
+                                    <div class="tb-warn-pip" id="tbs-w1">
+                                        <input
+                                            type="color"
+                                            data-var="--w1"
+                                        />
+                                    </div>
+                                    <div class="tb-warn-pip" id="tbs-w2">
+                                        <input
+                                            type="color"
+                                            data-var="--w2"
+                                        />
+                                    </div>
+                                    <div class="tb-warn-pip" id="tbs-w3">
+                                        <input
+                                            type="color"
+                                            data-var="--w3"
+                                        />
+                                    </div>
+                                    <div class="tb-warn-pip" id="tbs-w4">
+                                        <input
+                                            type="color"
+                                            data-var="--w4"
+                                        />
+                                    </div>
+                                    <div class="tb-warn-pip" id="tbs-w5">
+                                        <input
+                                            type="color"
+                                            data-var="--w5"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tb-warn-gradient-wrap">
+                                <div
+                                    class="tb-warn-gradient"
+                                    id="tb-warn-gradient"
+                                ></div>
+                            </div>
+                        </div>
+
+                        <details class="tb-share">
+                            <summary
+                                class="sub-hdr tb-group-hdr tb-share-summary"
+                            >
+                                <span>Share Theme</span>
+                                <svg
+                                    class="tb-share-arrow"
+                                    viewBox="0 0 12 12"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    stroke-width="1.7"
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                >
+                                    <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                                </svg>
+                            </summary>
+                            <div class="tb-group tb-group-css">
+                                <p class="tb-share-hint">
+                                    Always mirrors the theme above. Copy it
+                                    to send to a friend, or paste one they
+                                    sent you and load it.
+                                </p>
+                                <textarea
+                                    id="custom-css"
+                                    placeholder=":root {&#10;  --bg: #1a1a2e;&#10;  --cpu: #e94560;&#10;  --r: 0px;&#10;}"
+                                ></textarea>
+                                <div class="tb-share-btns">
+                                    <button
+                                        class="btn btn-s"
+                                        id="btn-theme-copy"
+                                    >
+                                        Copy
+                                    </button>
+                                    <button
+                                        class="btn btn-p"
+                                        id="btn-theme-apply"
+                                    >
+                                        Load Theme
+                                    </button>
+                                </div>
+                            </div>
+                        </details>
+                    </div>
+
+                    </div>
+
+                    <div class="zone-hdr">System</div>
+                    <div class="zone-group">
 
                     <details class="grp-details" id="connection-details">
                     <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
@@ -333,7 +357,7 @@
                             <polyline points="2.5,4.5 6,8 9.5,4.5" />
                         </svg>
                     </summary>
-                    <div class="theme-conn">
+                    <div class="field-stack">
                         <div class="field">
                             <label>Daemon URL</label>
                             <input id="tc-url" type="text" />
@@ -359,32 +383,9 @@
                     </div>
                     </details>
 
-                    <div class="grp-hdr">Backup</div>
-                    <div class="btn-row">
-                        <button
-                            class="btn btn-s btn-neutral-hover"
-                            id="btn-export-settings"
-                            title="Save your theme, layout, and window position to a file"
-                        >
-                            Export Settings
-                        </button>
-                        <button
-                            class="btn btn-s btn-neutral-hover"
-                            id="btn-import-settings"
-                            title="Load theme, layout, and window position from a file"
-                        >
-                            Import Settings
-                        </button>
-                    </div>
-
-                    <div class="grp-hdr">Danger Zone</div>
-                    <button class="btn btn-s" id="btn-reset-drawer">
-                        Reset Widget
-                    </button>
-
-                    <details class="grp-details" id="dev-mode-details">
+                    <details class="grp-details" id="backup-details" open>
                     <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
-                        <span>Dev Mode</span>
+                        <span>Backup</span>
                         <svg
                             class="grp-hdr-arrow"
                             viewBox="0 0 12 12"
@@ -397,9 +398,69 @@
                             <polyline points="2.5,4.5 6,8 9.5,4.5" />
                         </svg>
                     </summary>
+                    <div class="btn-row">
+                        <button
+                            class="btn btn-s"
+                            id="btn-export-settings"
+                            title="Save your theme, layout, and window position to a file"
+                        >
+                            Export Settings
+                        </button>
+                        <button
+                            class="btn btn-s"
+                            id="btn-import-settings"
+                            title="Load theme, layout, and window position from a file"
+                        >
+                            Import Settings
+                        </button>
+                    </div>
+                    </details>
 
-                    <div class="sub-hdr">Demo Mode</div>
-                    <div class="theme-conn">
+                    <details class="grp-details" id="reset-details" open>
+                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
+                        <span>Reset</span>
+                        <svg
+                            class="grp-hdr-arrow"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                        </svg>
+                    </summary>
+                    <button class="btn btn-s btn-danger" id="btn-reset-drawer">
+                        Reset Widget
+                    </button>
+                    </details>
+
+                    </div>
+
+                    <div class="zone-hdr">Advanced</div>
+                    <div class="zone-group">
+
+                    <details class="grp-details" id="demo-mode-details">
+                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
+                        <span class="grp-hdr-title-group">
+                            <span>Demo Mode</span>
+                            <span class="grp-hdr-divider">|</span>
+                            <span class="grp-hdr-hint">Fake data preview</span>
+                        </span>
+                        <svg
+                            class="grp-hdr-arrow"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                        </svg>
+                    </summary>
+                    <div class="field-stack">
                         <div class="field">
                             <label>Scenario</label>
                             <div class="size-seg" id="demo-scenario-btns"></div>
@@ -408,16 +469,37 @@
                             Enter Demo Mode
                         </button>
                     </div>
+                    </details>
 
-                    <div class="sub-hdr">First-Launch Simulation</div>
+                    <details class="grp-details" id="first-launch-details">
+                    <summary class="grp-hdr grp-hdr-row grp-hdr-toggle">
+                        <span class="grp-hdr-title-group">
+                            <span>First Launch</span>
+                            <span class="grp-hdr-divider">|</span>
+                            <span class="grp-hdr-hint">Resets token only</span>
+                        </span>
+                        <svg
+                            class="grp-hdr-arrow"
+                            viewBox="0 0 12 12"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.7"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                        >
+                            <polyline points="2.5,4.5 6,8 9.5,4.5" />
+                        </svg>
+                    </summary>
                     <button
-                        class="btn btn-s btn-neutral-hover"
+                        class="btn btn-s"
                         id="btn-soft-reset-drawer"
                         title="Clears only the saved token — theme, layout, and sensor assignments stay put"
                     >
                         Simulate First Launch
                     </button>
                     </details>
+
+                    </div>
                 </div>
             </div>
 
@@ -542,7 +624,7 @@
                     ></div>
                     <div class="btn-row">
                         <button
-                            class="btn btn-s btn-neutral-hover"
+                            class="btn btn-s"
                             id="text-modal-cancel"
                         >
                             Cancel

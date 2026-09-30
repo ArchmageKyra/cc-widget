@@ -146,9 +146,7 @@ const CARD_DEFS = [
         typeFilter: ["temp"],
       },
       {
-        // Not a real sensor slot — averages duty% across whichever
-        // custom rpm-type rows the user has added to this card.
-        // See _chassisFanAvg().
+        // Not a real sensor slot — averages duty%
         sid: "case_fan_avg",
         lbl: "FAN AVG",
         mode: "meter",
@@ -159,9 +157,7 @@ const CARD_DEFS = [
     ],
   },
   {
-    // Storage: auto-generated from Linux disk data (no static slots).
-    // Kept last so the plotted cards (CPU/GPU/MEMORY/NET/CHASSIS) sit
-    // together, with the plot-less disk list trailing after them.
+    // Storage: auto-generated from Linux disk data (no static slots)
     id: "storage",
     lbl: "STORAGE",
     cls: "ssd",

@@ -16,19 +16,26 @@
 
 const BOOT_MIN_TIME = 450;
 
-// How long to hold the finished dashboard on screen
+// How long to hold the finished dashboard on screen — fully resized,
+// "Online" showing — before the boot screen starts fading. Gives the
+// user a beat to actually register it instead of having it flicker past.
 const BOOT_READ_DELAY = 2000;
 
 const bootStarted = {};
 
-// Resolves once the first Linux stats sample has arrived (or we give up)
+// Resolves once the first Linux stats sample has arrived (or we give up
+// waiting, e.g. psutil isn't installed). Python's stats push runs on its
+// own independent 2s timer, unrelated to the SSE connection — boot can't
+// safely take its "final" measurement until both are in.
 let _resolveLinuxStatsReady;
 const linuxStatsReady = new Promise((resolve) => {
   _resolveLinuxStatsReady = resolve;
 });
 setTimeout(() => _resolveLinuxStatsReady?.(), 3000);
 
-// Order of the boot checklist and the progress-bar percentage the fill jumps to as each step goes active / completes.
+// Order of the boot checklist and the progress-bar percentage the fill
+// jumps to as each step goes active / completes. Kept as one table so the
+// bar and the checklist can never drift out of sync with each other.
 const BOOT_PROGRESS = {
   profile: { active: 8, done: 28 },
   theme: { active: 34, done: 52 },
@@ -60,7 +67,11 @@ function bootState(text) {
   if (el) el.textContent = text.toUpperCase();
 }
 
-// Marks a step "done", holding it "active" for at least BOOT_MIN_TIME so fast synchronous steps don't just blip past
+// Marks a step "done", holding it "active" for at least BOOT_MIN_TIME so
+// fast synchronous steps (loading config, applying a theme) don't just
+// blip past — every step gets a moment to actually register on screen.
+// callback is optional; waitBootStep() below wraps this as a promise for
+// the common case of awaiting a step before starting the next one.
 function bootStepDone(name, callback) {
   const started = bootStarted[name] ?? performance.now();
   const elapsed = performance.now() - started;
@@ -76,7 +87,11 @@ function waitBootStep(name) {
   return new Promise((resolve) => bootStepDone(name, resolve));
 }
 
-// How long the boot screen is allowed to sit on screen before it gets dismissed unconditionally.
+// How long the boot screen is allowed to sit on screen before it gets
+// dismissed unconditionally. Covers the case where a returning user's
+// daemon never answers (SSE just retries forever) — without this the
+// boot screen would otherwise hang over the connect/retry panel forever
+// with no way for the user to reach it.
 const BOOT_FAILSAFE_MS = 8000;
 let _bootHidden = false;
 let _bootFailsafeTimer = null;
@@ -97,7 +112,8 @@ function hideBootScreen() {
     settled = true;
     clearTimeout(fallbackTimer);
     window.__onResizeApplied = null;
-    // Two real animation frames so the browser has actually painted a settled frame at the new size before the fade starts.
+    // Two real animation frames so the browser has actually painted a
+    // settled frame at the new size before the fade starts.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         boot.classList.add("hide");
@@ -106,7 +122,11 @@ function hideBootScreen() {
     });
   };
 
-  // Python calls this the instant GTK's configure-event confirms the native window has actually reached its target size
+  // Python calls this the instant GTK's configure-event confirms the
+  // native window has actually reached its target size (see
+  // on_window_configure() in launch.py) — a real signal instead of a
+  // guessed delay. The fallback timer is just a backstop for an older
+  // launch.py that doesn't send it, or the rare case it's dropped.
   window.__onResizeApplied = reveal;
   fallbackTimer = setTimeout(reveal, 400);
 
@@ -117,6 +137,11 @@ function hideBootScreen() {
 // ═══════════════════════════════════════════════════════════════
 //  RESET
 // ═══════════════════════════════════════════════════════════════
+// Clears just the saved connection token — the app boots exactly like
+// a brand-new install (Demo Mode, drawer auto-open, token field flash)
+// without touching theme, layout, sizing, or any sensor assignments.
+// Dev-only convenience for testing the first-run experience against
+// real settings instead of a wiped profile.
 function softResetWidget() {
   if (
     !confirm(
@@ -129,19 +154,27 @@ function softResetWidget() {
   location.reload();
 }
 
-// Clears all local config (token, theme, layout, everything) and reloads as a brand-new install
+// Clears all local config (token, theme, layout, everything) and reloads
+// as a brand-new install — same action from the drawer's "Danger Zone"
+// regardless of whether a real connection was ever made.
 function resetWidget() {
   if (!confirm("Clear saved settings and token?")) return;
   localStorage.clear();
   location.reload();
 }
 
-// Bundles the in-memory cfg and hands it to Python
+// Bundles the in-memory cfg (theme, layout, custom rows — everything
+// that's in localStorage) and hands it to Python, which merges in the
+// window position/anchor from window_pos.json and pops a native Save
+// dialog. Nothing local changes here — Python owns the actual write.
 function exportSettings() {
   gtksend("export-settings:" + JSON.stringify(cfg));
 }
 
-// Pops a native Open dialog (via Python) and overwrites the current config entirely.
+// Pops a native Open dialog (via Python) and, if the user picks a
+// valid file, overwrites the current config entirely. Confirming here
+// rather than after the file's already picked keeps this one dialog
+// instead of two — same "ask once, up front" shape as resetWidget().
 function importSettings() {
   if (
     !confirm(
@@ -152,13 +185,22 @@ function importSettings() {
   gtksend("import-settings");
 }
 
-// Wite the ccm blob and reload — the normal boot path re-renders everything from localStorage exactly like any other launch.
+// Python calls this once the user has picked a valid file and window
+// position has already been applied on that side. Just write the ccm
+// blob and reload — the normal boot path re-renders everything from
+// localStorage exactly like any other launch.
 window.onSettingsImported = function (ccm) {
   localStorage.setItem("ccm", JSON.stringify(ccm));
   location.reload();
 };
 
-// Attempts a real connection using whatever's currently in cfg.baseUrl/cfg.token.
+// Attempts a real connection using whatever's currently in cfg.baseUrl/
+// cfg.token. Called whenever the drawer's connection fields change to a
+// non-empty token — there's no separate "Connect" screen anymore, so
+// this is the only path into live data. Tears down Demo Mode first if
+// it was running; the dashboard keeps showing the persisted card
+// layout throughout, just with "--" values until the first packet
+// lands and setStatus() flips the indicator to "Live".
 function connectNow() {
   if (!cfg.token) return;
   if (demoMode) _teardownDemoState();
@@ -182,6 +224,12 @@ function connectNow() {
 //  dashboard — and the theme editor over top of it — can be previewed
 //  without a CoolerControl daemon or real sensors. No network/GTK
 //  calls are made; it's pure client-side data generation on a timer.
+//
+//  Coverage is deliberately broad — one leaf per typeFilter kind
+//  (temp/rpm/duty/watts) plus multiple disks and a couple of fake
+//  folder sizes — so every custom-row assignment path in the picker
+//  has something real to bind to while testing, not just the six
+//  slots the built-in cards auto-fill.
 //
 //  Scenario presets (DEMO_SCENARIOS) swap the load-curve params that
 //  drive cpuLoad/gpuLoad/ram/swap/net; everything derived from load
@@ -255,7 +303,9 @@ class DemoCurve {
   }
 }
 
-// Per-scenario overrides for the load-driven curves
+// Per-scenario overrides for the load-driven curves. Everything else
+// (disks, folders, ambient, NVMe temp) stays constant across scenarios —
+// they're "always there" coverage, not workload-reactive.
 const DEMO_SCENARIOS = {
   idle: {
     label: "Idle",
@@ -295,7 +345,8 @@ const DEMO_SCENARIOS = {
   },
 };
 
-// Builds one DemoCurve per data channel, seeded from the given scenario's load params (falls back to "normal" for an unknown key).
+// Builds one DemoCurve per data channel, seeded from the given
+// scenario's load params (falls back to "normal" for an unknown key).
 function _buildDemoCurves(scenarioKey = demoScenario) {
   const s = DEMO_SCENARIOS[scenarioKey] || DEMO_SCENARIOS.normal;
   return {
@@ -316,7 +367,9 @@ function _buildDemoCurves(scenarioKey = demoScenario) {
   };
 }
 
-// Advances every curve one tick and shapes the results into the same shapes buildLeaves()/applyLinuxStats() already know how to consume
+// Advances every curve one tick and shapes the results into the same
+// shapes buildLeaves()/applyLinuxStats() already know how to consume —
+// nothing downstream needs to know this data isn't real.
 function _computeDemoFrame() {
   const c = demoCurves;
 
@@ -469,7 +522,8 @@ function _computeDemoFrame() {
   return { ccDevices, linuxStats };
 }
 
-// One fake-data frame in, fed through the exact same pipeline
+// One fake-data frame in, fed through the exact same pipeline real CC/
+// Linux data goes through — nothing downstream can tell the difference.
 function demoTick() {
   const { ccDevices: fakeCc, linuxStats } = _computeDemoFrame();
   ccDevices = fakeCc;
@@ -478,11 +532,14 @@ function demoTick() {
   if (phase === "dashboard") setStatus("ok");
 }
 
-// Restores whatever cfg.slots those sids held before enterDemoMode() overwrote them — undefined means "wasn't assigned", not "leave alone".
+// Restores whatever cfg.slots those sids held before enterDemoMode()
+// overwrote them — undefined means "wasn't assigned", not "leave alone".
 let _demoSlotBackup = null;
 const DEMO_CC_SIDS = ["cpu_temp", "cpu_fan", "gpu_temp", "gpu_load", "gpu_fan", "case_temp"];
 
-// The drawer's Connection-section button doubles as the enter/exit toggle
+// The drawer's Connection-section button doubles as the enter/exit
+// toggle — it's the only demo control now that the setup screen (and
+// its own separate "Try Demo Mode" button) is gone.
 function _updateDemoButtons() {
   const drawerBtn = document.getElementById("btn-demo-drawer");
   if (drawerBtn) {
@@ -494,7 +551,9 @@ function _updateDemoButtons() {
   });
 }
 
-// Pulse token field to catch new user's eye
+// Draws the eye to the token field for first-time users who've just
+// been dropped into Demo Mode with the drawer freshly opened — a few
+// quick pulses, then it settles back to normal.
 function _flashTokenField() {
   const inp = document.getElementById("tc-tok");
   if (!inp) return;
@@ -502,7 +561,9 @@ function _flashTokenField() {
   setTimeout(() => inp.classList.remove("flash-attn"), 2700);
 }
 
-// Switches the active scenario preset
+// Switches the active scenario preset. If demo mode is already running,
+// rebuilds the curves in place and forces an immediate tick so the
+// change is felt right away rather than waiting for the next timer fire.
 function setDemoScenario(key) {
   if (!DEMO_SCENARIOS[key] || key === demoScenario) {
     demoScenario = key; // still update in case it was a no-op re-click
@@ -560,10 +621,13 @@ function enterDemoMode() {
 
   refreshDevices();
   applyLinuxStats(linuxStats); // also runs autoAssignLinux() for cpu_load/ram/swap/net —
+  // harmless no-op if those sids are already assigned from a real connection
 
   phase = "dashboard";
 
-  // Entering demo mode always lands on a clean dashboard view
+  // Entering demo mode always lands on a clean dashboard view — close
+  // the settings drawer and drop out of edit mode even if either was
+  // open when the button was clicked.
   editMode = false;
   document.getElementById("cards")?.classList.remove("editing");
   const _cfgBtn = document.getElementById("bb-cfg");
@@ -584,7 +648,10 @@ function enterDemoMode() {
   demoTimer = setInterval(demoTick, DEMO_TICK_MS);
 }
 
-// Shared demo-teardown: stops the tick timer, drops the fake devices, and restores whatever cfg.slots held before demo touched them.
+// Shared demo-teardown: stops the tick timer, drops the fake devices,
+// and restores whatever cfg.slots held before demo touched them. Used
+// by both exitDemoMode() (drawer's toggle) and connectNow() (entering
+// a real token) — same cleanup either way out of Demo Mode.
 function _teardownDemoState() {
   demoMode = false;
   if (demoTimer) {
@@ -608,13 +675,16 @@ function exitDemoMode() {
   if (!demoMode) return;
   _teardownDemoState();
 
-  // A token's already saved — reconnect for real instead of just sitting on a blank dashboard.
+  // A token's already saved — reconnect for real instead of just
+  // sitting on a blank dashboard.
   if (cfg.token) {
     connectNow();
     return;
   }
 
-  // No token yet: nothing to connect to. Set it to idle directly.
+  // No token yet: nothing to connect to. connectNow() would normally
+  // reset the status indicator via setStatus("spin", …), but there's
+  // no connection attempt happening here, so reset it to idle directly.
   _resetConnIndicator();
   _updateDemoButtons();
   buildCards();
@@ -908,6 +978,7 @@ function _applyThemeChoice(key) {
   document
     .querySelectorAll(".theme-tile")
     .forEach((t) => t.classList.toggle("active", t.dataset.key === key));
+  document.getElementById("theme-editor-inline")?.classList.add("hide");
   applyTheme(key);
   if (_tbSync) _tbSync();
 }
@@ -1003,6 +1074,7 @@ function initThemeScreen() {
   }
 
   // ── Theme tiles ────────────────────────────────────────────
+  const themeEditorInline = document.getElementById("theme-editor-inline");
   const g = document.getElementById("theme-grid");
   g.innerHTML = "";
   for (const [key, theme] of Object.entries(THEMES)) {
@@ -1016,9 +1088,11 @@ function initThemeScreen() {
         .querySelectorAll(".theme-tile")
         .forEach((t) => t.classList.remove("active"));
       tile.classList.add("active");
+      themeEditorInline.classList.add("hide");
       applyTheme(key);
-      // Builder is always visible now — reload it from whatever preset
-      // just got selected so the pickers stay in sync with the theme.
+      // Keep the builder synced to whatever preset just got selected,
+      // so if Custom gets picked next it starts from this, not from
+      // whatever was active the last time the drawer was opened.
       if (_tbSync) _tbSync();
     };
     g.appendChild(tile);
@@ -1035,27 +1109,28 @@ function initThemeScreen() {
       .querySelectorAll(".theme-tile")
       .forEach((t) => t.classList.remove("active"));
     customTile.classList.add("active");
-    document.getElementById("theme-editor-details").open = true;
-    const css =
-      cfg.customThemeCSS || (_tbGenerateCSS ? _tbGenerateCSS() : null);
-    if (css) applyTheme("custom", css);
+    themeEditorInline.classList.remove("hide");
+    // Always regenerate from whatever's currently live (bv was kept in
+    // sync by _tbSync() on every preset click) rather than falling
+    // back to an old saved cfg.customThemeCSS — otherwise clicking a
+    // preset and then Custom silently ignores the preset and restores
+    // whatever custom theme existed before, which defeats the whole
+    // point of using the editor to dial in a preset.
+    if (_tbGenerateCSS) applyTheme("custom", _tbGenerateCSS());
   };
   g.appendChild(customTile);
 
   // ── Theme Builder ──────────────────────────────────────────
   initThemeBuilder();
 
-  // Collapsible sections default to closed, except Theme Editor opens
-  // by default when a custom theme is already active — someone
-  // actively tweaking colors shouldn't have to expand it themselves
-  // every time they open the drawer.
-  document.getElementById("theme-editor-details").open =
-    cfg.theme === "custom";
-  // Same idea for Connection: open when there's nothing saved yet and
-  // the fields are what someone actually needs in front of them,
-  // closed once a token exists — the status dot+text stay visible in
-  // the collapsed summary either way, so connection state is never
-  // hidden, just the input fields.
+  // Theme Editor isn't its own collapsible section anymore — it's just
+  // whatever "Custom…" above currently is, so its visibility tracks
+  // cfg.theme directly instead of a <details> open/closed state.
+  themeEditorInline.classList.toggle("hide", cfg.theme !== "custom");
+  // Connection: open when there's nothing saved yet and the fields are
+  // what someone actually needs in front of them, closed once a token
+  // exists — the status dot+text stay visible in the collapsed summary
+  // either way, so connection state is never hidden, just the fields.
   document.getElementById("connection-details").open = !cfg.token;
 
   // ── Share Theme (Copy / Load) ────────────────────────────────

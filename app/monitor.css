@@ -386,17 +386,25 @@ body {
     margin-top: 8px;
 }
 .btn-s:hover {
-    background: var(--bg-danger);
-    color: var(--hot);
-    border-color: var(--bdr-err);
-}
-/* Opt-in modifier for .btn-s buttons that aren't destructive (Simulate
-   First Launch, etc.) — neutral hover instead of the shared red
-   danger treatment every other .btn-s gets. */
-.btn-neutral-hover:hover {
     background: var(--bg-hover);
     color: var(--txt);
     border-color: var(--bhi);
+}
+/* Opt-in modifier for a genuinely destructive .btn-s (Reset Widget,
+   today) — a permanent red-tinted border, not just on hover, so it
+   reads as different at rest, before anyone's even moused over it.
+   Explicit opt-IN on purpose: the previous scheme made red-on-hover
+   the default and safe buttons had to opt out, so a new button that
+   forgot the modifier would silently look destructive. This way,
+   forgetting the modifier just makes a button look normal — the safe
+   direction to fail in. */
+.btn-danger {
+    border-color: var(--bdr-err);
+}
+.btn-danger:hover {
+    background: var(--bg-danger);
+    color: var(--hot);
+    border-color: var(--bdr-err);
 }
 /* Side-by-side pair of .btn-s buttons (Export/Import Settings) — .btn-s
    is width:100% by default for the normal stacked case, so this row
@@ -418,16 +426,14 @@ body {
 /* ── Connection (drawer) ───────────────────────────────────────
    Same bordered-container language as .tb-group, so this reads as a
    peer of the Theme Editor's groups instead of two loose fields. */
-.theme-conn {
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs);
-    background: var(--bg-hover-subtle);
-    padding: 9px;
-}
-.theme-conn .field {
+/* Plain vertical stack of fields/controls — used inside Connection and
+   Demo Mode. No border/background of its own: these are a couple of
+   form fields, not a distinct sub-unit that needs a visual boundary
+   the way Theme Editor's three genuinely-separate clusters do. */
+.field-stack .field {
     margin-bottom: 9px;
 }
-.theme-conn .field:last-child {
+.field-stack .field:last-child {
     margin-bottom: 0;
 }
 
@@ -1285,28 +1291,82 @@ body {
 }
 
 /* ── Theme screen ──────────────────────────────────────────── */
-/* Two-tier header hierarchy for the settings drawer.
-   .grp-hdr  — top-level sections (Size, Window Position, Theme,
-               Theme Editor, Connection, Backup, Danger Zone, Dev
-               Mode). Brighter, bottom-ruled. Theme Editor, Connection,
-               and Dev Mode are collapsible (.grp-details/
-               .grp-hdr-toggle below) — everything else stays flat.
-   .sub-hdr  — sub-groups nested *inside* one grp-hdr (e.g. Background
-               & Chrome / Warning Ramp / CSS all live under one
-               "Theme Editor" grp-hdr). Dimmer, no rule, tighter margin —
-               reads as clearly subordinate rather than a peer section. */
+/* Three-tier header hierarchy for the settings drawer.
+   .zone-hdr   — the three top-level zones (Appearance, System,
+                 Advanced). A grouping label, not a control — bigger,
+                 accent-colored, with a small leading bar borrowed
+                 from the dashboard's own .card-hdr language (see
+                 ::before below), so it reads as a distinctly coarser
+                 tier rather than just a bigger section header.
+   .zone-group — the bordered box a zone's sections live inside (see
+                 monitor.html) — one visible boundary per zone, so
+                 Appearance/System/Advanced each read as one cohesive
+                 unit instead of a flat list of same-weight headers.
+   .grp-hdr    — named sections within a zone (Size, Window Position,
+                 Theme, Connection, Backup, Reset, Demo Mode, First
+                 Launch). Brighter, bottom-ruled. Connection, Demo
+                 Mode, and First Launch are collapsible
+                 (.grp-details/.grp-hdr-toggle below), each its own
+                 independent disclosure rather than grouped under one
+                 shared toggle. Theme Editor doesn't have one of these
+                 at all — see theme-editor-inline in monitor.html, it's
+                 folded into Theme instead.
+   .sub-hdr    — sub-groups nested *inside* one grp-hdr (e.g. Background
+                 & Chrome / Warning Ramp / Share Theme all live under
+                 Theme). Dimmer, no rule, tighter margin — reads as
+                 clearly subordinate rather than a peer section. */
+.zone-hdr {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 12.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.13em;
+    color: var(--cpu);
+    margin: 26px 0 0;
+}
+.zone-hdr::before {
+    content: "";
+    width: 3px;
+    height: 12px;
+    border-radius: 2px;
+    background: currentColor;
+    flex-shrink: 0;
+}
+.zone-hdr:first-child {
+    margin-top: 3px;
+}
+/* The box right after a zone label needs less top margin than normal
+   — the zone label's own margin already signaled "new group starts
+   here"; this is just the small gap between the label and its box. */
+.zone-hdr + .zone-group {
+    margin-top: 8px;
+}
+.zone-group {
+    border: 1px solid var(--bdr);
+    border-radius: var(--rs);
+    overflow: hidden; /* clips full-bleed headers to the box's rounded corners, same trick .card uses for .card-hdr */
+    padding: 0 10px 10px;
+}
+/* Bleeds edge-to-edge within .zone-group (whose own padding is 10px —
+   the -10px here is deliberately coupled to that, not a generic
+   value) and picks up the same background+border-bottom recipe as
+   the dashboard's own .card-hdr, so a settings section reads as part
+   of its card instead of floating text sitting inside one. Flush at
+   the top (margin-top: 0) so stacked sections run contiguously, like
+   rows in one list, rather than as separate floating blocks with
+   gaps between them. */
 .grp-hdr {
     font-size: 10.5px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--txt);
-    margin: 15px 0 8px;
-    padding-bottom: 5px;
+    margin: 0 -10px 8px;
+    padding: 8px 10px 7px;
+    background: var(--bg-card-hdr);
     border-bottom: 1px solid var(--bdr);
-}
-.grp-hdr:first-child {
-    margin-top: 3px;
 }
 /* Header variant that carries small icon-button actions on the right
    (Theme's Shuffle/Cycle toggles) instead of being plain text. */
@@ -1315,28 +1375,18 @@ body {
     align-items: center;
     justify-content: space-between;
 }
-/* Collapsible top-level sections (Theme Editor, Dev Mode) — a plain
-   <details>/<summary> so the collapse behavior is free, but the
-   summary keeps the exact same look as every non-collapsible .grp-hdr
-   (just with a click target and an arrow) rather than adopting the
-   separate boxed-chip look .tb-share uses one level down.
-
-   The gap above a collapsible section is set here, on .grp-details
-   itself, rather than left to the summary's own .grp-hdr top margin —
-   a <summary>'s margin collapsing through its <details> parent isn't
-   consistent across engines, and here it was rendering visibly
-   tighter than a plain .grp-hdr's gap. Setting it explicitly and
-   zeroing the summary's own top margin makes the gap a fixed
-   property of the block instead of something that depends on
-   collapse behavior. */
-.grp-details {
-    margin-top: 15px;
-}
+/* Collapsible sections (Connection, Backup, Reset, Demo Mode, First
+   Launch) — a plain <details>/<summary> so the collapse behavior is
+   free, but the summary keeps the exact same look as every
+   non-collapsible .grp-hdr (just with a click target and an arrow)
+   rather than adopting the separate boxed-chip look .tb-share uses
+   one level down. No extra spacing rules needed here beyond .grp-hdr's
+   own — a <details> with a .grp-hdr-toggle summary sits flush and
+   contiguous exactly like a plain .grp-hdr div does. */
 .grp-details > .grp-hdr-toggle {
     cursor: pointer;
     list-style: none;
     user-select: none;
-    margin-top: 0;
 }
 .grp-details > .grp-hdr-toggle::-webkit-details-marker {
     display: none;
@@ -1375,18 +1425,20 @@ body {
     opacity: 0.45;
     font-weight: 400;
 }
-/* A lone full-width button (Reset Widget) directly followed by the
-   next section header is the one spot in this drawer where the
-   standard 15px gap reads as too tight — its unbroken border spans
-   almost the full panel width right up against the header text,
-   unlike a .btn-row pair which breaks that line up. Verified this is
-   the *only* boundary shaped like this today; if that changes, this
-   rule naturally covers any new case with the same shape too. */
-.btn-s + .grp-hdr,
-.btn-s + .grp-details,
-.btn-p + .grp-hdr,
-.btn-p + .grp-details {
-    margin-top: 22px;
+/* Short dim descriptor next to a collapsed section's title (Demo
+   Mode's "Fake data preview", First Launch's "Resets token only") —
+   same job as Connection's live status text: a hint at what's inside
+   without needing to open it. Truncates rather than wraps if a title
+   and its hint don't both fit at once. */
+.grp-hdr-hint {
+    color: var(--txt-dim);
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 .grp-hdr-icon-btn {
     background: none;
@@ -1549,6 +1601,13 @@ body {
    merged-header language for all three, Share Theme included, so
    nothing here reads as an older, less-finished sub-panel than the
    rest of the drawer. */
+/* Folded into Theme (see monitor.html) — only rendered when Custom is
+   the active tile. Scoped like every other .hide usage in this file
+   (.btn.hide, .picker-overlay.hide, etc.) rather than a bare .hide,
+   since there's no generic rule for that class anywhere here. */
+#theme-editor-inline.hide {
+    display: none;
+}
 .tb-group-hdr {
     display: flex;
     align-items: center;
