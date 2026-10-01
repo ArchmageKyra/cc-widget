@@ -32,14 +32,12 @@ const THEMES = {
   --bg-hover:rgba(255,255,255,.07);
   --bg-hover-subtle:rgba(255,255,255,.035);
   --bg-active:rgba(255,255,255,.09);
-  --bg-sel:rgba(10,132,255,.16);
   --bg-danger:rgba(255,69,58,.16);
   --bg-err:rgba(255,69,58,.10);
   --track-bg:rgba(255,255,255,.08);
 
   --bdr:rgba(255,255,255,.09);
   --bhi:rgba(255,255,255,.17);
-  --bdr-accent:rgba(10,132,255,.32);
   --bdr-err:rgba(255,69,58,.26);
 
   --r:16px; --rs:9px;
@@ -50,6 +48,7 @@ const THEMES = {
   --ssd:#8280FF;
   --ram:#BF5AF2;
   --net:#64D2FF;
+  --accent:#66D4CF;
 
   --w1:#32D74B;
   --w2:#FFD60A;
@@ -90,6 +89,7 @@ const THEMES = {
   --ssd:#b4befe;
   --ram:#cdd6f4;
   --net:#94e2d5;
+  --accent:#CBA6F7;
 
   --w1:#a6e3a1;
   --w2:#c9f27d;
@@ -130,6 +130,7 @@ const THEMES = {
   --ssd:#81a1c1;
   --ram:#c7d8e6;
   --net:#8fbcbb;
+  --accent:#B48EAD;
 
   --w1:#a3be8c;
   --w2:#c7d59a;
@@ -170,6 +171,7 @@ const THEMES = {
   --ssd:#458588;
   --ram:#8ec07c;
   --net:#fabd2f;
+  --accent:#D3869B;
 
   --w1:#b8bb26;
   --w2:#d8d84a;
@@ -210,6 +212,7 @@ const THEMES = {
   --ssd:#6c71c4;
   --ram:#93a1a1;
   --net:#859900;
+  --accent:#D33682;
 
   --w1:#859900;
   --w2:#2aa198;
@@ -250,6 +253,7 @@ const THEMES = {
   --ssd:#bb9af7;
   --ram:#c0caf5;
   --net:#7dcfff;
+  --accent:#73DACA;
 
   --w1:#9ece6a;
   --w2:#e0af68;
@@ -290,6 +294,7 @@ const THEMES = {
   --ssd:#6FB8D9;
   --ram:#4FC7BE;
   --net:#E8C97A;
+  --accent:#C792A8;
 
   --w1:#7FBF6B;
   --w2:#C7D56B;
@@ -330,6 +335,7 @@ const THEMES = {
   --ssd:#EBDCC2;
   --ram:#F5813D;
   --net:#F3A53F;
+  --accent:#EEAC90;
 
   --w1:#E8D3B0;
   --w2:#F0BC42;
@@ -370,6 +376,7 @@ const THEMES = {
   --ssd:#657C94;
   --ram:#F0C04A;
   --net:#D89B36;
+  --accent:#5CD6E8;
 
   --w1:#2FBE86;
   --w2:#8FB84A;
@@ -410,6 +417,7 @@ const THEMES = {
   --ssd:#3B8FE0;
   --ram:#3FC4E8;
   --net:#7DD33D;
+  --accent:#E07BF0;
 
   --w1:#8B5CF6;
   --w2:#3FC4E8;
@@ -450,6 +458,7 @@ const THEMES = {
   --ssd:#cc99cc;
   --ram:#f0a8a8;
   --net:#66ccff;
+  --accent:#FFCC99;
 
   --w1:#5ce0a0;
   --w2:#ffcc66;

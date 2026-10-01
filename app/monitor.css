@@ -27,10 +27,10 @@
     --bg-hover: rgba(255, 255, 255, 0.08);
     --bg-hover-subtle: rgba(255, 255, 255, 0.04);
     --bg-active: rgba(255, 255, 255, 0.1);
-    /* Derived from each theme's --cpu/--hot so selection rings and error states
-   match its accents; themes shouldn't override these directly. */
-    --bg-sel: color-mix(in srgb, var(--cpu) 12%, transparent);
-    --bdr-accent: color-mix(in srgb, var(--cpu) 30%, transparent);
+    /* Derived from each theme's --accent/--hot so selection rings and error
+   states match its accents; themes shouldn't override these directly. */
+    --bg-sel: color-mix(in srgb, var(--accent) 12%, transparent);
+    --bdr-accent: color-mix(in srgb, var(--accent) 30%, transparent);
     --bg-danger: color-mix(in srgb, var(--hot) 18%, transparent);
     --bg-err: color-mix(in srgb, var(--hot) 10%, transparent);
     --track-bg: rgba(255, 255, 255, 0.08);
@@ -38,6 +38,7 @@
     --bhi: rgba(255, 255, 255, 0.13);
     --bdr-err: color-mix(in srgb, var(--hot) 25%, transparent);
     --cpu: #60a5fa;
+    --accent: var(--cpu); /* UI chrome colour; themes set their own, custom CSS falls back to --cpu */
     --gpu: #34d399;
     --fan: #fb923c;
     --ssd: #818cf8;
@@ -151,7 +152,7 @@ body {
 }
 .bb.on {
     opacity: 1;
-    color: var(--cpu);
+    color: var(--accent);
 }
 .bb-icon {
     width: 10px;
@@ -323,7 +324,7 @@ body {
         box-shadow: none;
     }
     50% {
-        border-color: var(--cpu);
+        border-color: var(--accent);
         box-shadow: 0 0 0 4px var(--bdr-accent);
     }
 }
@@ -346,7 +347,7 @@ body {
         border-color 0.15s;
 }
 .btn-p {
-    background: var(--cpu);
+    background: var(--accent);
     color: var(--bg);
     width: 100%;
     margin-top: 4px;
@@ -406,6 +407,14 @@ body {
 }
 .field-stack .field:last-child {
     margin-bottom: 0;
+}
+/* Drawer field labels sit below the section header in the hierarchy:
+   sentence case, lighter, so they don't read as a second row of headers. */
+.field-stack .field label {
+    font-size: 10.5px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0.02em;
 }
 
 /* ── Picker overlay ────────────────────────────────────────── */
@@ -577,7 +586,7 @@ body {
     border-color: var(--bhi);
 }
 .assign-badge.set {
-    color: var(--cpu);
+    color: var(--accent);
     border-color: var(--bdr-accent);
     background: var(--bg-sel);
 }
@@ -721,7 +730,7 @@ body {
 }
 .row-menu-color-hex:focus {
     outline: none;
-    border-color: var(--cpu);
+    border-color: var(--accent);
 }
 .row-menu-color-hex.invalid {
     border-color: var(--hot);
@@ -788,7 +797,7 @@ body {
 }
 .row-menu-seg-btn.active {
     background: var(--bg-sel);
-    color: var(--cpu);
+    color: var(--accent);
 }
 .slot-clr {
     background: none;
@@ -842,7 +851,7 @@ body {
     transform: translateY(0);
 }
 .anchor-btn.active {
-    border-color: var(--cpu);
+    border-color: var(--accent);
     background: var(--bg-sel);
     box-shadow: 0 0 0 1px var(--bdr-accent);
 }
@@ -876,7 +885,7 @@ body {
     opacity: 0.8;
 }
 .anchor-btn.active .anchor-dot {
-    background: var(--cpu);
+    background: var(--accent);
     opacity: 1;
     box-shadow: 0 0 5px var(--bdr-accent);
 }
@@ -939,7 +948,7 @@ body {
     inset: 0;
     background: radial-gradient(
         circle at 50% 32%,
-        var(--cpu),
+        var(--accent),
         transparent 45%
     );
     opacity: 0.05;
@@ -1013,7 +1022,7 @@ body {
     background: conic-gradient(
         from 0deg,
         transparent 0deg,
-        var(--cpu) 55deg,
+        var(--accent) 55deg,
         transparent 130deg
     );
     -webkit-mask: radial-gradient(
@@ -1027,7 +1036,7 @@ body {
         #000 calc(100% - 2px)
     );
 
-    filter: drop-shadow(0 0 3px var(--cpu));
+    filter: drop-shadow(0 0 3px var(--accent));
     animation: boot-spin 1.3s linear infinite;
 }
 
@@ -1036,8 +1045,8 @@ body {
     inset: 15px;
 
     border-radius: 50%;
-    background: var(--cpu);
-    filter: drop-shadow(0 0 5px var(--cpu));
+    background: var(--accent);
+    filter: drop-shadow(0 0 5px var(--accent));
 
     animation: boot-pulse 1.6s ease-in-out infinite;
 }
@@ -1099,9 +1108,9 @@ body {
     height: 100%;
     width: 4%;
 
-    background: linear-gradient(90deg, var(--cpu), var(--gpu));
+    background: linear-gradient(90deg, var(--accent), var(--gpu));
     border-radius: 2px;
-    filter: drop-shadow(0 0 3px var(--cpu));
+    filter: drop-shadow(0 0 3px var(--accent));
 
     transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -1161,8 +1170,8 @@ body {
 }
 
 .boot-step.active .boot-step-mark {
-    border-color: var(--cpu);
-    background: var(--cpu);
+    border-color: var(--accent);
+    background: var(--accent);
     box-shadow: 0 0 0 3px var(--bg-hover-subtle);
 }
 
@@ -1174,8 +1183,8 @@ body {
 }
 
 .boot-step.done .boot-step-mark {
-    border-color: var(--cpu);
-    background: var(--cpu);
+    border-color: var(--accent);
+    background: var(--accent);
     animation: boot-step-pop 0.3s ease;
 }
 
@@ -1242,24 +1251,28 @@ body {
 /* ── Theme screen ──────────────────────────────────────────── */
 /* Three-tier header hierarchy for the settings drawer:
    .zone-hdr   top-level zones (Appearance, System, Advanced). A coarse
-               grouping label: larger, accent-coloured, with a leading bar
-               echoing .card-hdr (see ::before).
+               grouping label: larger, accent-coloured, styled as the
+               header bar of its .zone-group box (like .card-hdr).
    .zone-group the bordered box holding a zone's sections.
    .grp-hdr    named sections within a zone (Size, Theme, Connection, …).
-               Bottom-ruled; Connection, Demo Mode and First Launch are
+               Small dim eyebrow; Connection, Demo Mode and First Launch are
                collapsible (.grp-details / .grp-hdr-toggle).
    .sub-hdr    sub-groups nested inside one .grp-hdr (e.g. the Theme Editor's
                clusters). Dimmer, no rule: clearly subordinate. */
 .zone-hdr {
     display: flex;
     align-items: center;
-    gap: 7px;
-    font-size: 12.5px;
-    font-weight: 800;
+    gap: 6px;
+    font-size: var(--sz-hdr);
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.13em;
-    color: var(--cpu);
-    margin: 26px 0 0;
+    letter-spacing: 0.07em;
+    color: var(--accent);
+    margin: 22px 0 0;
+    padding: 6px 9px;
+    background: var(--bg-card-hdr);
+    border: 1px solid var(--bdr);
+    border-radius: var(--rs) var(--rs) 0 0;
 }
 .zone-hdr::before {
     content: "";
@@ -1272,31 +1285,27 @@ body {
 .zone-hdr:first-child {
     margin-top: 3px;
 }
-/* A box right after a zone label needs less top margin (the label's own
-      margin already starts the group). */
-.zone-hdr + .zone-group {
-    margin-top: 8px;
-}
+/* The zone label is the top edge of its box (same look as .card-hdr), so
+   the group sits flush beneath it and shares one seam. */
 .zone-group {
     border: 1px solid var(--bdr);
-    border-radius: var(--rs);
-    overflow: hidden; /* clips full-bleed headers to the box's rounded corners, same trick .card uses for .card-hdr */
-    padding: 0 10px 10px;
+    border-top: none;
+    border-radius: 0 0 var(--rs) var(--rs);
+    overflow: hidden;
+    padding: 10px;
 }
-/* Bleeds edge to edge within .zone-group (the -10px margin is coupled to
-   that group's 10px padding) with the same background + bottom border as
-   .card-hdr, so a section reads as part of its card. Flush at the top so
-   stacked sections run together like rows in one list. */
+/* Sections within a zone: small dim eyebrow label, no bar or rule. */
 .grp-hdr {
     font-size: 10.5px;
-    font-weight: 800;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--txt);
-    margin: 0 -10px 8px;
-    padding: 8px 10px 7px;
-    background: var(--bg-card-hdr);
-    border-bottom: 1px solid var(--bdr);
+    letter-spacing: 0.09em;
+    color: var(--txt-dim);
+    margin: 16px 0 8px;
+}
+.zone-group > .grp-hdr:first-child,
+.zone-group > .grp-details:first-child > .grp-hdr {
+    margin-top: 0;
 }
 /* Header variant with small icon-button actions on the right (Theme's
       Shuffle/Cycle toggles). */
@@ -1391,7 +1400,7 @@ body {
 }
 .grp-hdr-icon-btn.on {
     opacity: 1;
-    color: var(--cpu);
+    color: var(--accent);
     background: var(--bg-sel);
 }
 .grp-hdr-icon-btn svg {
@@ -1400,7 +1409,7 @@ body {
     pointer-events: none;
 }
 .sub-hdr {
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1450,7 +1459,7 @@ body {
 }
 .size-btn.active {
     background: var(--bg-sel);
-    color: var(--cpu);
+    color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--bdr-accent);
 }
 .theme-grid {
@@ -1480,7 +1489,7 @@ body {
     transform: translateY(0);
 }
 .theme-tile.active {
-    border-color: var(--cpu);
+    border-color: var(--accent);
     background: var(--bg-sel);
     box-shadow: 0 0 0 1px var(--bdr-accent);
 }
@@ -1512,7 +1521,7 @@ body {
     color: var(--txt-dim);
 }
 .theme-tile-custom.active .theme-swatches-custom {
-    color: var(--cpu);
+    color: var(--accent);
 }
 .tile-custom-icon {
     font-size: 11px;
@@ -1587,7 +1596,7 @@ body {
 }
 .tb-lbl {
     flex: 1;
-    font-size: 10.5px;
+    font-size: 11px;
     color: var(--txt-dim);
     font-family: var(--font-ui);
 }
@@ -1663,7 +1672,7 @@ body {
     width: 13px;
     height: 13px;
     border-radius: 50%;
-    background: var(--cpu);
+    background: var(--accent);
     cursor: pointer;
     border: 2px solid var(--bg);
 }
