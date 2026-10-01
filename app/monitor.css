@@ -1,20 +1,16 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — monitor.css
-   ────────────────────────────────────────────────────────────────────────────
-   Loaded by monitor.html via <link>.
-   Section 1 — Token defaults (the "Deep Space" theme; overridden at runtime
-                by applyTheme() writing inline styles to :root).
-   Section 2 — Static ruleset (all component CSS referencing those tokens).
+   § 1 Token defaults (the "Deep Space" theme; applyTheme() overrides them
+       at runtime via inline styles on :root).
+   § 2 Static ruleset: all component CSS, referencing those tokens.
    ════════════════════════════════════════════════════════════════════════════ */
 
 /* ── § 1  Token defaults ────────────────────────────────────────────────── */
 /* ── Active theme — injected/overwritten by applyTheme() ── */
 /* --txt-dim is the floor for anything meant to be READ (labels, captions,
-   secondary values) — every theme keeps it well above WCAG contrast.
-   --txt-muted sits far below that on purpose; it's for decorative/fill use
-   only (idle dots, hairline-adjacent chrome) and is not legible as text in
-   most themes. Never set a text `color` to --txt-muted — use --txt-dim,
-   optionally with `opacity` if you want it to read as lower-emphasis. */
+   secondary values). --txt-muted is for decorative fills only (idle dots,
+   hairline-adjacent chrome) and isn't legible as text in most themes: never
+   use it as a text `color`. */
 :root {
     --bg: #0d0d16;
     --txt: #e2e8f0;
@@ -31,10 +27,8 @@
     --bg-hover: rgba(255, 255, 255, 0.08);
     --bg-hover-subtle: rgba(255, 255, 255, 0.04);
     --bg-active: rgba(255, 255, 255, 0.1);
-    /* Derived from each theme's own --cpu/--hot rather than hardcoded,
-       so the "selected" ring and error states always match whatever
-       accent colors the active theme sets — themes should not (and
-       mostly don't) override these directly. */
+    /* Derived from each theme's --cpu/--hot so selection rings and error states
+   match its accents; themes shouldn't override these directly. */
     --bg-sel: color-mix(in srgb, var(--cpu) 12%, transparent);
     --bdr-accent: color-mix(in srgb, var(--cpu) 30%, transparent);
     --bg-danger: color-mix(in srgb, var(--hot) 18%, transparent);
@@ -116,15 +110,10 @@ body {
     width: 100%;
     height: 100%;
     background: var(--bg);
-    /* Border kept transparent (not removed) so it still occupies its 1px
-       of box-sizing: border-box space — autoResize()'s height math
-       accounts for exactly this. The visible line is drawn via an inset
-       box-shadow instead of border-color: a *stroked* border on a large
-       border-radius anti-aliases unevenly, rendering visibly dimmer
-       along the curved corners than the straight edges. An inset
-       shadow is rasterized as a filled shape minus an inset copy rather
-       than stroked along the path, so it stays a consistent brightness
-       all the way around regardless of how large --r gets. */
+    /* The border stays transparent (not removed) so it still takes its 1px of
+       box-sizing space; autoResize() counts on it. The visible line is an
+       inset box-shadow, because a stroked border on a large radius
+       anti-aliases dimmer around the corners than along the edges. */
     border: 1px solid transparent;
     box-shadow: inset 0 0 0 1px var(--bhi);
     border-radius: var(--r);
@@ -132,11 +121,9 @@ body {
 }
 
 /* ── Buttons (shared by sbar) ──────────────────────────────────
-   Deliberately chromeless — no box, no hover fill, no selected-ring.
-   State reads purely through icon opacity/color: dim = inactive,
-   full-opacity txt = hovered, --cpu = toggled on, --hot = danger-hover.
-   (Contrast with .size-btn / .theme-tile / etc., which are real
-   boxed controls and do get the tinted-fill treatment.) */
+   Chromeless: state reads through icon opacity/colour alone (dim = inactive,
+   --txt = hovered, --cpu = on, --hot = danger-hover). Boxed controls such as
+   .size-btn and .theme-tile use a tinted fill instead. */
 .bb {
     background: none;
     border: none;
@@ -237,8 +224,8 @@ body {
     background: var(--bhi);
     border-radius: 2px;
 }
-/* Dashboard keeps the size preset's exact width — never stretches to fill
-   the extra room the drawer opens up beside it. */
+/* The dashboard keeps its preset width; it doesn't stretch into the
+      space the drawer opens beside it. */
 #s-dash {
     order: 1;
     flex: 0 0 auto;
@@ -247,11 +234,9 @@ body {
 }
 
 /* ── Connection status (drawer) ───────────────────────────────
-   Mirrors the sbar's dot + text exactly (same .sdot classes, same
-   short strings) instead of keeping its own separate wordy copy —
-   hover for the longer explanation via the wrapper's title attr.
-   Lives inline in the "Connection" .grp-hdr-row now, so no block
-   spacing of its own — just a compact readout beside the label. */
+   Mirrors the sbar's dot + text (same .sdot classes); the wrapper's title
+   attribute carries the longer explanation. Sits inline in the "Connection"
+   .grp-hdr-row, so it has no block spacing of its own. */
 .conn-status {
     display: flex;
     align-items: center;
@@ -269,10 +254,8 @@ body {
 .field {
     margin-bottom: 11px;
 }
-/* Eyebrow-label typography — shared verbatim by .field label, .picker-sec,
-   .sub-hdr, and .row-menu-color-lbl so every small uppercase
-   section/field label in the app reads at one consistent size/weight/
-   tracking, regardless of which panel it lives in. */
+/* Eyebrow-label typography shared by .field label, .picker-sec, .sub-hdr
+      and .row-menu-color-lbl, so every small uppercase label matches. */
 .field label {
     display: block;
     font-size: 10px;
@@ -300,9 +283,8 @@ body {
     border-color: var(--bdr-accent);
     box-shadow: 0 0 0 3px var(--bg-sel);
 }
-/* Token field's show/hide toggle — sits inside the input's own box
-   rather than beside it, so the field doesn't visually grow relative
-   to every other .field input in this panel. */
+/* Token field's show/hide toggle: inside the input's own box, so the field
+      doesn't grow relative to the other .field inputs. */
 .tok-field {
     position: relative;
 }
@@ -333,8 +315,7 @@ body {
     opacity: 1;
     color: var(--txt);
 }
-/* First-run attention flash on the token field — draws the eye to
-   where a new user actually needs to act, a few pulses then settles. */
+/* First-run flash on the token field: a few pulses, then it settles. */
 @keyframes token-flash {
     0%,
     100% {
@@ -390,14 +371,9 @@ body {
     color: var(--txt);
     border-color: var(--bhi);
 }
-/* Opt-in modifier for a genuinely destructive .btn-s (Reset Widget,
-   today) — a permanent red-tinted border, not just on hover, so it
-   reads as different at rest, before anyone's even moused over it.
-   Explicit opt-IN on purpose: the previous scheme made red-on-hover
-   the default and safe buttons had to opt out, so a new button that
-   forgot the modifier would silently look destructive. This way,
-   forgetting the modifier just makes a button look normal — the safe
-   direction to fail in. */
+/* Opt-in modifier for a destructive .btn-s (Reset Widget): a permanent
+   red-tinted border. Opt-in so a button that forgets the modifier merely
+   looks normal, the safe way to fail. */
 .btn-danger {
     border-color: var(--bdr-err);
 }
@@ -406,9 +382,7 @@ body {
     color: var(--hot);
     border-color: var(--bdr-err);
 }
-/* Side-by-side pair of .btn-s buttons (Export/Import Settings) — .btn-s
-   is width:100% by default for the normal stacked case, so this row
-   overrides that to split the space evenly instead. */
+/* Side-by-side .btn-s pair (Export/Import); overrides .btn-s's width:100%. */
 .btn-row {
     display: flex;
     gap: 8px;
@@ -424,12 +398,9 @@ body {
 }
 
 /* ── Connection (drawer) ───────────────────────────────────────
-   Same bordered-container language as .tb-group, so this reads as a
-   peer of the Theme Editor's groups instead of two loose fields. */
-/* Plain vertical stack of fields/controls — used inside Connection and
-   Demo Mode. No border/background of its own: these are a couple of
-   form fields, not a distinct sub-unit that needs a visual boundary
-   the way Theme Editor's three genuinely-separate clusters do. */
+   Same bordered-container look as .tb-group. */
+/* Plain vertical stack of fields, used in Connection and Demo Mode. No
+      border or background: these are form fields, not a distinct sub-unit. */
 .field-stack .field {
     margin-bottom: 9px;
 }
@@ -571,10 +542,9 @@ body {
 }
 
 /* ── Edit mode ─────────────────────────────────────────────── */
-/* Combines with .card's own inset border-shadow (single box-shadow
-   property, so both need listing together or the second would replace
-   the first instead of layering over it) — inset line stays, plus an
-   outer highlight ring while editing. */
+/* Lists the inset border-shadow together with the outer edit-mode ring:
+      they share one box-shadow property, so listing only one would replace
+      the other. */
 .cards.editing .card {
     box-shadow:
         inset 0 0 0 1px var(--bdr),
@@ -618,9 +588,8 @@ body {
     color: var(--txt-dim);
     border-color: var(--bhi);
 }
-/* Card-header "…" — opens a small popover to recolor this card's own
-   accent var. The drag grip now lives on the left (see .card-grip),
-   so this sits alone at the header's right edge. */
+/* Card-header "…": opens the accent-colour popover. The drag grip is on the
+      left (.card-grip), so this sits alone at the right edge. */
 .card-more {
     position: absolute;
     right: 5px;
@@ -652,10 +621,8 @@ body {
     color: var(--txt);
     border-color: var(--txt-dim);
 }
-/* Mini-mode collapse/expand — chromeless like .bb (icon-only, no box),
-   since this is an everyday viewing toggle rather than a menu/config
-   action, unlike .card-more which it shares a right-edge slot with
-   (mutually exclusive: edit mode swaps one for the other). */
+/* Mini-mode chevron: chromeless like .bb. Edit mode swaps it for .card-more
+      in the same right-edge slot. */
 .card-mini-toggle {
     position: absolute;
     right: 6px;
@@ -680,10 +647,8 @@ body {
     opacity: 1;
     color: var(--txt);
 }
-/* The header itself is now the click target for mini-toggle (see
-   buildCards()) — the chevron button is still there for a visible
-   affordance/icon, but a tiny 18px button alone is a fussy target on
-   a widget this size. */
+/* The whole header is the mini-toggle click target (see buildCards()); the
+      chevron stays as a visible affordance. */
 .card-hdr-toggleable {
     cursor: pointer;
 }
@@ -694,9 +659,8 @@ body {
     opacity: 1;
     color: var(--txt);
 }
-/* Color-picker row inside the "…" flyout — used by the card-header
-   accent-color popover. A display/pick chip (native colour input,
-   for anyone who'd rather eyeball it) plus a typeable hex field. */
+/* Colour row in the "…" flyout: a native colour chip plus a typeable hex
+      field. */
 .row-menu-color {
     display: flex;
     flex-direction: column;
@@ -717,10 +681,8 @@ body {
     align-items: center;
     gap: 6px;
 }
-/* Wrapper carries the visible fill; the native <input type=color> sits
-   on top at opacity:0 — same technique as .tb-swatch, so this chip
-   reads as one consistent rounded swatch style app-wide instead of the
-   browser's own (inconsistently-padded) color-input chrome. */
+/* The wrapper carries the fill; the native colour input sits over it at
+      opacity:0 (same technique as .tb-swatch) for one consistent swatch look. */
 .row-menu-color-chip {
     position: relative;
     width: 24px;
@@ -797,8 +759,7 @@ body {
 .row-menu-item.danger:hover {
     background: rgba(239, 68, 68, 0.12);
 }
-/* Style toggle as a multi-segment button — pick a style directly
-   instead of cycling through "Style: X" one click at a time. */
+/* Style toggle: pick a style directly rather than cycling. */
 .row-menu-seg {
     display: flex;
     gap: 2px;
@@ -849,12 +810,9 @@ body {
 }
 
 /* ── Anchor / position picker ──────────────────────────────────
-   Each option reads as a tiny screen preview — a monitor bezel with
-   a little widget chip docked in the corner it represents — rather
-   than an abstract checkbox. Kept deliberately small and icon-only
-   (label lives in the title tooltip): this is a set-and-forget
-   preference, not something to compete for visual weight with the
-   Theme grid below it. Single row of 4 rather than a 2×2 block. */
+   Each option is a tiny screen preview: a monitor bezel with a widget chip
+   docked in that corner. Icon-only (the label is the title tooltip) and a
+   single row of 4, since it's a set-and-forget preference. */
 .anchor-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -938,9 +896,7 @@ body {
     bottom: 2px;
     right: 2px;
 }
-/* Label text is dropped visually (still set as the button's title
-   attribute for a hover tooltip / accessibility) — icon-only keeps
-   this row compact. */
+/* Label text is hidden (it remains the title tooltip) to keep the row compact. */
 .anchor-lbl {
     display: none;
 }
@@ -976,8 +932,7 @@ body {
         visibility 0.45s ease;
 }
 
-/* Slow ambient wash of accent color behind the mark — makes the screen
-   feel alive during the (often sub-second) wait instead of static. */
+/* Slow ambient wash of accent colour behind the mark. */
 #boot-screen::before {
     content: "";
     position: absolute;
@@ -1040,8 +995,7 @@ body {
     margin-bottom: 14px;
 }
 
-/* Static outer bezel — gives the spinning ring something to sit inside
-   rather than floating on bare background. */
+/* Static outer bezel for the spinning ring. */
 .boot-mark::before {
     content: "";
     position: absolute;
@@ -1050,8 +1004,7 @@ body {
     border-radius: 50%;
 }
 
-/* A soft comet trail rather than a hard-edged single-color arc — reads
-   as instrumentation, not a generic browser spinner. */
+/* Soft comet trail instead of a hard single-colour arc. */
 .boot-mark-ring {
     position: absolute;
     inset: 3px;
@@ -1129,9 +1082,8 @@ body {
 }
 
 /* ── Progress bar ─────────────────────────────────────────────── */
-/* A continuously-filling bar under the status text — the checklist
-   below gives discrete steps, but this reads as steady forward motion
-   in between, so the screen never looks like it's stalled. */
+/* Steady fill between the checklist's discrete steps, so the screen never
+      looks stalled. */
 
 .boot-progress {
     width: 100%;
@@ -1279,11 +1231,8 @@ body {
 }
 
 /* ── Bar-top mode ─────────────────────────────────────────────
-   Top-anchored corners move the status bar (drag handle + controls)
-   above the content instead of below it — most people who park the
-   widget near the top of their screen expect the grab handle up
-   there too, and it keeps the controls from drifting far from the
-   anchored edge as the window resizes. ── */
+   Top-anchored corners put the status bar (drag handle + controls) above the
+   content, next to the anchored edge. */
 #app.bar-top #sbar {
     order: -1;
     border-top: none;
@@ -1291,30 +1240,16 @@ body {
 }
 
 /* ── Theme screen ──────────────────────────────────────────── */
-/* Three-tier header hierarchy for the settings drawer.
-   .zone-hdr   — the three top-level zones (Appearance, System,
-                 Advanced). A grouping label, not a control — bigger,
-                 accent-colored, with a small leading bar borrowed
-                 from the dashboard's own .card-hdr language (see
-                 ::before below), so it reads as a distinctly coarser
-                 tier rather than just a bigger section header.
-   .zone-group — the bordered box a zone's sections live inside (see
-                 monitor.html) — one visible boundary per zone, so
-                 Appearance/System/Advanced each read as one cohesive
-                 unit instead of a flat list of same-weight headers.
-   .grp-hdr    — named sections within a zone (Size, Window Position,
-                 Theme, Connection, Backup, Reset, Demo Mode, First
-                 Launch). Brighter, bottom-ruled. Connection, Demo
-                 Mode, and First Launch are collapsible
-                 (.grp-details/.grp-hdr-toggle below), each its own
-                 independent disclosure rather than grouped under one
-                 shared toggle. Theme Editor doesn't have one of these
-                 at all — see theme-editor-inline in monitor.html, it's
-                 folded into Theme instead.
-   .sub-hdr    — sub-groups nested *inside* one grp-hdr (e.g. Background
-                 & Chrome / Warning Ramp / Share Theme all live under
-                 Theme). Dimmer, no rule, tighter margin — reads as
-                 clearly subordinate rather than a peer section. */
+/* Three-tier header hierarchy for the settings drawer:
+   .zone-hdr   top-level zones (Appearance, System, Advanced). A coarse
+               grouping label: larger, accent-coloured, with a leading bar
+               echoing .card-hdr (see ::before).
+   .zone-group the bordered box holding a zone's sections.
+   .grp-hdr    named sections within a zone (Size, Theme, Connection, …).
+               Bottom-ruled; Connection, Demo Mode and First Launch are
+               collapsible (.grp-details / .grp-hdr-toggle).
+   .sub-hdr    sub-groups nested inside one .grp-hdr (e.g. the Theme Editor's
+               clusters). Dimmer, no rule: clearly subordinate. */
 .zone-hdr {
     display: flex;
     align-items: center;
@@ -1337,9 +1272,8 @@ body {
 .zone-hdr:first-child {
     margin-top: 3px;
 }
-/* The box right after a zone label needs less top margin than normal
-   — the zone label's own margin already signaled "new group starts
-   here"; this is just the small gap between the label and its box. */
+/* A box right after a zone label needs less top margin (the label's own
+      margin already starts the group). */
 .zone-hdr + .zone-group {
     margin-top: 8px;
 }
@@ -1349,14 +1283,10 @@ body {
     overflow: hidden; /* clips full-bleed headers to the box's rounded corners, same trick .card uses for .card-hdr */
     padding: 0 10px 10px;
 }
-/* Bleeds edge-to-edge within .zone-group (whose own padding is 10px —
-   the -10px here is deliberately coupled to that, not a generic
-   value) and picks up the same background+border-bottom recipe as
-   the dashboard's own .card-hdr, so a settings section reads as part
-   of its card instead of floating text sitting inside one. Flush at
-   the top (margin-top: 0) so stacked sections run contiguously, like
-   rows in one list, rather than as separate floating blocks with
-   gaps between them. */
+/* Bleeds edge to edge within .zone-group (the -10px margin is coupled to
+   that group's 10px padding) with the same background + bottom border as
+   .card-hdr, so a section reads as part of its card. Flush at the top so
+   stacked sections run together like rows in one list. */
 .grp-hdr {
     font-size: 10.5px;
     font-weight: 800;
@@ -1368,21 +1298,16 @@ body {
     background: var(--bg-card-hdr);
     border-bottom: 1px solid var(--bdr);
 }
-/* Header variant that carries small icon-button actions on the right
-   (Theme's Shuffle/Cycle toggles) instead of being plain text. */
+/* Header variant with small icon-button actions on the right (Theme's
+      Shuffle/Cycle toggles). */
 .grp-hdr-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
-/* Collapsible sections (Connection, Backup, Reset, Demo Mode, First
-   Launch) — a plain <details>/<summary> so the collapse behavior is
-   free, but the summary keeps the exact same look as every
-   non-collapsible .grp-hdr (just with a click target and an arrow)
-   rather than adopting the separate boxed-chip look .tb-share uses
-   one level down. No extra spacing rules needed here beyond .grp-hdr's
-   own — a <details> with a .grp-hdr-toggle summary sits flush and
-   contiguous exactly like a plain .grp-hdr div does. */
+/* Collapsible sections (Connection, Backup, Reset, Demo Mode, First Launch):
+   a <details>/<summary> whose summary looks exactly like a plain .grp-hdr,
+   plus a click target and arrow. */
 .grp-details > .grp-hdr-toggle {
     cursor: pointer;
     list-style: none;
@@ -1595,16 +1520,10 @@ body {
 }
 
 /* ── Theme Builder groups ─────────────────────────────────────
-   Background & Chrome / Warning Ramp / Share Theme all live together
-   under one "Theme Editor" .grp-hdr. Each one's own header is the top
-   edge of its box, not a floating label above a separate box — same
-   merged-header language for all three, Share Theme included, so
-   nothing here reads as an older, less-finished sub-panel than the
-   rest of the drawer. */
-/* Folded into Theme (see monitor.html) — only rendered when Custom is
-   the active tile. Scoped like every other .hide usage in this file
-   (.btn.hide, .picker-overlay.hide, etc.) rather than a bare .hide,
-   since there's no generic rule for that class anywhere here. */
+   Background & Chrome, Warning Ramp and Share Theme sit under one "Theme
+   Editor" .grp-hdr. Each one's header is the top edge of its own box. */
+/* Folded into Theme: rendered only while Custom is the active tile. Scoped
+      to #theme-editor-inline since there's no generic .hide rule. */
 #theme-editor-inline.hide {
     display: none;
 }
@@ -1619,8 +1538,7 @@ body {
     border-bottom: none;
     background: var(--bg-hover-subtle);
 }
-/* The box below sits flush against its header, sharing one seam
-   instead of doubling the border there. */
+/* The box below sits flush against its header, sharing one seam. */
 .tb-group-hdr + .tb-group {
     margin-top: -1px;
     border-radius: 0 0 var(--rs) var(--rs);
@@ -1681,8 +1599,8 @@ body {
     text-align: right;
     letter-spacing: 0.02em;
 }
-/* Neutral pill on the Background row — no ok/warn/bad tint, just a
-   hover target explaining what the contrast badges below it mean. */
+/* Neutral pill on the Background row: a hover target explaining the
+      contrast badges. */
 .tb-wcag-pill {
     font-family: var(--font-code);
     font-size: 8.5px;
@@ -1799,9 +1717,7 @@ body {
     transition: background 0.25s;
 }
 
-/* Custom CSS textarea — same input language as .field input (bg-input
-   fill, --bhi border, --rs radius) so it reads as a form control like
-   everything else, not a separate code-editor widget. */
+/* Custom CSS textarea: same look as .field input. */
 #custom-css {
     width: 100%;
     height: 72px;
@@ -1831,22 +1747,13 @@ body {
 }
 
 /* ── Share Theme (collapsible) ────────────────────────────────
-   <details>/<summary> gives native collapse behavior for free — no
-   JS needed to toggle it. Summary is boxed in the same bordered-chip
-   language as .tb-group/.theme-tile (not just plain .sub-hdr text)
-   so it visibly reads as something you click, and joins seamlessly
-   with the body below into one continuous box while open. */
+   Native <details>/<summary>; the summary uses the .tb-group-hdr chip look
+   and joins the body into one box while open. */
 .tb-share {
     margin-bottom: 4px;
 }
-/* Everything Share Theme's summary has in common with Background &
-   Chrome / Warning Ramp's headers (border, radius, padding, bg, the
-   flex layout) comes from .tb-group-hdr. This only adds what's
-   actually different here: it's clickable, and — unlike the other
-   two, which always have their box visible right below — closed it
-   has no box below at all, so closed it needs to look like a
-   complete standalone box (all four corners, full border) rather
-   than a header with its bottom edge cut off. */
+/* Adds to .tb-group-hdr only what differs here: it's clickable, and closed
+   it has no box below, so it needs full borders and all four corners. */
 .tb-share-summary {
     cursor: pointer;
     list-style: none;
@@ -1944,8 +1851,7 @@ body {
 }
 .card {
     background: var(--bg-card);
-    /* Same fix as #app above — inset box-shadow instead of a stroked
-       border so large --rs values don't dim out along the curve. */
+    /* Inset box-shadow instead of a stroked border, as on #app. */
     border: 1px solid transparent;
     box-shadow: inset 0 0 0 1px var(--bdr);
     border-radius: var(--rs);
@@ -1986,9 +1892,8 @@ body {
 .card-hdr.net {
     color: var(--net);
 }
-/* Header alert bar — moderate pulses in the card's own accent color
-   (no color swap, just motion); high swaps to danger red and pulses
-   faster. Silent (falls through to the plain accent bar) at levels 1–3. */
+/* Header alert bar: moderate levels pulse in the card's own accent colour;
+      high swaps to danger red and pulses faster. Levels 1–3 stay silent. */
 .card-hdr.hdr-warm::before {
     animation: pulse 1.6s infinite;
 }
@@ -2033,10 +1938,8 @@ body {
     opacity: 0.55;
 }
 /* ── Mini (collapsed) card ────────────────────────────────────────
-   Toggled via .card-mini-toggle — see isCardMini()/setCardMini() in
-   monitor.js. Values/dots are kept live in the DOM at all times (see
-   renderDashboard), so collapsing/expanding is just this class flip:
-   no rebuild, no stale numbers on the way back out. */
+   Toggled via .card-mini-toggle (setCardMini() in dashboard.js). Values stay
+   live in the DOM, so collapsing/expanding is just this class flip. */
 .card-mini-vals {
     display: none;
     align-items: baseline;
@@ -2047,17 +1950,10 @@ body {
 .card.mini .card-mini-vals {
     display: flex;
 }
-/* Fixed-width slots (MINI_SLOTS in monitor.js) rather than each card's
-   cluster sizing to its own content — that's what actually makes this
-   read as one grid once several cards are collapsed and stacked:
-   every card's 1st/2nd/3rd value lands at the same x position instead
-   of each row hugging its own natural width. Cards with fewer values
-   than MINI_SLOTS get an empty, same-width cell rather than
-   compacting — the "fill left to right" part. Label/number sizes and
-   this width all come from --sz-mini-* (see SIZES in themes.js) so
-   mini mode actually scales with the S/M/L size preset like everything
-   else does, instead of sitting at one hardcoded tiny size regardless
-   of it. */
+/* Fixed-width slots (MINI_SLOTS in dashboard.js): each card's 1st/2nd/3rd
+   value lands at the same x position, so stacked mini cards form a grid;
+   cards with fewer values get empty same-width cells. Sizes come from
+   --sz-mini-* (SIZES in themes.js), so mini mode scales with S/M/L. */
 .mini-val,
 .mini-val-empty {
     display: flex;
@@ -2080,33 +1976,24 @@ body {
     font-weight: 600;
     color: var(--txt);
 }
-/* Per-metric bar — same shape/size language as .sr-accent, the little
-   solid/dashed/dotted bar that already sits beside every row in the
-   full view and doubles as that row's sparkline-line legend. Warn-mode
-   metrics (temp/load) get the graduated --w1..--w5 severity ramp;
-   everything else (fan, RX/TX, Storage's summary) gets a flat on/off
-   read via --meter/--dot-off-meter — the same convention the full
-   view's meter dots already use (see makeDots) — so every slot has a
-   bar instead of leaving a gap where "statusless" metrics would
-   otherwise have nothing. */
+/* Per-metric bar, shaped like .sr-accent. Warn-mode metrics use the
+   --w1…--w5 severity ramp; the rest get the flat --meter / --dot-off-meter
+   read the full view's meter dots use (see makeDots). */
 .mini-bar {
     width: 3px;
     height: var(--sz-mini-bar);
     border-radius: 2px;
     flex-shrink: 0;
 }
-/* Collapse: hide everything below the header regardless of which body
-   wrapper this card happens to use (.card-spark / .card-spark-ctx /
-   .card-rows-full) — the canvas/spark instance underneath keeps
-   running untouched, just off-screen, so expanding is instant. */
+/* Collapse: hide everything below the header whichever body wrapper the
+      card uses. The canvas keeps running off-screen, so expanding is instant. */
 .card.mini > *:not(.card-hdr) {
     display: none;
 }
 .card.mini .card-hdr {
     border-bottom: none;
 }
-/* Manual-hide preview — visible only in edit mode as a reminder this
-   card is suppressed elsewhere, with a way back via the "⋯" menu. */
+/* Manual-hide preview: shown only in edit mode, restorable via the badge. */
 .card-hidden-preview {
     opacity: 0.5;
 }
@@ -2134,9 +2021,8 @@ body {
     border-color: var(--bhi);
     background: var(--bg-hover);
 }
-/* ── Custom-row reordering — same drag pattern as cards, scoped to a
-   card's own list of custom rows so it never mixes with disk/named
-   rows sharing the same section. ── */
+/* ── Custom-row reordering ── drag pattern as for cards, scoped to a card's
+   own custom-row list. ── */
 .custom-rows-list {
     display: flex;
     flex-direction: column;
@@ -2178,12 +2064,8 @@ body {
     opacity: 0.55;
 }
 .card-ttl {
-    /* Fixed at the same width as the sparkline canvas column
-       (--canvas-w) rather than flex:1 — this is the "data zone" seam
-       used throughout the full-size view (canvas | rows), so a mini
-       row's values start at the exact same x position as a full
-       card's rows do, and mixed mini/full cards in the same list line
-       up cleanly instead of each header sizing itself independently. */
+    /* Fixed at the canvas column width (--canvas-w), the full view's
+       canvas | rows seam, so mini-row values align with a full card's rows. */
     flex: none;
     width: var(--canvas-w);
     min-width: 0;
@@ -2214,9 +2096,8 @@ body {
     background: var(--bg-canvas);
     width: 100%;
 }
-/* Peak marker — a real DOM element, not canvas-drawn, specifically so
-   it can spill past the canvas's own border into the gap beside it
-   rather than being clipped at the canvas edge. */
+/* Peak marker: a DOM element, not canvas-drawn, so it can spill past the
+      canvas border instead of being clipped. */
 .spark-peak-dot {
     position: absolute;
     left: 100%;

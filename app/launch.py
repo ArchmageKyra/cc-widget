@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""
-CC Widget launcher.
+"""CC Widget launcher.
 
-Creates the borderless GTK/WebKit window, handles window positioning,
-communicates with the JavaScript frontend, and periodically pushes
-Linux system statistics into monitor.html.
+Creates the borderless GTK/WebKit window, handles window positioning and
+the JavaScript bridge, and pushes Linux system statistics into monitor.html.
 """
 
 import json
@@ -19,12 +17,8 @@ import gi
 # Environment / GTK backend
 # ============================================================================
 
-# GTK's native Wayland positioning APIs are awkward for this widget because
-# we intentionally save and restore the window's screen coordinates.
-#
-# Running GTK through XWayland gives us the traditional X11 move()/position
-# behavior we need. This only changes the GTK backend; the rest of the desktop
-# can remain on Wayland normally.
+# Native Wayland can't place a window at saved screen coordinates, so run GTK
+# through XWayland for X11-style move()/position. Only GTK's backend changes.
 if os.environ.get("XDG_SESSION_TYPE") == "wayland":
     os.environ.setdefault("GDK_BACKEND", "x11")
     if os.environ["GDK_BACKEND"] == "x11":
@@ -62,8 +56,7 @@ except ImportError:
 HERE = os.path.dirname(os.path.abspath(__file__))
 HTML_URI = "file://" + os.path.join(HERE, "monitor.html")
 
-# Follow the XDG Base Directory specification instead of storing application
-# state beside the executable.
+# XDG Base Directory layout rather than state beside the executable.
 XDG_CONFIG_HOME = os.environ.get(
     "XDG_CONFIG_HOME", os.path.join(os.path.expanduser("~"), ".config")
 )
@@ -78,12 +71,9 @@ os.makedirs(CONFIG_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 
-# Window position is user state, so it belongs in ~/.config rather than the
-# application directory.
 WINDOW_POS_FILE = os.path.join(CONFIG_DIR, "window_pos.json")
 
-# WebKit maintains its own website data and cache. Keeping those under our
-# application directories prevents WebKit from scattering state elsewhere.
+# Keep WebKit's website data and cache under our own directories.
 WEBKIT_DATA_DIR = os.path.join(CONFIG_DIR, "webkit-data")
 WEBKIT_CACHE_DIR = os.path.join(CACHE_DIR, "webkit-cache")
 
@@ -95,8 +85,7 @@ os.makedirs(WEBKIT_CACHE_DIR, exist_ok=True)
 # Window configuration
 # ============================================================================
 
-# The window starts small while WebKit loads, then the frontend can request
-# its normal size once it is ready.
+# The window starts small while WebKit loads; the frontend then requests its real size.
 BOOT_W, BOOT_H = 320, 300
 
 MIN_W, MAX_W = 300, 1200
@@ -109,8 +98,7 @@ ANCHOR_CORNERS = {
     "bottom-right",
 }
 
-# Current anchor mode. None means the window behaves like a normal
-# free-positioned window.
+# Current anchor corner; None = a normal free-positioned window.
 _anchor_corner = None
 
 
@@ -158,35 +146,44 @@ def position_from_anchor(
     return anchor_x, anchor_y
 
 def _apply_geometry(width, height, x, y):
-    """Move and resize in a single X11 request to avoid the visible
-    grow-then-jump flash that separate resize()/move() calls cause.
+    """Move and resize in a single X11 request, avoiding the grow-then-jump
+    flash separate resize()/move() calls cause.
 
-    move_resize() being one request stops GTK from painting an
-    intermediate frame between the move and the resize, but it doesn't
-    stop X11/the compositor from painting a frame *during* the resize
-    itself, before WebKit has repainted its content at the new size —
-    that's the actual source of the flash on every resize, not just the
-    boot reveal. freeze_updates()/thaw_updates() suppresses painting for
-    that window in between, so the compositor only ever shows a
-    fully-settled frame.
+    That alone doesn't stop the compositor painting a frame mid-resize,
+    before WebKit has repainted at the new size, so updates are frozen
+    until it has.
     """
     win.set_size_request(-1, -1)
     gdk_window = win.get_window()
     if gdk_window is not None:
         gdk_window.freeze_updates()
         gdk_window.move_resize(x, y, width, height)
-        # Thaw on the next idle pass rather than immediately — gives
-        # WebKit a chance to reflow/repaint at the new size first, so the
-        # first frame the compositor is allowed to show is already correct.
+        # Thaw on the next idle pass so WebKit can repaint at the new size first.
         GLib.idle_add(gdk_window.thaw_updates)
     else:
-        # Not realized yet (shouldn't happen once win.show_all() has run,
-        # but fall back just in case).
+        # Not realized yet (shouldn't happen after show_all()).
         win.resize(width, height)
         win.move(x, y)
 
-# Give the process a meaningful application name instead of inheriting
-# "launch.py". This also helps desktop tools identify the application.
+
+def _schedule_geometry(width, height, x, y) -> None:
+    """Apply a geometry change on the next GLib idle pass."""
+
+    def apply():
+        _apply_geometry(width, height, x, y)
+        return False
+
+    GLib.idle_add(apply)
+
+
+def _eval_js(javascript: str) -> None:
+    """Run JavaScript in the webview, if it exists yet."""
+
+    if webview is not None:
+        webview.evaluate_javascript(javascript, -1, None, None)
+
+
+# Name the process so desktop tools don't show "launch.py".
 GLib.set_prgname("cc-widget")
 GLib.set_application_name("CC Widget")
 
@@ -200,7 +197,7 @@ webkit_settings.set_allow_universal_access_from_file_urls(True)
 webkit_settings.set_allow_file_access_from_file_urls(True)
 webkit_settings.set_javascript_can_open_windows_automatically(False)
 
-# Use an explicit WebKit context so its data/cache locations are predictable.
+# Explicit context so WebKit's data/cache locations are predictable.
 webkit_data_manager = WebKit2.WebsiteDataManager(
     base_data_directory=WEBKIT_DATA_DIR,
     base_cache_directory=WEBKIT_CACHE_DIR,
@@ -215,8 +212,7 @@ web_context = WebKit2.WebContext.new_with_website_data_manager(
 # Network rate tracking
 # ============================================================================
 
-# psutil gives us cumulative byte counters, so network speed must be
-# calculated as a delta between successive samples.
+# psutil's byte counters are cumulative, so rates are deltas between samples.
 _previous_net = None
 _previous_net_time = None
 
@@ -268,9 +264,8 @@ def get_net_rates() -> dict[str, float]:
 # Folder size tracking
 # ============================================================================
 
-# Folder sizes can be expensive to calculate because they require walking
-# the filesystem. Keep the results cached and perform "du" in background
-# threads so the GTK/WebKit UI never blocks while calculating them.
+# `du` walks the filesystem, so results are cached and computed in background
+# threads to keep the UI from blocking.
 _folder_paths: list[str] = []
 _folder_sizes: dict[str, float] = {}
 _folder_sizes_lock = threading.Lock()
@@ -321,12 +316,10 @@ manager = WebKit2.UserContentManager()
 win = None
 webview = None
 
-# Set right before a "boot"/"resize:" message triggers _apply_geometry, to
-# (width, height) — cleared once win.get_size() actually reaches it. Lets
-# on_window_configure() tell JS the instant the native window has genuinely
-# reached its target size, rather than acking on the first configure-event
-# of any kind, which can fire on an intermediate/spurious geometry change
-# (common enough under XWayland) before the real resize has landed.
+# (width, height) requested by the latest "boot"/"resize:" message, cleared
+# once the window really reaches it. on_window_configure() uses it to tell JS
+# when the resize has landed, since a configure-event can also fire for an
+# intermediate geometry (common under XWayland).
 _resize_target = None
 
 # ============================================================================
@@ -380,12 +373,7 @@ def on_message(_manager, result) -> None:
                 x, y = saved_position["x"], saved_position["y"]
 
             _resize_target = (width, height)
-
-            def boot_window(width=width, height=height, x=x, y=y):
-                _apply_geometry(width, height, x, y)
-                return False
-
-            GLib.idle_add(boot_window)
+            _schedule_geometry(width, height, x, y)
 
         except Exception as exc:
             print("Boot resize error:", exc)
@@ -414,9 +402,7 @@ def on_message(_manager, result) -> None:
             old_width, old_height = win.get_size()
 
             if _anchor_corner in ANCHOR_CORNERS:
-                # Preserve the fixed screen-space anchor while changing the
-                # window dimensions. Without this, resizing from the opposite
-                # side would make an anchored window appear to "drift".
+                # Keep the anchor corner fixed on screen while the size changes.
                 anchor_x, anchor_y = get_anchor_position(
                     _anchor_corner,
                     x,
@@ -436,12 +422,7 @@ def on_message(_manager, result) -> None:
                 new_x, new_y = x, y
 
             _resize_target = (width, height)
-
-            def resize_window(width=width, height=height, x=new_x, y=new_y):
-                _apply_geometry(width, height, x, y)
-                return False
-
-            GLib.idle_add(resize_window)
+            _schedule_geometry(width, height, new_x, new_y)
 
         except Exception as exc:
             print("Resize error:", exc)
@@ -462,9 +443,7 @@ def on_message(_manager, result) -> None:
             x, y = win.get_position()
             width, height = win.get_size()
 
-            # Store the anchor's screen coordinate rather than the window's
-            # top-left coordinate. This allows the window to change size while
-            # keeping the selected corner fixed in place.
+            # Store the anchor point, not the top-left, so resizing keeps the corner fixed.
             anchor_x, anchor_y = get_anchor_position(
                 corner,
                 x,
@@ -483,8 +462,7 @@ def on_message(_manager, result) -> None:
         return
 
     # ------------------------------------------------------------------------
-    # Folder picker (native GTK dialog, replaces the old prompt()-based
-    # free-text path entry)
+    # Folder picker
     # ------------------------------------------------------------------------
 
     if message == "pick-folder":
@@ -492,23 +470,15 @@ def on_message(_manager, result) -> None:
         if not path:
             return
 
-        javascript = (
-            "if(window.onFolderPicked)"
-            f"window.onFolderPicked({json.dumps(path)})"
-        )
-        webview.evaluate_javascript(javascript, -1, None, None)
-
+        _eval_js(f"if(window.onFolderPicked)window.onFolderPicked({json.dumps(path)})")
         return
 
     # ------------------------------------------------------------------------
     # Settings export / import
     #
-    # JS holds the "ccm" config blob in memory (it's what's in
-    # localStorage); Python holds window_pos.json. Export merges both
-    # into one file; import reverses that — write window_pos.json back
-    # via the same atomic helper the app itself uses, reposition the
-    # live window immediately, then hand the ccm blob back to JS to
-    # write into localStorage and reload.
+    # JS owns the "ccm" config (localStorage); Python owns window_pos.json.
+    # Export bundles both into one file. Import restores the window position,
+    # repositions the live window, then hands ccm back to JS to store and reload.
     # ------------------------------------------------------------------------
 
     if message.startswith("export-settings:"):
@@ -529,10 +499,7 @@ def on_message(_manager, result) -> None:
         }
 
         try:
-            tmp_path = path + ".tmp"
-            with open(tmp_path, "w") as file:
-                json.dump(bundle, file, indent=2)
-            os.replace(tmp_path, path)
+            _atomic_write_json(path, bundle, indent=2)
         except Exception as exc:
             print("Export write error:", exc)
             _js_alert("Couldn't save the settings file — see the terminal for details.")
@@ -575,21 +542,15 @@ def on_message(_manager, result) -> None:
                 else:
                     new_x, new_y = x, y
 
-                def reposition_window(width=width, height=height, x=new_x, y=new_y):
-                    _apply_geometry(width, height, x, y)
-                    return False
-
-                GLib.idle_add(reposition_window)
+                _schedule_geometry(width, height, new_x, new_y)
 
             except Exception as exc:
                 print("Import reposition error:", exc)
 
-        javascript = (
+        _eval_js(
             "if(window.onSettingsImported)"
             f"window.onSettingsImported({json.dumps(bundle['ccm'])})"
         )
-        webview.evaluate_javascript(javascript, -1, None, None)
-
         return
 
     # ------------------------------------------------------------------------
@@ -598,12 +559,11 @@ def on_message(_manager, result) -> None:
 
     if message.startswith("watch:"):
         try:
-            # JavaScript sends the complete list whenever its watched-folder
-            # configuration changes.
+            # JS sends the complete list whenever it changes.
             new_paths = json.loads(message[6:])
 
             with _folder_sizes_lock:
-                # Remove cached entries for folders that are no longer watched.
+                # Drop cache entries for folders no longer watched.
                 for path in list(_folder_sizes):
                     if path not in new_paths:
                         del _folder_sizes[path]
@@ -645,9 +605,8 @@ manager.register_script_message_handler("ccm")
 # Filesystem filtering
 # ============================================================================
 
-# These pseudo-filesystems aren't useful as user-facing storage devices.
-# In particular, excluding loop/squashfs/overlay mounts prevents things like
-# Snap images and virtual filesystems from polluting the storage display.
+# Pseudo-filesystems that aren't user-facing storage (this keeps Snap images
+# and virtual filesystems out of the storage card).
 SKIP_FILESYSTEMS = {
     "tmpfs",
     "devtmpfs",
@@ -679,28 +638,16 @@ SKIP_FILESYSTEMS = {
 # ============================================================================
 
 def push_stats() -> bool:
-    """
-    Collect system statistics and push them into the WebKit frontend.
+    """Collect system statistics and push them to the frontend.
 
-    Returns True so GLib keeps calling this function every 2 seconds.
+    Returns True so GLib keeps calling it every 2 seconds.
     """
 
     if webview is None:
         return True
 
     if not HAS_PSUTIL:
-        javascript = (
-            "if(window.onLinuxStats)"
-            "window.onLinuxStats({unavailable:true})"
-        )
-
-        webview.evaluate_javascript(
-            javascript,
-            -1,
-            None,
-            None,
-        )
-
+        _eval_js("if(window.onLinuxStats)window.onLinuxStats({unavailable:true})")
         return True
 
     try:
@@ -738,21 +685,16 @@ def push_stats() -> bool:
                 }
 
             except (PermissionError, OSError):
-                # Some mounts can disappear or become inaccessible between
-                # disk_partitions() and disk_usage().
+                # A mount can vanish between disk_partitions() and disk_usage().
                 pass
 
         # --------------------------------------------------------------------
         # Watched folder sizes
         # --------------------------------------------------------------------
 
-        # Copy the cache while holding the lock, then release it before doing
-        # anything else. The expensive work happens in background threads.
+        # Send the cached sizes now and start a background refresh for next time.
         with _folder_sizes_lock:
             folder_sizes = dict(_folder_sizes)
-
-        # Start another asynchronous refresh. The current cached values are
-        # still sent to JavaScript immediately.
         refresh_folder_sizes()
 
         # --------------------------------------------------------------------
@@ -788,18 +730,7 @@ def push_stats() -> bool:
             "error": str(exc),
         }
 
-    javascript = (
-        "if(window.onLinuxStats)"
-        f"window.onLinuxStats({json.dumps(stats)})"
-    )
-
-    webview.evaluate_javascript(
-        javascript,
-        -1,
-        None,
-        None,
-    )
-
+    _eval_js(f"if(window.onLinuxStats)window.onLinuxStats({json.dumps(stats)})")
     return True
 
 
@@ -807,127 +738,104 @@ def push_stats() -> bool:
 # Window position persistence
 # ============================================================================
 
-def _write_window_position(x: int, y: int, corner) -> None:
-    """
-    Atomically write the window position/anchor file.
+def _atomic_write_json(path: str, data, **dump_kwargs) -> None:
+    """Write JSON to a temp file, then rename it into place.
 
-    Writes to a temp file in the same directory then renames it into
-    place — os.replace() is an atomic operation on POSIX, so a crash or
-    kill mid-write leaves either the old file or the new one intact,
-    never a truncated/corrupt one.
+    os.replace() is atomic on POSIX, so a crash mid-write leaves the old file
+    or the new one, never a truncated one.
     """
 
-    tmp_path = WINDOW_POS_FILE + ".tmp"
+    tmp_path = path + ".tmp"
 
     with open(tmp_path, "w") as file:
-        json.dump({"x": x, "y": y, "corner": corner}, file)
+        json.dump(data, file, **dump_kwargs)
 
-    os.replace(tmp_path, WINDOW_POS_FILE)
+    os.replace(tmp_path, path)
 
 
-def _choose_export_path() -> str:
-    """Native 'Save As' dialog for exporting settings. Returns a path,
-    or None if the user cancelled."""
+def _write_window_position(x: int, y: int, corner) -> None:
+    """Persist the window position/anchor file."""
 
-    dialog = Gtk.FileChooserDialog(
-        title="Export Settings",
-        parent=win,
-        action=Gtk.FileChooserAction.SAVE,
-    )
+    _atomic_write_json(WINDOW_POS_FILE, {"x": x, "y": y, "corner": corner})
+
+
+def _run_file_dialog(
+    title: str,
+    action,
+    accept_label: str,
+    *,
+    json_only: bool = False,
+    current_name: str = None,
+):
+    """Run a native file chooser; return the chosen path, or None if cancelled."""
+
+    dialog = Gtk.FileChooserDialog(title=title, parent=win, action=action)
     dialog.add_buttons(
         "_Cancel",
         Gtk.ResponseType.CANCEL,
-        "_Save",
+        accept_label,
         Gtk.ResponseType.OK,
     )
-    dialog.set_current_name("cc-widget-settings.json")
-    dialog.set_do_overwrite_confirmation(True)
 
-    json_filter = Gtk.FileFilter()
-    json_filter.set_name("JSON files")
-    json_filter.add_pattern("*.json")
-    dialog.add_filter(json_filter)
+    if current_name:
+        dialog.set_current_name(current_name)
+        dialog.set_do_overwrite_confirmation(True)
+
+    if json_only:
+        json_filter = Gtk.FileFilter()
+        json_filter.set_name("JSON files")
+        json_filter.add_pattern("*.json")
+        dialog.add_filter(json_filter)
 
     path = None
     if dialog.run() == Gtk.ResponseType.OK:
         path = dialog.get_filename()
-        if path and not path.endswith(".json"):
-            path += ".json"
 
     dialog.destroy()
+    return path
+
+
+def _choose_export_path() -> str:
+    """'Save As' dialog for exporting settings. Returns a .json path or None."""
+
+    path = _run_file_dialog(
+        "Export Settings",
+        Gtk.FileChooserAction.SAVE,
+        "_Save",
+        json_only=True,
+        current_name="cc-widget-settings.json",
+    )
+    if path and not path.endswith(".json"):
+        path += ".json"
     return path
 
 
 def _choose_import_path() -> str:
-    """Native 'Open' dialog for importing settings. Returns a path,
-    or None if the user cancelled."""
+    """'Open' dialog for importing settings. Returns a path or None."""
 
-    dialog = Gtk.FileChooserDialog(
-        title="Import Settings",
-        parent=win,
-        action=Gtk.FileChooserAction.OPEN,
-    )
-    dialog.add_buttons(
-        "_Cancel",
-        Gtk.ResponseType.CANCEL,
+    return _run_file_dialog(
+        "Import Settings",
+        Gtk.FileChooserAction.OPEN,
         "_Open",
-        Gtk.ResponseType.OK,
+        json_only=True,
     )
-
-    json_filter = Gtk.FileFilter()
-    json_filter.set_name("JSON files")
-    json_filter.add_pattern("*.json")
-    dialog.add_filter(json_filter)
-
-    path = None
-    if dialog.run() == Gtk.ResponseType.OK:
-        path = dialog.get_filename()
-
-    dialog.destroy()
-    return path
 
 
 def _choose_folder_path() -> str:
-    """Native 'select folder' dialog for the folder-size watch feature.
-    Returns an absolute path, or None if the user cancelled. GTK's
-    SELECT_FOLDER mode only ever returns a real, existing directory —
-    there's no equivalent of a typo'd free-text path to validate."""
+    """'Select folder' dialog for the folder-size feature. Returns an existing
+    directory, or None if cancelled."""
 
-    dialog = Gtk.FileChooserDialog(
-        title="Select Folder to Monitor",
-        parent=win,
-        action=Gtk.FileChooserAction.SELECT_FOLDER,
-    )
-    dialog.add_buttons(
-        "_Cancel",
-        Gtk.ResponseType.CANCEL,
+    return _run_file_dialog(
+        "Select Folder to Monitor",
+        Gtk.FileChooserAction.SELECT_FOLDER,
         "_Select",
-        Gtk.ResponseType.OK,
     )
-
-    path = None
-    if dialog.run() == Gtk.ResponseType.OK:
-        path = dialog.get_filename()
-
-    dialog.destroy()
-    return path
 
 
 def _js_alert(text: str) -> None:
-    """Fire a JS alert() in the webview — reuses the app's existing
-    alert() idiom (already used for a couple of other drawer validation
-    messages) instead of introducing a second, GTK-native error-dialog
-    pattern just for this."""
+    """Show a message via the frontend's alert()."""
 
-    if webview is None:
-        return
-
-    webview.evaluate_javascript(
-        f"alert({json.dumps(text)})",
-        -1,
-        None,
-        None,
-    )
+    _eval_js(f"alert({json.dumps(text)})")
 
 
 def load_window_position() -> dict:
@@ -944,8 +852,6 @@ def load_window_position() -> dict:
         }
 
     except Exception:
-        # These defaults are intentionally conservative. The frontend will
-        # resize the window after WebKit finishes loading.
         return {
             "x": 1500,
             "y": 50,
@@ -954,13 +860,8 @@ def load_window_position() -> dict:
 
 
 def save_window_position() -> None:
-    """
-    Save the current window position.
-
-    For anchored windows we save the anchor coordinate instead of the
-    top-left coordinate so the position remains valid when the window size
-    changes.
-    """
+    """Save the window position (the anchor point, for anchored windows, so it
+    stays valid when the size changes)."""
 
     if win is None:
         return
@@ -983,7 +884,7 @@ def save_window_position() -> None:
         _write_window_position(save_x, save_y, _anchor_corner)
 
     except Exception:
-        # Window destruction/configuration can race with position saving.
+        # Can race with window destruction/configuration.
         pass
 
 
@@ -991,9 +892,8 @@ def save_window_position() -> None:
 # WebKit view
 # ============================================================================
 
-# Use the explicit WebKit context created above. Using the convenience
-# constructor here would create a different/default context and could cause
-# WebKit data to end up somewhere unexpected.
+# Must use the explicit context above; the convenience constructor would
+# create a default one and scatter WebKit data.
 webview = WebKit2.WebView(
     web_context=web_context,
     user_content_manager=manager,
@@ -1002,7 +902,7 @@ webview = WebKit2.WebView(
 webview.set_settings(webkit_settings)
 webview.load_uri(HTML_URI)
 
-# Let the HTML document provide its own visual background.
+# The HTML provides the background.
 webview.set_background_color(
     Gdk.RGBA(0, 0, 0, 0)
 )
@@ -1043,14 +943,9 @@ win.set_resizable(True)
 win.set_app_paintable(True)
 win.set_visual(win.get_screen().get_rgba_visual())
 
-# Most GTK themes draw a drop shadow around top-level windows using an
-# RGBA visual (needed above for our transparent corners), via the
-# ".background" CSS node — even when undecorated. That shadow is a
-# plain rectangle; it knows nothing about our own CSS --r corner
-# radius, so it shows up as a squared-off halo poking out past our
-# rounded corners. Barely visible at a small radius, glaring at a large
-# one. Stripping it here keeps our own CSS as the only source of the
-# window's visual shape.
+# GTK themes draw a rectangular drop shadow on RGBA top-level windows (via the
+# ".background" node), which pokes out past our CSS --r rounded corners.
+# Strip it so our CSS alone defines the window's shape.
 _shadow_css = Gtk.CssProvider()
 _shadow_css.load_from_data(b"""
 window.background {
@@ -1068,26 +963,16 @@ Gtk.StyleContext.add_provider_for_screen(
 
 win.connect("destroy", Gtk.main_quit)
 
-# Save position whenever GTK reports a geometry change. This keeps the
-# position persistent even if the application is closed normally after a
-# resize or drag.
 def on_window_configure(_window, _event) -> bool:
-    """Persist the current window position whenever GTK reports a *settled*
-    geometry change, and — if a resize/boot message is waiting on one —
-    tell the frontend once the native window has genuinely reached its
-    target size.
+    """Save the window position on settled geometry changes, and tell the
+    frontend once a pending resize has reached its target size.
 
-    configure-event can fire more than once for a single move_resize()
-    call (WM/XWayland settling, intermediate frames, etc.), so acting on
-    the first one to arrive isn't safe — it can report a size that hasn't
-    actually landed yet. That matters for saving, not just the JS ack:
-    an anchored window's saved position is *computed* from the current
-    width/height (see get_anchor_position()), so persisting from a
-    transitional frame bakes in a slightly-wrong anchor point. Boot alone
-    resizes the window at least twice, so on every single launch that
-    could nudge the saved position — which is exactly how a "drifts a
-    little further each launch" bug happens. Gating the save on the same
-    target-match check already used for the ack fixes both at once.
+    configure-event can fire several times for one move_resize() (WM/XWayland
+    settling), so acting on the first is unsafe. An anchored window's saved
+    position is computed from its current size, so saving mid-transition bakes
+    in a wrong anchor; boot resizes at least twice, which is how a "drifts a
+    little further each launch" bug appears. Gating the save on the same
+    target check as the ack avoids both.
     """
 
     global _resize_target
@@ -1103,11 +988,8 @@ def on_window_configure(_window, _event) -> bool:
         target_w, target_h = _resize_target
         if abs(width - target_w) <= 1 and abs(height - target_h) <= 1:
             _resize_target = None
-            webview.evaluate_javascript(
-                f"window.__onResizeApplied && window.__onResizeApplied({width},{height})",
-                -1,
-                None,
-                None,
+            _eval_js(
+                f"window.__onResizeApplied && window.__onResizeApplied({width},{height})"
             )
 
     return False
@@ -1122,7 +1004,7 @@ win.show_all()
 # Main loop
 # ============================================================================
 
-# Push system statistics to JavaScript every 2 seconds.
+# Push system statistics every 2 seconds.
 GLib.timeout_add(2000, push_stats)
 
 Gtk.main()

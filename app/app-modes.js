@@ -1,12 +1,9 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — app-modes.js
-   ────────────────────────────────────────────────────────────────────────────
-   Screens and modes layered on top of the dashboard: the startup/boot
-   sequence, the reset flow, Demo Mode, the theme builder, and theme
-   cycling/shuffle. Ends with the boot IIFE — this file must load LAST,
-   since boot() calls into every other file.
-   Depends on: themes.js, state.js, platform-linux.js, ui-widgets.js,
-   dashboard.js (must all load first).
+   Screens and modes layered on the dashboard: boot sequence, reset/import/
+   export, Demo Mode, the theme builder, and theme cycling/shuffle. Ends with
+   the boot IIFE, so this file must load LAST (boot() calls into every other file).
+   Depends on: themes.js, state.js, platform-linux.js, ui-widgets.js, dashboard.js.
    ════════════════════════════════════════════════════════════════════════════ */
 "use strict";
 
@@ -16,26 +13,22 @@
 
 const BOOT_MIN_TIME = 450;
 
-// How long to hold the finished dashboard on screen — fully resized,
-// "Online" showing — before the boot screen starts fading. Gives the
-// user a beat to actually register it instead of having it flicker past.
+// How long the finished dashboard ("Online") stays up before the boot screen fades.
 const BOOT_READ_DELAY = 2000;
 
 const bootStarted = {};
 
-// Resolves once the first Linux stats sample has arrived (or we give up
-// waiting, e.g. psutil isn't installed). Python's stats push runs on its
-// own independent 2s timer, unrelated to the SSE connection — boot can't
-// safely take its "final" measurement until both are in.
+// Resolves once the first Linux stats sample arrives, or after 3 s (e.g.
+// psutil missing). Python's push runs on its own 2 s timer, independent of
+// SSE, and boot's final resize needs both.
 let _resolveLinuxStatsReady;
 const linuxStatsReady = new Promise((resolve) => {
   _resolveLinuxStatsReady = resolve;
 });
 setTimeout(() => _resolveLinuxStatsReady?.(), 3000);
 
-// Order of the boot checklist and the progress-bar percentage the fill
-// jumps to as each step goes active / completes. Kept as one table so the
-// bar and the checklist can never drift out of sync with each other.
+// Boot checklist order, and the progress-bar % at each step's active/done
+// states — one table so the bar and checklist can't drift apart.
 const BOOT_PROGRESS = {
   profile: { active: 8, done: 28 },
   theme: { active: 34, done: 52 },
@@ -67,11 +60,8 @@ function bootState(text) {
   if (el) el.textContent = text.toUpperCase();
 }
 
-// Marks a step "done", holding it "active" for at least BOOT_MIN_TIME so
-// fast synchronous steps (loading config, applying a theme) don't just
-// blip past — every step gets a moment to actually register on screen.
-// callback is optional; waitBootStep() below wraps this as a promise for
-// the common case of awaiting a step before starting the next one.
+// Marks a step "done" after it has been "active" for at least BOOT_MIN_TIME,
+// so fast steps still register on screen.
 function bootStepDone(name, callback) {
   const started = bootStarted[name] ?? performance.now();
   const elapsed = performance.now() - started;
@@ -87,11 +77,8 @@ function waitBootStep(name) {
   return new Promise((resolve) => bootStepDone(name, resolve));
 }
 
-// How long the boot screen is allowed to sit on screen before it gets
-// dismissed unconditionally. Covers the case where a returning user's
-// daemon never answers (SSE just retries forever) — without this the
-// boot screen would otherwise hang over the connect/retry panel forever
-// with no way for the user to reach it.
+// Upper bound on the boot screen: if the daemon never answers (SSE retries
+// forever) it would otherwise cover the UI indefinitely.
 const BOOT_FAILSAFE_MS = 8000;
 let _bootHidden = false;
 let _bootFailsafeTimer = null;
@@ -112,8 +99,7 @@ function hideBootScreen() {
     settled = true;
     clearTimeout(fallbackTimer);
     window.__onResizeApplied = null;
-    // Two real animation frames so the browser has actually painted a
-    // settled frame at the new size before the fade starts.
+    // Two frames, so a settled frame at the new size is painted before the fade.
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         boot.classList.add("hide");
@@ -122,11 +108,8 @@ function hideBootScreen() {
     });
   };
 
-  // Python calls this the instant GTK's configure-event confirms the
-  // native window has actually reached its target size (see
-  // on_window_configure() in launch.py) — a real signal instead of a
-  // guessed delay. The fallback timer is just a backstop for an older
-  // launch.py that doesn't send it, or the rare case it's dropped.
+  // launch.py calls this once the native window reaches its target size (see
+  // on_window_configure()); the timer is a backstop if that signal never comes.
   window.__onResizeApplied = reveal;
   fallbackTimer = setTimeout(reveal, 400);
 
@@ -137,11 +120,8 @@ function hideBootScreen() {
 // ═══════════════════════════════════════════════════════════════
 //  RESET
 // ═══════════════════════════════════════════════════════════════
-// Clears just the saved connection token — the app boots exactly like
-// a brand-new install (Demo Mode, drawer auto-open, token field flash)
-// without touching theme, layout, sizing, or any sensor assignments.
-// Dev-only convenience for testing the first-run experience against
-// real settings instead of a wiped profile.
+// Clears only the saved token, so the next boot behaves like a first launch
+// (Demo Mode, drawer open) while theme, layout and assignments stay. Dev aid.
 function softResetWidget() {
   if (
     !confirm(
@@ -154,27 +134,21 @@ function softResetWidget() {
   location.reload();
 }
 
-// Clears all local config (token, theme, layout, everything) and reloads
-// as a brand-new install — same action from the drawer's "Danger Zone"
-// regardless of whether a real connection was ever made.
+// Clears all local config and reloads as a brand-new install.
 function resetWidget() {
   if (!confirm("Clear saved settings and token?")) return;
   localStorage.clear();
   location.reload();
 }
 
-// Bundles the in-memory cfg (theme, layout, custom rows — everything
-// that's in localStorage) and hands it to Python, which merges in the
-// window position/anchor from window_pos.json and pops a native Save
-// dialog. Nothing local changes here — Python owns the actual write.
+// Hands cfg to Python, which adds the window position and opens a native
+// Save dialog. Python does the actual write.
 function exportSettings() {
   gtksend("export-settings:" + JSON.stringify(cfg));
 }
 
-// Pops a native Open dialog (via Python) and, if the user picks a
-// valid file, overwrites the current config entirely. Confirming here
-// rather than after the file's already picked keeps this one dialog
-// instead of two — same "ask once, up front" shape as resetWidget().
+// Confirms up front, then has Python open a native Open dialog; a valid file
+// overwrites the current config.
 function importSettings() {
   if (
     !confirm(
@@ -185,75 +159,52 @@ function importSettings() {
   gtksend("import-settings");
 }
 
-// Python calls this once the user has picked a valid file and window
-// position has already been applied on that side. Just write the ccm
-// blob and reload — the normal boot path re-renders everything from
-// localStorage exactly like any other launch.
+// Called by Python after a valid file is picked and the window repositioned.
+// Store the config and reload; boot renders it like any launch.
 window.onSettingsImported = function (ccm) {
   localStorage.setItem("ccm", JSON.stringify(ccm));
   location.reload();
 };
 
-// Attempts a real connection using whatever's currently in cfg.baseUrl/
-// cfg.token. Called whenever the drawer's connection fields change to a
-// non-empty token — there's no separate "Connect" screen anymore, so
-// this is the only path into live data. Tears down Demo Mode first if
-// it was running; the dashboard keeps showing the persisted card
-// layout throughout, just with "--" values until the first packet
-// lands and setStatus() flips the indicator to "Live".
+// Starts a real connection from cfg.baseUrl/cfg.token (the only way into live
+// data), ending Demo Mode first. The saved layout stays up, showing "--"
+// until the first packet flips the status to "Live".
 function connectNow() {
   if (!cfg.token) return;
   if (demoMode) _teardownDemoState();
   phase = "connecting";
-  _connectTime = 0; // restart the uptime clock for this connection attempt
+  _connectTime = 0; // restart the uptime clock
   const _upEl = document.getElementById("sbar-uptime");
   if (_upEl) _upEl.textContent = "";
   setStatus("spin", "Connecting…");
   _updateDemoButtons();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  rebuildDashboard();
   startSSE();
 }
 
 
 // ═══════════════════════════════════════════════════════════════
 //  DEMO MODE
-//  Fakes both data sources (CC's SSE devices and Python's Linux
-//  stats push) with a handful of self-running curves, so the whole
-//  dashboard — and the theme editor over top of it — can be previewed
-//  without a CoolerControl daemon or real sensors. No network/GTK
-//  calls are made; it's pure client-side data generation on a timer.
+//  Fakes both data sources (CC's SSE devices and Python's Linux stats) with
+//  self-running curves, so the dashboard and theme editor can be previewed
+//  without a daemon. Pure client-side; no network or GTK calls.
 //
-//  Coverage is deliberately broad — one leaf per typeFilter kind
-//  (temp/rpm/duty/watts) plus multiple disks and a couple of fake
-//  folder sizes — so every custom-row assignment path in the picker
-//  has something real to bind to while testing, not just the six
-//  slots the built-in cards auto-fill.
-//
-//  Scenario presets (DEMO_SCENARIOS) swap the load-curve params that
-//  drive cpuLoad/gpuLoad/ram/swap/net; everything derived from load
-//  (temps, fans, power draw) cascades automatically — see
-//  _computeDemoFrame().
+//  Coverage is deliberately broad: one leaf per sensor kind (temp/rpm/duty/
+//  watts), several disks and fake folder sizes, so every picker path has
+//  something to bind to. DEMO_SCENARIOS swap the load curves; temps, fans and
+//  power cascade from load (see _computeDemoFrame()).
 // ═══════════════════════════════════════════════════════════════
 const DEMO_TICK_MS = 1500;
 
-// Small helpers shared by the curve generator below.
-function _clamp(v, lo, hi) {
-  return Math.min(hi, Math.max(lo, v));
-}
 function _jitter(amp) {
   return (Math.random() - 0.5) * 2 * amp;
 }
 
-// One self-advancing curve. `kind` picks the shape:
-//   "sine"   — smooth periodic wave (e.g. a breathing GPU load)
-//   "normal" — gentle mean-reverting drift (e.g. RAM slowly creeping)
-//   "gaming" — bursty: idles low, then jumps into a sustained high-load
-//              plateau for a while before dropping back (e.g. CPU load
-//              while a game is running). burstChance controls how
-//              often it picks the high plateau over the idle one —
-//              higher for scenarios that should read as "busy".
+// A self-advancing curve. `kind`:
+//   "sine"   — smooth periodic wave
+//   "normal" — mean-reverting drift
+//   "gaming" — bursty: idles low, then holds a high plateau; burstChance is
+//              how often it picks the plateau over idle
 class DemoCurve {
   constructor(kind, { min, max, period = 60, target, burstChance = 0.2 } = {}) {
     this.kind = kind;
@@ -303,9 +254,8 @@ class DemoCurve {
   }
 }
 
-// Per-scenario overrides for the load-driven curves. Everything else
-// (disks, folders, ambient, NVMe temp) stays constant across scenarios —
-// they're "always there" coverage, not workload-reactive.
+// Per-scenario load curves. Disks, folders, ambient and NVMe temp are the
+// same in every scenario.
 const DEMO_SCENARIOS = {
   idle: {
     label: "Idle",
@@ -345,8 +295,7 @@ const DEMO_SCENARIOS = {
   },
 };
 
-// Builds one DemoCurve per data channel, seeded from the given
-// scenario's load params (falls back to "normal" for an unknown key).
+// One DemoCurve per data channel (unknown scenario keys fall back to "normal").
 function _buildDemoCurves(scenarioKey = demoScenario) {
   const s = DEMO_SCENARIOS[scenarioKey] || DEMO_SCENARIOS.normal;
   return {
@@ -367,9 +316,7 @@ function _buildDemoCurves(scenarioKey = demoScenario) {
   };
 }
 
-// Advances every curve one tick and shapes the results into the same
-// shapes buildLeaves()/applyLinuxStats() already know how to consume —
-// nothing downstream needs to know this data isn't real.
+// Advances every curve one tick, shaped like real CC devices and Linux stats.
 function _computeDemoFrame() {
   const c = demoCurves;
 
@@ -522,8 +469,7 @@ function _computeDemoFrame() {
   return { ccDevices, linuxStats };
 }
 
-// One fake-data frame in, fed through the exact same pipeline real CC/
-// Linux data goes through — nothing downstream can tell the difference.
+// Feeds one fake frame through the real CC/Linux pipeline.
 function demoTick() {
   const { ccDevices: fakeCc, linuxStats } = _computeDemoFrame();
   ccDevices = fakeCc;
@@ -532,14 +478,11 @@ function demoTick() {
   if (phase === "dashboard") setStatus("ok");
 }
 
-// Restores whatever cfg.slots those sids held before enterDemoMode()
-// overwrote them — undefined means "wasn't assigned", not "leave alone".
+// cfg.slots entries enterDemoMode() overwrites; undefined = was unassigned.
 let _demoSlotBackup = null;
 const DEMO_CC_SIDS = ["cpu_temp", "cpu_fan", "gpu_temp", "gpu_load", "gpu_fan", "case_temp"];
 
-// The drawer's Connection-section button doubles as the enter/exit
-// toggle — it's the only demo control now that the setup screen (and
-// its own separate "Try Demo Mode" button) is gone.
+// The drawer's Connection button toggles Demo Mode.
 function _updateDemoButtons() {
   const drawerBtn = document.getElementById("btn-demo-drawer");
   if (drawerBtn) {
@@ -551,9 +494,7 @@ function _updateDemoButtons() {
   });
 }
 
-// Draws the eye to the token field for first-time users who've just
-// been dropped into Demo Mode with the drawer freshly opened — a few
-// quick pulses, then it settles back to normal.
+// Pulses the token field to draw a first-time user's eye to it.
 function _flashTokenField() {
   const inp = document.getElementById("tc-tok");
   if (!inp) return;
@@ -561,12 +502,11 @@ function _flashTokenField() {
   setTimeout(() => inp.classList.remove("flash-attn"), 2700);
 }
 
-// Switches the active scenario preset. If demo mode is already running,
-// rebuilds the curves in place and forces an immediate tick so the
-// change is felt right away rather than waiting for the next timer fire.
+// Switches scenario; if Demo Mode is running, rebuilds the curves and ticks
+// immediately so the change shows at once.
 function setDemoScenario(key) {
   if (!DEMO_SCENARIOS[key] || key === demoScenario) {
-    demoScenario = key; // still update in case it was a no-op re-click
+    demoScenario = key;
     _updateDemoButtons();
     return;
   }
@@ -584,19 +524,16 @@ function enterDemoMode() {
   if (demoMode) return;
   demoMode = true;
 
-  // A real connection may be live right now (entering demo mode "even
-  // if real data exists" doesn't require disconnecting first) — tear
-  // down its SSE loop and stash whatever it had assigned so exiting
-  // can put it back exactly as it was.
+  // A real connection may be live: stop it and stash its assignments so
+  // exiting can restore them.
   stopSSE();
   _demoSlotBackup = {};
   for (const sid of DEMO_CC_SIDS) _demoSlotBackup[sid] = cfg.slots[sid];
 
   demoCurves = _buildDemoCurves(demoScenario);
 
-  // Seed one frame up front so the CC-side slots (cpu/gpu/case — not
-  // auto-assigned the way the Linux stats are) have something to bind
-  // to before the first buildCards().
+  // Seed a frame so the CC-side slots (not auto-assigned like Linux stats)
+  // have something to bind to before the first buildCards().
   const { ccDevices: fakeCc, linuxStats } = _computeDemoFrame();
   ccDevices = fakeCc;
   const leaves = buildLeaves(ccDevices);
@@ -620,20 +557,13 @@ function enterDemoMode() {
   bind("case_temp", "demo-chassis", "temp", "ambient");
 
   refreshDevices();
-  applyLinuxStats(linuxStats); // also runs autoAssignLinux() for cpu_load/ram/swap/net —
-  // harmless no-op if those sids are already assigned from a real connection
+  applyLinuxStats(linuxStats); // also autoAssignLinux() (no-op for sids already assigned)
 
   phase = "dashboard";
 
-  // Entering demo mode always lands on a clean dashboard view — close
-  // the settings drawer and drop out of edit mode even if either was
-  // open when the button was clicked.
+  // Always land on a clean dashboard: no edit mode, drawer closed.
   editMode = false;
-  document.getElementById("cards")?.classList.remove("editing");
-  const _cfgBtn = document.getElementById("bb-cfg");
-  if (_cfgBtn) {
-    _cfgBtn.classList.remove("on");
-  }
+  _syncEditChrome();
   drawerOpen = false;
   _drawer?.classList.remove("open");
 
@@ -648,10 +578,8 @@ function enterDemoMode() {
   demoTimer = setInterval(demoTick, DEMO_TICK_MS);
 }
 
-// Shared demo-teardown: stops the tick timer, drops the fake devices,
-// and restores whatever cfg.slots held before demo touched them. Used
-// by both exitDemoMode() (drawer's toggle) and connectNow() (entering
-// a real token) — same cleanup either way out of Demo Mode.
+// Stops the tick timer, drops fake devices, restores cfg.slots. Shared by
+// exitDemoMode() and connectNow().
 function _teardownDemoState() {
   demoMode = false;
   if (demoTimer) {
@@ -675,27 +603,22 @@ function exitDemoMode() {
   if (!demoMode) return;
   _teardownDemoState();
 
-  // A token's already saved — reconnect for real instead of just
-  // sitting on a blank dashboard.
+  // A token is saved: reconnect rather than sit on a blank dashboard.
   if (cfg.token) {
     connectNow();
     return;
   }
 
-  // No token yet: nothing to connect to. connectNow() would normally
-  // reset the status indicator via setStatus("spin", …), but there's
-  // no connection attempt happening here, so reset it to idle directly.
+  // No token: nothing to connect to, so reset the indicator to idle.
   _resetConnIndicator();
   _updateDemoButtons();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  rebuildDashboard();
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-//  THEME BUILDER — color pickers that write :root CSS live to the
-//  active theme. Exposed below so theme-tile clicks can resync them.
+//  THEME BUILDER — colour pickers that write :root CSS live to the active
+//  theme. _tb* hooks are exposed so theme tiles and card menus can resync it.
 // ═══════════════════════════════════════════════════════════════
 let _tbSync = null;
 let _tbGenerateCSS = null;
@@ -712,6 +635,8 @@ function initThemeBuilder() {
   const ACCENT_KEYS = ["--cpu", "--gpu", "--fan", "--ssd", "--ram", "--net"];
   const CHROME_KEYS = ["--bg", "--txt", "--txt-dim", "--txt-muted", "--hot"];
   const WARN_KEYS = ["--w1", "--w2", "--w3", "--w4", "--w5"];
+  // Colours with a swatch + hex readout in the drawer; also what contrast is measured from.
+  const CONTRAST_VARS = ["--bg", "--txt", "--txt-dim", "--hot"];
   const SOLID_VARS = [...CHROME_KEYS, ...ACCENT_KEYS, ...WARN_KEYS];
 
   let bv = {
@@ -734,7 +659,7 @@ function initThemeBuilder() {
     "--r": 10,
   };
 
-  // ── Sync bv from live CSS vars ─────────────────────────────
+  // Loads bv from the live CSS vars.
   function syncBuilderFromActive() {
     for (const k of SOLID_VARS) {
       const raw = getCSSVar(k);
@@ -744,14 +669,11 @@ function initThemeBuilder() {
     syncUIFromBv();
   }
 
-  // ── Push bv → all UI elements ──────────────────────────────
-  // Accent colors (--cpu/--gpu/etc.) have no drawer UI of their own —
-  // they're edited per-card via the header "⋯" popover (see _tbSetVar
-  // below) — so bv tracks them only as inputs to generateCSS().
+  // Pushes bv into the drawer UI. Accent colours (--cpu, …) have no drawer
+  // controls (they're edited via each card's "⋯" menu), so bv only tracks
+  // them as inputs to generateCSS().
   function syncUIFromBv() {
-    // Chrome swatches (bg, txt, txt-dim, hot)
-    const CHROME_UI = ["--bg", "--txt", "--txt-dim", "--hot"];
-    for (const v of CHROME_UI) {
+    for (const v of CONTRAST_VARS) {
       const key = v.replace(/^--/, "");
       const sw = document.getElementById("tbs-" + key);
       if (sw) {
@@ -763,7 +685,6 @@ function initThemeBuilder() {
       if (hx) hx.textContent = bv[v];
     }
 
-    // Warning pips
     for (let i = 1; i <= 5; i++) {
       const pip = document.getElementById("tbs-w" + i);
       if (pip) {
@@ -774,7 +695,6 @@ function initThemeBuilder() {
     }
     updateWarnGradient();
 
-    // Radius
     const slider = document.getElementById("tb-radius");
     const rval = document.getElementById("tb-radius-val");
     if (slider) slider.value = bv["--r"];
@@ -783,7 +703,6 @@ function initThemeBuilder() {
     updateContrastBadges();
   }
 
-  // ── Live gradient bar for the warn ramp ───────────────────
   function updateWarnGradient() {
     const bar = document.getElementById("tb-warn-gradient");
     if (!bar) return;
@@ -791,9 +710,8 @@ function initThemeBuilder() {
     bar.style.background = `linear-gradient(to right, ${stops})`;
   }
 
-  // ── WCAG contrast checker — live ratio vs --bg for every text colour ──
-  // AA body-text threshold is 4.5:1; AA large-text/UI threshold is 3:1.
-  // ok = passes 4.5:1, warn = passes 3:1 only, bad = fails both.
+  // WCAG contrast of each text colour against --bg: ok ≥ 4.5:1 (AA body
+  // text), warn ≥ 3:1 (AA large text only), bad below that.
   const CONTRAST_PAIRS = [
     ["--txt", "tbc-txt"],
     ["--txt-dim", "tbc-txt-dim"],
@@ -817,71 +735,49 @@ function initThemeBuilder() {
     }
   }
 
-  // ── Wire all color inputs ──────────────────────────────────
   document.querySelectorAll('input[type="color"]').forEach((inp) => {
     inp.addEventListener("input", (e) => {
       const varName = e.target.dataset.var;
       bv[varName] = e.target.value;
 
-      // Update the parent swatch / pip
       const parent = e.target.closest(".tb-swatch,.tb-warn-pip");
-      if (parent) {
-        parent.style.background = e.target.value;
-      }
+      if (parent) parent.style.background = e.target.value;
 
-      // Update hex readout
       const key = varName.replace(/^--/, "");
       const hx = document.getElementById("tbh-" + key);
       if (hx) hx.textContent = e.target.value;
 
-      // Warn ramp gradient
-      if (varName.match(/--w[0-9]/)) updateWarnGradient();
-
-      // Contrast badges — any of these four changes what's being measured
-      if (["--bg", "--txt", "--txt-dim", "--hot"].includes(varName)) {
-        updateContrastBadges();
-      }
+      if (/--w[0-9]/.test(varName)) updateWarnGradient();
+      if (CONTRAST_VARS.includes(varName)) updateContrastBadges();
 
       liveApply();
     });
   });
 
-  // ── Radius slider ──────────────────────────────────────────
   document.getElementById("tb-radius").addEventListener("input", (e) => {
     bv["--r"] = parseInt(e.target.value, 10);
     document.getElementById("tb-radius-val").textContent = bv["--r"] + "px";
     liveApply();
   });
 
-  // ── Live apply — pickers write straight to the active theme, no
-  //    separate Generate→Apply step. The textarea stays in sync as a
-  //    secondary "paste your own" path for hand-editing.        ──
+  // Pickers write straight to the active theme; the textarea mirrors it as a
+  // "paste your own" path.
   function liveApply() {
     const css = generateCSS();
     document.getElementById("custom-css").value = css;
     applyTheme("custom", css);
-    document
-      .querySelectorAll(".theme-tile")
-      .forEach((t) => t.classList.toggle("active", t.dataset.key === "custom"));
+    _markActiveTile("custom");
   }
 
-  // ── Generate full CSS from current builder values ──────────
+  // Full theme CSS from the builder values. Surface/border overlays are
+  // white on dark backgrounds and black on light ones.
   function generateCSS() {
     const r = bv["--r"];
-    const bgHex = bv["--bg"].replace("#", "");
-    const bgR = parseInt(bgHex.slice(0, 2), 16),
-      bgG = parseInt(bgHex.slice(2, 4), 16),
-      bgB = parseInt(bgHex.slice(4, 6), 16);
+    const [bgR, bgG, bgB] = hexToRgb(bv["--bg"]);
     const luma = (bgR * 0.299 + bgG * 0.587 + bgB * 0.114) / 255;
     const ov = luma < 0.4 ? "255,255,255" : "0,0,0";
-    const cpuHex = bv["--cpu"].replace("#", "");
-    const cpuR = parseInt(cpuHex.slice(0, 2), 16),
-      cpuG = parseInt(cpuHex.slice(2, 4), 16),
-      cpuB = parseInt(cpuHex.slice(4, 6), 16);
-    const hotHex = bv["--hot"].replace("#", "");
-    const hotR = parseInt(hotHex.slice(0, 2), 16),
-      hotG = parseInt(hotHex.slice(2, 4), 16),
-      hotB = parseInt(hotHex.slice(4, 6), 16);
+    const [cpuR, cpuG, cpuB] = hexToRgb(bv["--cpu"]);
+    const [hotR, hotG, hotB] = hexToRgb(bv["--hot"]);
     const rs = Math.max(2, Math.round(r * 0.6));
     const lines = [
       `:root {`,
@@ -945,10 +841,8 @@ function initThemeBuilder() {
 
   _tbSync = syncBuilderFromActive;
   _tbGenerateCSS = generateCSS;
-  // Lets a card-header "…" color popover change one accent var without
-  // reverting the rest of the active theme to whatever the builder's
-  // buffer last held — resync from the live theme first, then apply
-  // just the one change on top of it.
+  // Changes one var (card-menu colour) on top of the live theme: resync bv
+  // first so the rest of the theme isn't reverted to a stale buffer.
   _tbSetVar = function (varName, hex) {
     syncBuilderFromActive();
     bv[varName] = hex;
@@ -962,22 +856,21 @@ function initThemeBuilder() {
 
 // ═══════════════════════════════════════════════════════════════
 //  THEME CYCLING & SHUFFLE
-//  Cycle: auto-advances through THEMES on a timer — a quick way to
-//  preview every theme without clicking through the grid by hand.
-//  Shuffle: picks one random theme at boot, so every launch has a
-//  different look without anything running continuously.
-//  Both skip "custom" since landing on a moving target isn't
-//  meaningful. Any manual theme pick (tile click or custom-CSS apply)
-//  stops Cycle — the person just told the app what they want, cycling
-//  back over that a few seconds later would be actively unhelpful.
+//  Cycle auto-advances through THEMES on a timer to preview them all.
+//  Shuffle picks a random theme at each boot. Both skip "custom", and any
+//  manual theme pick stops Cycle.
 // ═══════════════════════════════════════════════════════════════
 
-// Shared by both features — applies `key`, syncs the tile grid and
-// builder to match, same as clicking a tile by hand.
-function _applyThemeChoice(key) {
+// Highlights the tile for `key`.
+function _markActiveTile(key) {
   document
     .querySelectorAll(".theme-tile")
     .forEach((t) => t.classList.toggle("active", t.dataset.key === key));
+}
+
+// Applies `key` and syncs tiles and builder, like clicking its tile.
+function _applyThemeChoice(key) {
+  _markActiveTile(key);
   document.getElementById("theme-editor-inline")?.classList.add("hide");
   applyTheme(key);
   if (_tbSync) _tbSync();
@@ -1021,7 +914,7 @@ function setThemeCycling(on, { immediate = true } = {}) {
     themeCycleTimer = null;
   }
   if (on) {
-    if (immediate) _cycleToNextTheme(); // feels responsive when toggled by hand
+    if (immediate) _cycleToNextTheme();
     themeCycleTimer = setInterval(_cycleToNextTheme, THEME_CYCLE_MS);
   }
   _updateThemeToggleButtons();
@@ -1031,13 +924,12 @@ function setThemeShuffleOnBoot(on) {
   cfg.themeShuffleOnBoot = on;
   saveCfg();
   _updateThemeToggleButtons();
-  // Instant preview so toggling feels responsive, same as Cycle — the
-  // real effect (a fresh random pick) happens on the next launch.
+  // Preview now; the real effect is on the next launch.
   if (on) _applyThemeChoice(_randomThemeKey());
 }
 
 function initThemeScreen() {
-  // ── Size segmented control ─────────────────────────────────
+  // Size
   const sb = document.getElementById("size-btns");
   sb.innerHTML = "";
   for (const key of ["s", "m", "l"]) {
@@ -1049,7 +941,7 @@ function initThemeScreen() {
     sb.appendChild(btn);
   }
 
-  // ── Anchor corner ────────────────────────────────────────────
+  // Anchor corner
   const ag = document.getElementById("anchor-grid");
   ag.innerHTML = "";
   const CORNERS = [
@@ -1073,7 +965,7 @@ function initThemeScreen() {
     ag.appendChild(btn);
   }
 
-  // ── Theme tiles ────────────────────────────────────────────
+  // Theme tiles
   const themeEditorInline = document.getElementById("theme-editor-inline");
   const g = document.getElementById("theme-grid");
   g.innerHTML = "";
@@ -1084,56 +976,39 @@ function initThemeScreen() {
     tile.innerHTML = `<div class="theme-swatches">${theme.swatches.map((c) => `<span class="swatch" style="background:${c}"></span>`).join("")}</div><div class="theme-name">${theme.name}</div>`;
     tile.onclick = () => {
       if (themeCycling) setThemeCycling(false);
-      document
-        .querySelectorAll(".theme-tile")
-        .forEach((t) => t.classList.remove("active"));
-      tile.classList.add("active");
+      _markActiveTile(key);
       themeEditorInline.classList.add("hide");
       applyTheme(key);
-      // Keep the builder synced to whatever preset just got selected,
-      // so if Custom gets picked next it starts from this, not from
-      // whatever was active the last time the drawer was opened.
+      // Sync the builder so a following "Custom…" starts from this preset.
       if (_tbSync) _tbSync();
     };
     g.appendChild(tile);
   }
 
-  // "Custom…" tile — always present, active whenever cfg.theme is custom
+  // "Custom…" tile: active whenever cfg.theme is custom
   const customTile = el("div", "theme-tile theme-tile-custom");
   customTile.dataset.key = "custom";
   if (cfg.theme === "custom") customTile.classList.add("active");
   customTile.innerHTML = `<div class="theme-swatches-custom"><span class="tile-custom-icon">✎</span></div><div class="theme-name">Custom…</div>`;
   customTile.onclick = () => {
     if (themeCycling) setThemeCycling(false);
-    document
-      .querySelectorAll(".theme-tile")
-      .forEach((t) => t.classList.remove("active"));
-    customTile.classList.add("active");
+    _markActiveTile("custom");
     themeEditorInline.classList.remove("hide");
-    // Always regenerate from whatever's currently live (bv was kept in
-    // sync by _tbSync() on every preset click) rather than falling
-    // back to an old saved cfg.customThemeCSS — otherwise clicking a
-    // preset and then Custom silently ignores the preset and restores
-    // whatever custom theme existed before, which defeats the whole
-    // point of using the editor to dial in a preset.
+    // Regenerate from the live theme (kept in bv by _tbSync()), not the old
+    // saved customThemeCSS, so "preset, then Custom" edits that preset.
     if (_tbGenerateCSS) applyTheme("custom", _tbGenerateCSS());
   };
   g.appendChild(customTile);
 
-  // ── Theme Builder ──────────────────────────────────────────
   initThemeBuilder();
 
-  // Theme Editor isn't its own collapsible section anymore — it's just
-  // whatever "Custom…" above currently is, so its visibility tracks
-  // cfg.theme directly instead of a <details> open/closed state.
+  // The editor is shown exactly while the custom theme is active.
   themeEditorInline.classList.toggle("hide", cfg.theme !== "custom");
-  // Connection: open when there's nothing saved yet and the fields are
-  // what someone actually needs in front of them, closed once a token
-  // exists — the status dot+text stay visible in the collapsed summary
-  // either way, so connection state is never hidden, just the fields.
+  // Connection fields start open until a token is saved; the status stays
+  // visible in the collapsed summary either way.
   document.getElementById("connection-details").open = !cfg.token;
 
-  // ── Share Theme (Copy / Load) ────────────────────────────────
+  // Share Theme (Copy / Load)
   if (cfg.customThemeCSS)
     document.getElementById("custom-css").value = cfg.customThemeCSS;
 
@@ -1145,19 +1020,13 @@ function initThemeScreen() {
     }
     if (themeCycling) setThemeCycling(false);
     applyTheme("custom", css);
-    document
-      .querySelectorAll(".theme-tile")
-      .forEach((t) => t.classList.toggle("active", t.dataset.key === "custom"));
+    _markActiveTile("custom");
     if (_tbSync) _tbSync();
   };
 
-  // Copies the box's current contents so it can be pasted somewhere
-  // else (Discord, a text file, whatever). Tries the classic
-  // execCommand path first — it's synchronous and needs no permission
-  // prompt, which matters in an embedded WebKitGTK view where the
-  // modern async Clipboard API may not be wired up at all. Falls back
-  // to that API, and finally to "the text is already selected, copy
-  // it yourself" if neither works.
+  // Copy the CSS box. execCommand comes first: it's synchronous and needs no
+  // permission, and the async Clipboard API may be missing in embedded
+  // WebKitGTK. Failing both, the text stays selected for a manual copy.
   const copyBtn = document.getElementById("btn-theme-copy");
   if (copyBtn) {
     copyBtn.onclick = () => {
@@ -1187,13 +1056,11 @@ function initThemeScreen() {
     };
   }
 
-  // ── Connection fields ──────────────────────────────────────
+  // Connection fields
   document.getElementById("tc-url").value = cfg.baseUrl;
   document.getElementById("tc-tok").value = cfg.token;
 
-  // Show/hide toggle for the bearer token — starts masked (type=password
-  // set in HTML); flips to plain text on click, same on/off icon-swap
-  // pattern as setEditMode()'s pencil/check.
+  // Token show/hide (the field starts as type=password in the HTML).
   const tokEye = document.getElementById("tc-tok-eye");
   tokEye.innerHTML = _ICON_EYE;
   tokEye.onclick = () => {
@@ -1211,16 +1078,13 @@ function initThemeScreen() {
     if (u) cfg.baseUrl = u;
     if (t) cfg.token = t;
     saveCfg();
-    // A token now present, and either it (or the URL) actually changed,
-    // or we're still sitting in Demo Mode — either way there's a real
-    // connection worth attempting. Re-typing the same values doesn't
-    // re-trigger a connect on every blur.
+    // Connect when a token exists and something changed (or we're in Demo
+    // Mode); re-entering the same values doesn't reconnect.
     if (t && (changed || demoMode)) connectNow();
   };
   document.getElementById("tc-url").onchange = persist;
   document.getElementById("tc-tok").onchange = persist;
 
-  // ── Theme cycle / shuffle toggles ────────────────────────────
   const cycleBtn = document.getElementById("btn-theme-cycle");
   if (cycleBtn) cycleBtn.onclick = () => setThemeCycling(!themeCycling);
   const shuffleBtn = document.getElementById("btn-theme-shuffle");
@@ -1228,7 +1092,6 @@ function initThemeScreen() {
     shuffleBtn.onclick = () => setThemeShuffleOnBoot(!cfg.themeShuffleOnBoot);
   _updateThemeToggleButtons();
 
-  // ── Demo scenario segmented control ─────────────────────────
   const dsb = document.getElementById("demo-scenario-btns");
   if (dsb) {
     dsb.innerHTML = "";
@@ -1241,31 +1104,6 @@ function initThemeScreen() {
       dsb.appendChild(btn);
     }
   }
-
-  // Drawer is shown/hidden by the gear button — no showScreen needed
-}
-
-function fmtGB(v) {
-  if (typeof v !== "number" || Number.isNaN(v)) return "--";
-  return v < 100 ? v.toFixed(1) : Math.round(v).toString();
-}
-
-function clampPct(v) {
-  if (typeof v !== "number" || Number.isNaN(v)) return 0;
-  return Math.max(0, Math.min(100, v));
-}
-
-function barColorForPct(pct, baseColor) {
-  if (!(typeof pct === "number") || Number.isNaN(pct)) return baseColor;
-  if (pct >= 90) return cssVar("--w5");
-  if (pct >= 80) return cssVar("--w4");
-  if (pct >= 60) return cssVar("--w3");
-  return baseColor;
-}
-
-function barText(used, total) {
-  if (typeof used !== "number" || typeof total !== "number") return "--";
-  return `${fmtGB(used)}/${fmtGB(total)} GB`;
 }
 
 
@@ -1273,16 +1111,11 @@ function barText(used, total) {
 //  BOOT
 // ═══════════════════════════════════════════════════════════════
 (async () => {
-  // Backstop: whatever happens above (daemon never answers, an unexpected
-  // error, etc.), the boot screen is guaranteed to step aside eventually
-  // rather than trap the user behind it. hideBootScreen() is idempotent,
-  // so this is a no-op once boot finishes normally.
+  // Backstop so the boot screen always clears; hideBootScreen() is idempotent.
   _bootFailsafeTimer = setTimeout(hideBootScreen, BOOT_FAILSAFE_MS);
 
-  // Lock the native window to the compact startup size.
-  gtksend("boot");
+  gtksend("boot"); // compact startup window size
 
-  // ── Profile ──────────────────────────────────────────────────
   bootStep("profile", "active");
   bootState("Loading profile");
 
@@ -1292,7 +1125,6 @@ function barText(used, total) {
 
   await waitBootStep("profile");
 
-  // ── Interface ────────────────────────────────────────────────
   bootStep("theme", "active");
   bootState("Preparing interface");
 
@@ -1301,9 +1133,7 @@ function barText(used, total) {
 
   applySize(cfg.size || "s", false);
 
-  // Shuffle-on-boot picks a fresh random theme every launch instead of
-  // whatever was last saved; skips "custom" the same way Cycle does —
-  // there's no stable preset to land on for a moving target.
+  // Shuffle-on-boot overrides the saved theme with a random preset.
   if (cfg.themeShuffleOnBoot) {
     applyTheme(_randomThemeKey());
   } else {
@@ -1315,16 +1145,9 @@ function barText(used, total) {
 
   await waitBootStep("theme");
 
-  // Sync a previously-chosen anchor corner to Python (which persists
-  // its own copy for resize math) and flip the bar-top layout — both
-  // are no-ops for the common case of no corner chosen yet.
+  // Restore the saved anchor corner: bar position here, and Python's resize math.
   if (cfg.anchorCorner) {
-    document
-      .getElementById("app")
-      .classList.toggle(
-        "bar-top",
-        cfg.anchorCorner === "top-left" || cfg.anchorCorner === "top-right",
-      );
+    _applyBarPosition(cfg.anchorCorner);
     gtksend("anchor:" + cfg.anchorCorner);
   }
 
@@ -1334,34 +1157,24 @@ function barText(used, total) {
   document.getElementById("btn-import-settings").onclick = importSettings;
   _updateDemoButtons();
 
-  // ── New user ─────────────────────────────────────────────
-  // No token ever saved means there's no daemon to reach yet — rather
-  // than dropping a first-time user on a bare connect form, launch
-  // straight into Demo Mode so the dashboard is alive and worth
-  // exploring immediately, with the settings drawer already open to
-  // the field they'd need next.
+  // New user (no token): start in Demo Mode with the drawer open at the
+  // token field, rather than on a bare connect form.
   if (!cfg.token) {
     enterDemoMode();
     setConfigOpen(true);
-    // Let the drawer's slide-in transition settle before drawing the
-    // eye to the token field — flashing mid-animation reads as glitchy.
+    // Wait for the drawer's slide-in to finish before flashing the field.
     setTimeout(_flashTokenField, 500);
     hideBootScreen();
     return;
   }
 
-  // ── Returning user ───────────────────────────────────────
-  // No separate "connecting" screen anymore — the dashboard renders
-  // immediately from the saved card layout (values sit at "--" until
-  // the first packet lands), while the real connection catches up in
-  // the background behind the boot checklist.
+  // Returning user: render the saved layout at once ("--" until the first
+  // packet) while the connection catches up behind the boot checklist.
   bootStep("daemon", "active");
   bootState("Connecting");
 
   phase = "connecting";
   setStatus("spin", "Connecting…");
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  rebuildDashboard();
   startSSE();
 })();

@@ -1,34 +1,29 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — ui-widgets.js
-   ────────────────────────────────────────────────────────────────────────────
    Per-row interactive widgetry shared across cards: display-style cycling,
    the "⋯" row menu, hover sub-tooltips, user-added custom rows, and the
-   sensor picker overlay used to assign/reassign any of them.
-   Depends on: themes.js, state.js (must load first).
+   sensor picker overlay used to assign or reassign any row.
+   Depends on: themes.js, state.js (load first).
    ════════════════════════════════════════════════════════════════════════════ */
 "use strict";
 
 // ═══════════════════════════════════════════════════════════════
 //  ROW STYLE — user-selectable display per row
-//  Options:  "bar"        — fill bar + percentage
-//            "dots-warn"  — colour dot ramp (green → red)
-//            "dots-meter" — muted dot ramp (neutral intensity)
-//  Rows with pctSid can use all three; others only the two dot modes.
+//    "bar"        fill bar + percentage (rows with pctSid only)
+//    "dots-warn"  colour dot ramp, green → red
+//    "dots-meter" muted dot ramp, neutral intensity
+//    "num-only"   value only
 // ═══════════════════════════════════════════════════════════════
 function getRowStyle(row) {
   const saved = cfg.rowStyles?.[row.sid];
-  if (saved) {
-    if (saved === "bar" && !row.pctSid) {
-      /* bar invalid without pctSid — fall through */
-    } else return saved;
-  }
+  if (saved && !(saved === "bar" && !row.pctSid)) return saved;
   if (row.pctSid) return "bar";
   if (row.mode === "meter") return "dots-meter";
   if (row.mode) return "dots-warn";
-  return "num-only"; // rows with no mode/pctSid are implicitly num-only
+  return "num-only";
 }
 
-// Style options available for a row, in display order.
+// Styles a row can switch between, in display order.
 function _rowStyleOptions(row) {
   if (row.pctSid) return ["bar", "dots-warn", "dots-meter", "num-only"];
   if (row.mode) return ["dots-warn", "dots-meter", "num-only"];
@@ -38,15 +33,38 @@ function _rowStyleOptions(row) {
 function setRowStyle(row, style) {
   cfg.rowStyles ??= {};
   cfg.rowStyles[row.sid] = style;
-  saveCfg();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  commitAndRebuild();
+}
+
+const _STYLE_INFO = {
+  bar: { label: "▬", title: "Bar" },
+  "dots-warn": { label: "●●", title: "Warning dots" },
+  "dots-meter": { label: "○○", title: "Meter dots" },
+  "num-only": { label: "#", title: "Number only" },
+};
+
+// "⋯" menu entry for switching a row's display style (null if there's no choice).
+function _styleSegItem(row) {
+  const options = _rowStyleOptions(row);
+  if (!options.length) return null;
+  return {
+    type: "segmented",
+    current: getRowStyle(row),
+    options: options.map((v) => ({
+      value: v,
+      label: _STYLE_INFO[v].label,
+      title: _STYLE_INFO[v].title,
+    })),
+    onSelect: (v) => setRowStyle(row, v),
+  };
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-//  "⋯" ROW MENU
+//  "⋯" MENU
+//  items: [{ label, danger?, onClick }]
+//       | [{ type: "segmented", options: [{value,label,title}], current, onSelect }]
+//       | [{ type: "color", label?, value, onChange }]
 // ═══════════════════════════════════════════════════════════════
 let _rowMenuEl = null;
 
@@ -61,126 +79,177 @@ function _rowMenuOutsideClick(e) {
   if (_rowMenuEl && !_rowMenuEl.contains(e.target)) _closeRowMenu();
 }
 
-// items: [{ label, danger?, onClick }] or
-//        [{ type: "segmented", options: [{value,label,title}], current, onSelect }] or
-//        [{ type: "color", label?, value, onChange }]
+function _segmentedMenuEntry(it) {
+  const seg = el("div", "row-menu-seg");
+  for (const opt of it.options) {
+    const b = el(
+      "button",
+      "row-menu-seg-btn" + (opt.value === it.current ? " active" : ""),
+    );
+    b.textContent = opt.label;
+    if (opt.title) b.title = opt.title;
+    b.onclick = (e) => {
+      e.stopPropagation();
+      _closeRowMenu();
+      it.onSelect(opt.value);
+    };
+    seg.appendChild(b);
+  }
+  return seg;
+}
+
+// Colour swatch (native picker) plus a typeable hex field.
+function _colorMenuEntry(it) {
+  const wrap = el("div", "row-menu-color");
+  if (it.label) {
+    const lbl = el("span", "row-menu-color-lbl");
+    lbl.textContent = it.label;
+    wrap.appendChild(lbl);
+  }
+  const row = el("div", "row-menu-color-row");
+  // Wrapper div + invisible input, same technique as .tb-swatch, so the chip
+  // renders as a clean filled square instead of a native colour-input frame.
+  const chipWrap = el("div", "row-menu-color-chip");
+  chipWrap.style.background = it.value;
+  const chip = document.createElement("input");
+  chip.type = "color";
+  chip.value = it.value;
+  chipWrap.appendChild(chip);
+  const hexInp = document.createElement("input");
+  hexInp.type = "text";
+  hexInp.className = "row-menu-color-hex";
+  hexInp.maxLength = 7;
+  hexInp.spellcheck = false;
+  hexInp.value = it.value;
+  hexInp.placeholder = "#rrggbb";
+
+  const isHex = (v) => /^#[0-9a-f]{6}$/i.test(v);
+
+  chip.addEventListener("input", (e) => {
+    hexInp.classList.remove("invalid");
+    hexInp.value = e.target.value;
+    chipWrap.style.background = e.target.value;
+    it.onChange(e.target.value);
+  });
+  hexInp.addEventListener("input", () => {
+    let v = hexInp.value.trim();
+    if (v && !v.startsWith("#")) v = "#" + v;
+    if (isHex(v)) {
+      hexInp.classList.remove("invalid");
+      hexInp.value = v;
+      chip.value = v;
+      chipWrap.style.background = v;
+      it.onChange(v);
+    } else {
+      hexInp.classList.add("invalid");
+    }
+  });
+  hexInp.addEventListener("blur", () => {
+    if (!isHex(hexInp.value.trim())) {
+      hexInp.classList.remove("invalid");
+      hexInp.value = chip.value; // revert to the last valid colour
+    }
+  });
+  hexInp.addEventListener("keydown", (e) => e.stopPropagation());
+
+  row.appendChild(chipWrap);
+  row.appendChild(hexInp);
+  wrap.appendChild(row);
+  return wrap;
+}
+
 function _openRowMenu(anchorBtn, items) {
   _closeRowMenu();
   const menu = el("div", "row-menu");
   for (const it of items) {
     if (it.type === "segmented") {
-      const seg = el("div", "row-menu-seg");
-      for (const opt of it.options) {
-        const b = el(
-          "button",
-          "row-menu-seg-btn" + (opt.value === it.current ? " active" : ""),
-        );
-        b.textContent = opt.label;
-        if (opt.title) b.title = opt.title;
-        b.onclick = (e) => {
-          e.stopPropagation();
-          _closeRowMenu();
-          it.onSelect(opt.value);
-        };
-        seg.appendChild(b);
-      }
-      menu.appendChild(seg);
-      continue;
-    }
-    if (it.type === "color") {
-      const wrap = el("div", "row-menu-color");
-      if (it.label) {
-        const lbl = el("span", "row-menu-color-lbl");
-        lbl.textContent = it.label;
-        wrap.appendChild(lbl);
-      }
-      const row = el("div", "row-menu-color-row");
-      // Same wrapper-div + invisible-input technique as .tb-swatch, so
-      // this chip renders as a clean filled rounded square instead of
-      // a native color-input frame — matches the rest of the app rather
-      // than introducing a second, uglier swatch style.
-      const chipWrap = el("div", "row-menu-color-chip");
-      chipWrap.style.background = it.value;
-      const chip = document.createElement("input");
-      chip.type = "color";
-      chip.value = it.value;
-      chipWrap.appendChild(chip);
-      const hexInp = document.createElement("input");
-      hexInp.type = "text";
-      hexInp.className = "row-menu-color-hex";
-      hexInp.maxLength = 7;
-      hexInp.spellcheck = false;
-      hexInp.value = it.value;
-      hexInp.placeholder = "#rrggbb";
-
-      // Chip stays a native colour picker too — a quick eyeball option
-      // alongside the typeable hex field.
-      chip.addEventListener("input", (e) => {
-        hexInp.classList.remove("invalid");
-        hexInp.value = e.target.value;
-        chipWrap.style.background = e.target.value;
-        it.onChange(e.target.value);
-      });
-      const applyHex = () => {
-        let v = hexInp.value.trim();
-        if (v && !v.startsWith("#")) v = "#" + v;
-        if (/^#[0-9a-f]{6}$/i.test(v)) {
-          hexInp.classList.remove("invalid");
-          hexInp.value = v;
-          chip.value = v;
-          chipWrap.style.background = v;
-          it.onChange(v);
-        } else {
-          hexInp.classList.add("invalid");
-        }
+      menu.appendChild(_segmentedMenuEntry(it));
+    } else if (it.type === "color") {
+      menu.appendChild(_colorMenuEntry(it));
+    } else {
+      const b = el("button", "row-menu-item" + (it.danger ? " danger" : ""));
+      b.textContent = it.label;
+      b.onclick = (e) => {
+        e.stopPropagation();
+        _closeRowMenu();
+        it.onClick();
       };
-      hexInp.addEventListener("input", applyHex);
-      hexInp.addEventListener("blur", () => {
-        if (!/^#[0-9a-f]{6}$/i.test(hexInp.value.trim())) {
-          hexInp.classList.remove("invalid");
-          hexInp.value = chip.value; // revert to last valid colour
-        }
-      });
-      hexInp.addEventListener("keydown", (e) => e.stopPropagation());
-
-      row.appendChild(chipWrap);
-      row.appendChild(hexInp);
-      wrap.appendChild(row);
-      menu.appendChild(wrap);
-      continue;
+      menu.appendChild(b);
     }
-    const b = el("button", "row-menu-item" + (it.danger ? " danger" : ""));
-    b.textContent = it.label;
-    b.onclick = (e) => {
-      e.stopPropagation();
-      _closeRowMenu();
-      it.onClick();
-    };
-    menu.appendChild(b);
   }
   document.body.appendChild(menu);
 
   const r = anchorBtn.getBoundingClientRect();
-  let left = r.right - menu.offsetWidth;
-  if (left < 4) left = 4;
+  const left = Math.max(4, r.right - menu.offsetWidth);
   let top = r.bottom + 4;
   if (top + menu.offsetHeight > window.innerHeight - 4) {
-    top = r.top - menu.offsetHeight - 4; // flip above if it'd overflow
+    top = r.top - menu.offsetHeight - 4; // flip above if it would overflow
   }
   menu.style.left = left + "px";
   menu.style.top = top + "px";
 
   _rowMenuEl = menu;
-  // deferred so the click that opened the menu doesn't immediately close it
+  // Deferred so the click that opened the menu doesn't immediately close it.
   setTimeout(
     () => document.addEventListener("click", _rowMenuOutsideClick, true),
     0,
   );
 }
 
+// The "⋯" button that opens a row's menu; `buildItems()` returns the entries.
+function _makeMoreButton(buildItems) {
+  const more = el("button", "assign-badge row-more");
+  more.textContent = "⋯";
+  more.title = "Row options";
+  more.onclick = (e) => {
+    e.stopPropagation();
+    const items = buildItems();
+    if (items.length) _openRowMenu(more, items);
+  };
+  return more;
+}
+
+// Menu for built-in (non-custom) rows: display style plus sensor assign/remap.
+// isAutoLinux rows offer "Remap source" (any device, Linux included);
+// others offer "Assign / Change sensor" limited to the row's typeFilter.
+function _hardRowMenu(elem, row, { isAutoLinux = false } = {}) {
+  if (!editMode) return;
+  elem.classList.add("assignable");
+  elem.appendChild(
+    _makeMoreButton(() => {
+      const items = [];
+      const seg = _styleSegItem(row);
+      if (seg) items.push(seg);
+      if (isAutoLinux) {
+        items.push({
+          label: "Remap source…",
+          onClick: () => openPicker(row.sid, null, true),
+        });
+      } else if (row.typeFilter) {
+        const assigned = !!cfg.slots[row.sid];
+        items.push({
+          label: assigned ? "Change sensor…" : "+ Assign sensor",
+          onClick: () => openPicker(row.sid, row.typeFilter),
+        });
+        if (assigned) {
+          items.push({
+            label: "Clear assignment",
+            danger: true,
+            onClick: () => {
+              delete cfg.slots[row.sid];
+              commitAndRebuild();
+            },
+          });
+        }
+      }
+      return items;
+    }),
+  );
+}
+
 
 // ═══════════════════════════════════════════════════════════════
-//  SUB TOOLTIP — shows the "used / total GB" label
+//  SUB TOOLTIP — hover tip above a row ("used / total · peak")
 // ═══════════════════════════════════════════════════════════════
 let _subTipEl = null;
 let _subTipTarget = null;
@@ -193,7 +262,6 @@ function _showSubTip(text, anchorEl) {
   _subTipEl.textContent = text;
   _subTipEl.style.display = "block";
   const r = anchorEl.getBoundingClientRect();
-  // Position above the row, centred
   const tipW = _subTipEl.offsetWidth;
   let left = r.left + r.width / 2 - tipW / 2;
   if (left < 4) left = 4;
@@ -207,7 +275,7 @@ function _hideSubTip() {
   _subTipTarget = null;
 }
 
-// Delegated listeners on #app — lightweight, survives buildCards() rebuilds
+// Delegated on #app so the listeners survive buildCards() rebuilds.
 document.getElementById("app").addEventListener("mouseover", (e) => {
   if (locked) return;
   const row = e.target.closest(".sr[data-sub]");
@@ -219,103 +287,47 @@ document.getElementById("app").addEventListener("mouseover", (e) => {
   }
 });
 document.getElementById("app").addEventListener("mouseout", (e) => {
-  const row = e.target.closest(".sr[data-sub]");
-  if (row) _hideSubTip();
+  if (e.target.closest(".sr[data-sub]")) _hideSubTip();
 });
-// a sensible title when reassigning a custom row's source (custom
-// sids aren't in SLOTS, so the usual title lookup falls through).
-function _customRowLabel(sid) {
+
+
+// ═══════════════════════════════════════════════════════════════
+//  CUSTOM ROWS — user-added rows on a card. Display-only (noPlot), never
+//  feeding the sparkline. They reuse the built-in rows' slot/typeFilter/style
+//  machinery, with a generated sid and their own saved order.
+// ═══════════════════════════════════════════════════════════════
+const ALL_SENSOR_TYPES = ["temp", "rpm", "duty", "watts"];
+
+function _findCustomRow(sid) {
   for (const rows of Object.values(cfg.customRows ?? {})) {
     const r = rows.find((x) => x.sid === sid);
-    if (r) return r.lbl;
+    if (r) return r;
   }
   return null;
 }
 
-const _STYLE_LABELS = {
-  bar: "▬",
-  "dots-warn": "●●",
-  "dots-meter": "○○",
-  "num-only": "#",
-};
-const _STYLE_TITLES = {
-  bar: "Bar",
-  "dots-warn": "Warning dots",
-  "dots-meter": "Meter dots",
-  "num-only": "Number only",
-};
-// Builds a "⋯" menu's segmented-control entry for cycling a row's
-// display style — shared by the custom-row and hardcoded-row menus.
-function _styleSegItem(row) {
-  const options = _rowStyleOptions(row);
-  if (!options.length) return null;
-  return {
-    type: "segmented",
-    current: getRowStyle(row),
-    options: options.map((v) => ({
-      value: v,
-      label: _STYLE_LABELS[v],
-      title: _STYLE_TITLES[v],
-    })),
-    onSelect: (v) => setRowStyle(row, v),
-  };
+// Custom sids aren't in SLOTS, so the picker title needs this lookup.
+const _customRowLabel = (sid) => _findCustomRow(sid)?.lbl ?? null;
+
+const _newCustomSid = (cardId) =>
+  `custom_${cardId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+
+// Fan/duty channels get "meter" mode (dutyLevel off the live duty%); "warn"
+// mode only works for sensors with a WARN_T table. A generated custom sid is
+// never a WARN_T key, so warnLevel() would freeze a fan row at a constant 2.
+const _isFanLike = (leaf) =>
+  leaf.kind === "channel" && (leaf.field === "rpm" || leaf.field === "duty");
+
+function _registerCustomRow(cardId, row, slot) {
+  cfg.customRows ??= {};
+  (cfg.customRows[cardId] ??= []).push(row);
+  cfg.rowOrder ??= {};
+  (cfg.rowOrder[cardId] ??= []).push(row.sid);
+  cfg.slots[row.sid] = slot;
 }
 
-// ⋯ menu for hardcoded (non-custom) rows — consolidates style toggle +
-// assign/remap into a single button, mirroring the custom-row row-more menu.
-// isAutoLinux:true  → offers "Remap source" (shows all devices incl. Linux)
-// otherwise         → offers "Assign / Change sensor" via typeFilter
-function _hardRowMenu(elem, row, { isAutoLinux = false } = {}) {
-  if (!editMode) return;
-  elem.classList.add("assignable");
-  const more = el("button", "assign-badge row-more");
-  more.textContent = "⋯";
-  more.title = "Row options";
-  more.onclick = (e) => {
-    e.stopPropagation();
-    const items = [];
-    // Style toggle (only when meaningful) — multi-segment, pick directly
-    const seg = _styleSegItem(row);
-    if (seg) items.push(seg);
-    // Sensor assign / remap
-    if (isAutoLinux) {
-      items.push({
-        label: "Remap source…",
-        onClick: () => openPicker(row.sid, null, true),
-      });
-    } else if (row.typeFilter) {
-      const assigned = !!cfg.slots[row.sid];
-      items.push({
-        label: assigned ? "Change sensor…" : "+ Assign sensor",
-        onClick: () => openPicker(row.sid, row.typeFilter),
-      });
-      if (assigned) {
-        items.push({
-          label: "Clear assignment",
-          danger: true,
-          onClick: () => {
-            delete cfg.slots[row.sid];
-            saveCfg();
-            buildCards();
-            renderDashboard(liveDevices);
-            requestAnimationFrame(() => autoResize());
-          },
-        });
-      }
-    }
-    if (items.length) _openRowMenu(more, items);
-  };
-  elem.appendChild(more);
-}
-
-
-// ═══════════════════════════════════════════════════════════════
-//  CUSTOM ROWS — user-added rows on a card. Always noPlot (display
-//  only, never feed the sparkline). Reuse cfg.slots/typeFilter/style
-//  machinery from built-in rows, with a generated sid + own order.
-// ═══════════════════════════════════════════════════════════════
-const ALL_SENSOR_TYPES = ["temp", "rpm", "duty", "watts"];
-
+// A card's custom rows in their saved order; rows missing from the saved
+// order (newly added) go last.
 function customRowsFor(cardId) {
   const list = cfg.customRows?.[cardId] ?? [];
   const order = cfg.rowOrder?.[cardId];
@@ -328,33 +340,21 @@ function customRowsFor(cardId) {
       bySid.delete(sid);
     }
   }
-  out.push(...bySid.values()); // rows not yet in the saved order (newly added)
+  out.push(...bySid.values());
   return out;
 }
 
 function addCustomRow(cardId, leaf) {
-  const sid = `custom_${cardId}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-  // Fan/duty channels get "meter" mode (dutyLevel off the live duty%).
-  // "warn" mode only makes sense for metrics with a WARN_T threshold
-  // table (temps, load%) — every custom row used to get "warn"
-  // regardless of sensor kind, so rpm/duty rows went through
-  // warnLevel() instead of dutyLevel()+getFanDuty(). A generated custom
-  // sid is never a WARN_T key, so warnLevel() short-circuits to a
-  // constant level 2 — dots frozen no matter what the fan was doing.
-  const isFanLike = leaf.kind === "channel" && (leaf.field === "rpm" || leaf.field === "duty");
+  const sid = _newCustomSid(cardId);
   const row = {
     sid,
     lbl: shortLabel(leaf.label) || leaf.name,
-    mode: isFanLike ? "meter" : "warn",
+    mode: _isFanLike(leaf) ? "meter" : "warn",
     noPlot: true,
     custom: true,
     typeFilter: ALL_SENSOR_TYPES,
   };
-  cfg.customRows ??= {};
-  (cfg.customRows[cardId] ??= []).push(row);
-  cfg.rowOrder ??= {};
-  (cfg.rowOrder[cardId] ??= []).push(sid);
-  cfg.slots[sid] = { ...leaf };
+  _registerCustomRow(cardId, row, { ...leaf });
   return sid;
 }
 
@@ -366,10 +366,7 @@ function moveCustomRow(cardId, sid, dir) {
   [order[i], order[j]] = [order[j], order[i]];
   cfg.rowOrder ??= {};
   cfg.rowOrder[cardId] = order;
-  saveCfg();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  commitAndRebuild();
 }
 
 function removeCustomRow(cardId, sid) {
@@ -382,16 +379,75 @@ function removeCustomRow(cardId, sid) {
   if (cfg.rowStyles) delete cfg.rowStyles[sid];
   saveCfg();
   _sendFolderPaths();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  rebuildDashboard();
 }
 
-// Renders a card's custom rows (in their saved order) plus the
-// trailing "+ Add row" affordance. Shared by spark and sensor cards.
-// Rows live inside their own .custom-rows-list wrapper so pointer-drag
-// reordering (see initRowSort()) never mixes them with disk/named rows
-// sharing the same section.
+// "⋯" menu entries for one custom row.
+function _customRowMenuItems(def, row, idx, count) {
+  const items = [];
+  // Style picker first, matching the built-in row menu (_hardRowMenu).
+  const seg = _styleSegItem(row);
+  if (seg) items.push(seg);
+  items.push({
+    label: "Rename",
+    onClick: async () => {
+      const nl = await showTextPrompt({
+        title: "Rename Row",
+        label: "Label",
+        defaultValue: row.lbl,
+      });
+      if (nl && nl.trim()) {
+        row.lbl = nl.trim();
+        commitAndRebuild();
+      }
+    },
+  });
+  if (row.kind === "folder") {
+    items.push({
+      label: "Change path…",
+      onClick: () => {
+        pickFolder((newPath) => {
+          if (newPath === row.path) return;
+          row.path = newPath;
+          cfg.slots[row.sid] = {
+            ...cfg.slots[row.sid],
+            name: `Folder ${newPath}`,
+            label: `Folder: ${newPath}`,
+          };
+          saveCfg();
+          _sendFolderPaths();
+          rebuildDashboard();
+        });
+      },
+    });
+  } else {
+    items.push({
+      label: "Change sensor…",
+      onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, true),
+    });
+  }
+  // Dragging the row's grip is the primary way to reorder; these are the keyboard-free fallback.
+  if (idx > 0)
+    items.push({
+      label: "Move up",
+      onClick: () => moveCustomRow(def.id, row.sid, -1),
+    });
+  if (idx < count - 1)
+    items.push({
+      label: "Move down",
+      onClick: () => moveCustomRow(def.id, row.sid, 1),
+    });
+  items.push({
+    label: "Remove row",
+    danger: true,
+    onClick: () => removeCustomRow(def.id, row.sid),
+  });
+  return items;
+}
+
+// Renders a card's custom rows (saved order) plus the trailing "+ Add row"
+// affordance. Rows sit in their own .custom-rows-list so drag-reordering
+// (initRowSort()) never mixes them with disk/named rows in the same section.
 function _renderCustomRowSection(def, container) {
   const rows = customRowsFor(def.id).filter(
     (row) => cfg.slots[row.sid] || editMode,
@@ -407,85 +463,11 @@ function _renderCustomRowSection(def, container) {
       const grip = el("button", "row-grip");
       grip.type = "button";
       grip.title = "Drag to reorder";
-      grip.innerHTML =
-        '<svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg>';
+      grip.innerHTML = _ICON_GRIP;
       elem.insertBefore(grip, elem.firstChild);
-
-      const more = el("button", "assign-badge row-more");
-      more.textContent = "⋯";
-      more.title = "Row options";
-      more.onclick = (e) => {
-        e.stopPropagation();
-        const items = [];
-        // Style picker goes first — same position as the built-in row
-        // menu (_hardRowMenu) so the segmented control always lands in
-        // the same spot instead of drifting between "Rename" and
-        // "Change sensor" depending on which row you're on.
-        const seg = _styleSegItem(row);
-        if (seg) items.push(seg);
-        items.push({
-          label: "Rename",
-          onClick: async () => {
-            const nl = await showTextPrompt({
-              title: "Rename Row",
-              label: "Label",
-              defaultValue: row.lbl,
-            });
-            if (nl && nl.trim()) {
-              row.lbl = nl.trim();
-              saveCfg();
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
-            }
-          },
-        });
-        // Folder rows get "Change path", sensor rows get "Change sensor"
-        if (row.kind === "folder") {
-          items.push({
-            label: "Change path…",
-            onClick: () => {
-              pickFolder((newPath) => {
-                if (newPath === row.path) return;
-                row.path = newPath;
-                cfg.slots[row.sid] = {
-                  ...cfg.slots[row.sid],
-                  name: `Folder ${newPath}`,
-                  label: `Folder: ${newPath}`,
-                };
-                saveCfg();
-                _sendFolderPaths();
-                buildCards();
-                renderDashboard(liveDevices);
-                requestAnimationFrame(() => autoResize());
-              });
-            },
-          });
-        } else {
-          items.push({
-            label: "Change sensor…",
-            onClick: () => openPicker(row.sid, ALL_SENSOR_TYPES, true),
-          });
-        }
-        // Drag the grip to reorder — up/down stay as a no-mouse fallback
-        if (idx > 0)
-          items.push({
-            label: "Move up",
-            onClick: () => moveCustomRow(def.id, row.sid, -1),
-          });
-        if (idx < rows.length - 1)
-          items.push({
-            label: "Move down",
-            onClick: () => moveCustomRow(def.id, row.sid, 1),
-          });
-        items.push({
-          label: "Remove row",
-          danger: true,
-          onClick: () => removeCustomRow(def.id, row.sid),
-        });
-        _openRowMenu(more, items);
-      };
-      elem.appendChild(more);
+      elem.appendChild(
+        _makeMoreButton(() => _customRowMenuItems(def, row, idx, rows.length)),
+      );
     }
     list.appendChild(elem);
   });
@@ -504,124 +486,151 @@ function _renderCustomRowSection(def, container) {
 // ═══════════════════════════════════════════════════════════════
 //  PICKER OVERLAY
 //  openPicker(slotId, typeFilter, includeLinux, newRowCard)
-//    slotId      — cfg.slots key to assign, null for new custom row
-//    typeFilter  — array of field types: ["temp"], ["rpm"], etc.
-//    includeLinux — show Linux device channels in the list
-//    newRowCard  — card id → create a brand-new custom row on that
-//                  card and assign the chosen sensor to it
+//    slotId       cfg.slots key to assign; null when adding a custom row
+//    typeFilter   field types to list (["temp"], ["rpm"], …); null = all
+//    includeLinux also list the Linux device's channels
+//    newRowCard   card id: create a new custom row there for the chosen sensor
 // ═══════════════════════════════════════════════════════════════
-function openPicker(
-  slotId,
-  typeFilter,
-  includeLinux = false,
-  newRowCard = null,
-) {
-  pickerCtx = { slotId, typeFilter, newRowCard };
+const _pickerBody = () => document.getElementById("picker-body");
+const _showPicker = () => document.getElementById("picker").classList.remove("hide");
 
-  // Header title
-  const slotMeta = SLOTS.find((s) => s.id === slotId);
+// Accent-styled action row ("× Clear assignment", "Skip — …").
+function _pickerActionRow(text, onClick) {
+  const row = el("div", "picker-clr");
+  row.innerHTML = `<span>${text}</span>`;
+  row.onclick = onClick;
+  return row;
+}
+
+// Sensor list grouped under device headers. Returns the number of sensors listed.
+function _appendLeafGroups(body, leaves, onPick, currentKey = null) {
+  const byDev = {};
+  for (const leaf of leaves) (byDev[leaf.dLbl] ??= []).push(leaf);
+
+  for (const [devLbl, devLeaves] of Object.entries(byDev)) {
+    const sec = el("div", "picker-sec");
+    sec.textContent = devLbl;
+    body.appendChild(sec);
+
+    for (const leaf of devLeaves) {
+      const row = el("div", "picker-leaf");
+      if (leafKey(leaf) === currentKey) row.classList.add("sel");
+      row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.sensorName ?? leaf.name)}</span>
+<span class="picker-leaf-val">${fmt1(leaf.value, leaf.unit)}</span>
+<span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
+      row.onclick = () => onPick(leaf);
+      body.appendChild(row);
+    }
+  }
+  return leaves.length;
+}
+
+function _appendEmptyNote(body, text) {
+  const emp = el("div", "picker-empty");
+  emp.textContent = text;
+  body.appendChild(emp);
+}
+
+// Applies a picked sensor; returns the sid it was assigned to.
+function _assignPickedLeaf(leaf, slotId, newRowCard) {
+  if (newRowCard) return addCustomRow(newRowCard, leaf);
+  cfg.slots[slotId] = { ...leaf };
+  // Remapping a custom row: re-derive its mode so a row moved onto or off a
+  // fan channel gets meter dots instead of keeping its old mode.
+  if (slotId?.startsWith("custom_")) {
+    const r = _findCustomRow(slotId);
+    if (r) r.mode = _isFanLike(leaf) ? "meter" : "warn";
+  }
+  return slotId;
+}
+
+// Folder-size sensor: either a new custom row, or a remap of an existing one.
+function _assignFolder(path, lbl, slotId, newRowCard) {
+  const slot = {
+    uid: "linux-system",
+    kind: "channel",
+    name: `Folder ${path}`,
+    field: "watts",
+    unit: "GB",
+    dLbl: "Linux",
+    label: `Folder: ${path}`,
+  };
+
+  if (newRowCard) {
+    const row = {
+      sid: _newCustomSid(newRowCard),
+      lbl,
+      noPlot: true,
+      custom: true,
+      kind: "folder",
+      path,
+    };
+    _registerCustomRow(newRowCard, row, slot);
+  } else {
+    cfg.slots[slotId] = slot;
+    const r = _findCustomRow(slotId);
+    if (r) {
+      r.kind = "folder";
+      r.path = path;
+    }
+  }
+}
+
+function openPicker(slotId, typeFilter, includeLinux = false, newRowCard = null) {
   const titleEl = document.getElementById("picker-title");
   if (newRowCard) {
     const cardMeta = CARD_DEFS.find((d) => d.id === newRowCard);
     titleEl.textContent =
       "Add Row — " + (cardMeta ? cardLabel(cardMeta) : newRowCard);
   } else {
+    const slotMeta = SLOTS.find((s) => s.id === slotId);
     titleEl.textContent =
       "Assign " + (slotMeta?.lbl ?? _customRowLabel(slotId) ?? slotId ?? "");
   }
 
-  const body = document.getElementById("picker-body");
+  const body = _pickerBody();
   body.innerHTML = "";
 
-  // Clear option for existing slot assignment
   if (!newRowCard && slotId && cfg.slots[slotId]) {
-    const clr = el("div", "picker-clr");
-    clr.innerHTML = `<span>× Clear assignment</span>`;
-    clr.onclick = () => {
-      delete cfg.slots[slotId];
-      saveCfg();
-      closePicker();
-      buildCards();
-      renderDashboard(liveDevices);
-      requestAnimationFrame(() => autoResize());
-    };
-    body.appendChild(clr);
+    body.appendChild(
+      _pickerActionRow("× Clear assignment", () => {
+        delete cfg.slots[slotId];
+        saveCfg();
+        closePicker();
+        rebuildDashboard();
+      }),
+    );
   }
 
-  // Build filtered leaf list
-  // includeLinux=true when remapping autoLinux rows — user can pick any source
+  // Remapping an autoLinux row passes includeLinux so any source is pickable.
   const leaves = buildLeaves(liveDevices).filter(
     (l) => includeLinux || l.uid !== "linux-system",
   );
   const filtered = typeFilter
-    ? leaves.filter((l) => {
-        if (l.kind === "temp" && typeFilter.includes("temp")) return true;
-        if (l.kind === "channel" && typeFilter.includes(l.field)) return true;
-        return false;
-      })
+    ? leaves.filter(
+        (l) =>
+          (l.kind === "temp" && typeFilter.includes("temp")) ||
+          (l.kind === "channel" && typeFilter.includes(l.field)),
+      )
     : leaves;
 
-  // Group by device label
-  const byDev = {};
-  for (const leaf of filtered) {
-    (byDev[leaf.dLbl] ??= []).push(leaf);
-  }
-
-  if (Object.keys(byDev).length === 0) {
-    const emp = el("div", "picker-empty");
-    emp.textContent = "No matching channels found";
-    body.appendChild(emp);
+  if (!filtered.length) {
+    _appendEmptyNote(body, "No matching channels found");
   } else {
-    const currentKey = newRowCard
-      ? null
-      : slotId && cfg.slots[slotId]
-        ? slotKey(cfg.slots[slotId])
-        : null;
+    const currentKey =
+      !newRowCard && slotId && cfg.slots[slotId] ? slotKey(cfg.slots[slotId]) : null;
 
-    for (const [devLbl, devLeaves] of Object.entries(byDev)) {
-      const sec = el("div", "picker-sec");
-      sec.textContent = devLbl;
-      body.appendChild(sec);
+    _appendLeafGroups(
+      body,
+      filtered,
+      (leaf) => {
+        const targetSid = _assignPickedLeaf(leaf, slotId, newRowCard);
+        saveCfg();
 
-      for (const leaf of devLeaves) {
-        const row = el("div", "picker-leaf");
-        const lk = leafKey(leaf);
-        if (lk === currentKey) row.classList.add("sel");
-
-        row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.sensorName ?? leaf.name)}</span>
-<span class="picker-leaf-val">${fmt1(leaf.value, leaf.unit)}</span>
-<span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
-
-        row.onclick = () => {
-          let targetSid = slotId;
-          if (newRowCard) {
-            targetSid = addCustomRow(newRowCard, leaf);
-          } else {
-            cfg.slots[slotId] = { ...leaf };
-            // Remapping an existing custom row — re-derive mode from the
-            // new leaf's kind so a row moved onto/off a fan channel gets
-            // dutyLevel()/meter dots instead of being stuck on whatever
-            // mode it was created with (see addCustomRow for the same fix).
-            if (slotId?.startsWith("custom_")) {
-              const isFanLike =
-                leaf.kind === "channel" &&
-                (leaf.field === "rpm" || leaf.field === "duty");
-              for (const rows of Object.values(cfg.customRows ?? {})) {
-                const r = rows.find((x) => x.sid === slotId);
-                if (r) {
-                  r.mode = isFanLike ? "meter" : "warn";
-                  break;
-                }
-              }
-            }
-          }
-          saveCfg();
-
-          // RPM channel assigned — offer to pair it with a duty channel
-          // (or a manual max-RPM ceiling) even when one was auto-detected
-          // on the same channel object, since the auto-detected duty
-          // isn't always trustworthy (e.g. shares a name but controls a
-          // different fan). See openDutyPairingStep().
+        // An RPM channel gets a second step to pair it with a duty channel
+        // (or a manual max RPM) — offered even when a same-object duty field
+        // was auto-detected, since that one isn't always this fan's.
+        if (leaf.field === "rpm") {
           const hasNativeDuty = leaves.some(
             (l) =>
               l.kind === "channel" &&
@@ -629,25 +638,19 @@ function openPicker(
               l.name === leaf.name &&
               l.field === "duty",
           );
-          if (leaf.field === "rpm") {
-            openDutyPairingStep(targetSid, hasNativeDuty);
-            return;
-          }
+          openDutyPairingStep(targetSid, hasNativeDuty);
+          return;
+        }
 
-          closePicker();
-          buildCards();
-          renderDashboard(liveDevices);
-          requestAnimationFrame(() => autoResize());
-        };
-        body.appendChild(row);
-      }
-    }
+        closePicker();
+        rebuildDashboard();
+      },
+      currentKey,
+    );
   }
 
-  // ── Folder size option — available for any custom row ──────────
-  // Show when adding a new custom row or remapping an existing one.
-  const isCustomCtx = newRowCard || slotId?.startsWith("custom_");
-  if (isCustomCtx) {
+  // Folder sizes can back any custom row: a new one, or a remap of one.
+  if (newRowCard || slotId?.startsWith("custom_")) {
     const folderSec = el("div", "picker-sec");
     folderSec.textContent = "Folder Size";
     body.appendChild(folderSec);
@@ -656,118 +659,56 @@ function openPicker(
     folderOpt.textContent = "+ Monitor folder path…";
     folderOpt.onclick = () => {
       pickFolder(async (path) => {
-        const defaultLbl =
-          path === "/" ? "root" : path.split("/").pop() || path;
+        const defaultLbl = pathLabel(path);
         const rawLbl = await showTextPrompt({
           title: "Label This Folder",
           label: "Label",
           defaultValue: defaultLbl,
         });
-        if (rawLbl === null) return; // user cancelled
-        const lbl = rawLbl.trim() || defaultLbl;
-
-        const slot = {
-          uid: "linux-system",
-          kind: "channel",
-          name: `Folder ${path}`,
-          field: "watts",
-          unit: "GB",
-          dLbl: "Linux",
-          label: `Folder: ${path}`,
-        };
-
-        if (newRowCard) {
-          // Creating a brand-new custom row
-          const sid = `custom_${newRowCard}_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-          const row = {
-            sid,
-            lbl,
-            noPlot: true,
-            custom: true,
-            kind: "folder",
-            path,
-          };
-          cfg.customRows ??= {};
-          (cfg.customRows[newRowCard] ??= []).push(row);
-          cfg.rowOrder ??= {};
-          (cfg.rowOrder[newRowCard] ??= []).push(sid);
-          cfg.slots[sid] = slot;
-        } else {
-          // Remapping an existing custom row
-          cfg.slots[slotId] = slot;
-          // Mark the row as a folder row and record its path
-          for (const rows of Object.values(cfg.customRows ?? {})) {
-            const r = rows.find((x) => x.sid === slotId);
-            if (r) {
-              r.kind = "folder";
-              r.path = path;
-              break;
-            }
-          }
-        }
-
+        if (rawLbl === null) return; // cancelled
+        _assignFolder(path, rawLbl.trim() || defaultLbl, slotId, newRowCard);
         saveCfg();
         closePicker();
         _sendFolderPaths();
-        buildCards();
-        renderDashboard(liveDevices);
-        requestAnimationFrame(() => autoResize());
+        rebuildDashboard();
       });
     };
     body.appendChild(folderOpt);
   }
 
-  document.getElementById("picker").classList.remove("hide");
+  _showPicker();
 }
 
-// Second picker step shown right after assigning an RPM channel. Lets
-// the user point at the channel that actually reports this fan's duty%
-// — common on motherboard/hwmon fan headers where rpm and duty show up
-// as two different channels, sometimes even under a different device —
-// or enter a manual max-RPM ceiling instead. Always offered, even when
-// a duty field was auto-detected on the same channel object, since a
-// same-named duty field isn't always trustworthy (e.g. it can belong to
-// a different physical fan than the rpm reading). Only one source is
-// ever active at a time — picking one clears any previous override.
+// Second picker step after assigning an RPM channel: point at the channel
+// that reports this fan's duty% (on motherboard/hwmon headers it's often a
+// separate channel, sometimes under another device), or enter a max-RPM
+// ceiling. One source is active at a time; choosing one clears the others.
 function openDutyPairingStep(targetSid, hasNativeDuty) {
   document.getElementById("picker-title").textContent =
     "Match Duty Channel (optional)";
-  const body = document.getElementById("picker-body");
+  const body = _pickerBody();
   body.innerHTML = "";
 
-  const finish = () => {
-    closePicker();
-    buildCards();
-    renderDashboard(liveDevices);
-    requestAnimationFrame(() => autoResize());
-  };
-  const clearOverrides = () => {
+  const choose = (applyChoice) => {
     const s = cfg.slots[targetSid];
     if (s) {
       delete s.pairedDuty;
       delete s.manualMaxRpm;
     }
+    applyChoice?.(cfg.slots[targetSid]);
+    saveCfg();
+    closePicker();
+    rebuildDashboard();
   };
 
-  if (hasNativeDuty) {
-    const auto = el("div", "picker-clr");
-    auto.innerHTML = `<span>✓ Use auto-detected duty channel</span>`;
-    auto.onclick = () => {
-      clearOverrides();
-      saveCfg();
-      finish();
-    };
-    body.appendChild(auto);
-  } else {
-    const skip = el("div", "picker-clr");
-    skip.innerHTML = `<span>Skip — estimate from RPM instead</span>`;
-    skip.onclick = () => {
-      clearOverrides();
-      saveCfg();
-      finish();
-    };
-    body.appendChild(skip);
-  }
+  body.appendChild(
+    _pickerActionRow(
+      hasNativeDuty
+        ? "✓ Use auto-detected duty channel"
+        : "Skip — estimate from RPM instead",
+      () => choose(),
+    ),
+  );
 
   const manual = el("div", "picker-add");
   manual.textContent = "+ Enter max RPM manually";
@@ -780,17 +721,13 @@ function openDutyPairingStep(targetSid, hasNativeDuty) {
         return Number.isFinite(n) && n > 0 ? null : "Enter a positive number.";
       },
     });
-    if (raw === null) return; // cancelled — stay on this step
+    if (raw === null) return; // cancelled: stay on this step
     const max = parseFloat(raw);
-    clearOverrides();
-    cfg.slots[targetSid].manualMaxRpm = max;
-    saveCfg();
-    finish();
+    choose((slot) => (slot.manualMaxRpm = max));
   };
   body.appendChild(manual);
 
-  // The auto-detected duty (if any) is already offered above — exclude
-  // it here so it isn't listed twice.
+  // An auto-detected duty on the fan's own channel is offered above already.
   const rpmSlot = cfg.slots[targetSid];
   const dutyLeaves = buildLeaves(liveDevices).filter(
     (l) =>
@@ -800,39 +737,22 @@ function openDutyPairingStep(targetSid, hasNativeDuty) {
   );
 
   if (!dutyLeaves.length) {
-    const emp = el("div", "picker-empty");
-    emp.textContent = hasNativeDuty
-      ? "No other duty channels found"
-      : "No duty channels found — enter a max RPM above, or skip to estimate automatically";
-    body.appendChild(emp);
+    _appendEmptyNote(
+      body,
+      hasNativeDuty
+        ? "No other duty channels found"
+        : "No duty channels found — enter a max RPM above, or skip to estimate automatically",
+    );
   } else {
-    const byDev = {};
-    for (const leaf of dutyLeaves) (byDev[leaf.dLbl] ??= []).push(leaf);
-    for (const [devLbl, devLeaves] of Object.entries(byDev)) {
-      const sec = el("div", "picker-sec");
-      sec.textContent = devLbl;
-      body.appendChild(sec);
-      for (const leaf of devLeaves) {
-        const row = el("div", "picker-leaf");
-        row.innerHTML = `<span class="picker-leaf-name">${esc(leaf.sensorName ?? leaf.name)}</span>
-<span class="picker-leaf-val">${fmt1(leaf.value, leaf.unit)}</span>
-<span class="picker-leaf-unit">${esc(leaf.unit)}</span>`;
-        row.onclick = () => {
-          clearOverrides();
-          cfg.slots[targetSid].pairedDuty = { uid: leaf.uid, name: leaf.name };
-          saveCfg();
-          finish();
-        };
-        body.appendChild(row);
-      }
-    }
+    _appendLeafGroups(body, dutyLeaves, (leaf) =>
+      choose((slot) => (slot.pairedDuty = { uid: leaf.uid, name: leaf.name })),
+    );
   }
 
-  document.getElementById("picker").classList.remove("hide");
+  _showPicker();
 }
 
 function closePicker() {
-  pickerCtx = null;
   document.getElementById("picker")?.classList.add("hide");
 }
 

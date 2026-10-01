@@ -159,12 +159,8 @@
                     </div>
                     <div class="theme-grid" id="theme-grid"></div>
 
-                    <!-- Theme Editor is not a section of its own — it's
-                         whatever "Custom…" above actually is, so it only
-                         renders when Custom is the active tile (see the
-                         theme-tile click handlers in app-modes.js). No
-                         header of its own: the Theme grid above already
-                         says what this is. -->
+                    <!-- Theme Editor: shown only while the Custom tile is active (see the
+                         theme-tile handlers in app-modes.js). -->
                     <div id="theme-editor-inline" class="hide">
                         <div class="sub-hdr tb-group-hdr">
                             Background &amp; Chrome
@@ -601,10 +597,7 @@
                 </div>
             </div>
 
-            <!-- ── Generic text-input modal (replaces native prompt()) ──────
-                 Shared by any "type a short string" flow — row rename, a
-                 folder's display label, manual max-RPM entry, etc. Wired up
-                 by showTextPrompt() in state.js. -->
+            <!-- Text-input modal, replacing native prompt(); see showTextPrompt() in state.js. -->
             <div id="text-modal" class="text-modal-overlay hide">
                 <div class="text-modal-box">
                     <div class="text-modal-title" id="text-modal-title"></div>
@@ -637,10 +630,8 @@
             </div>
         </div>
         <!-- #app -->
-        <!-- Load order matters: these are classic scripts sharing one global
-             scope (no bundler, no modules) — each file below can use anything
-             defined in an earlier one. app-modes.js must load last; its boot
-             IIFE is what actually starts the app. -->
+        <!-- Classic scripts sharing one global scope: load order matters, and
+             app-modes.js must be last (its boot IIFE starts the app). -->
         <script src="themes.js"></script>
         <script src="state.js"></script>
         <script src="platform-linux.js"></script>

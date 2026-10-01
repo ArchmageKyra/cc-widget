@@ -1,18 +1,13 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — themes.js
-   ────────────────────────────────────────────────────────────────────────────
-   THEMES catalogue + applyTheme().
-   To add a theme: append an entry to THEMES following the existing pattern.
-   Use the in-app Theme Builder → "Generate CSS" to produce the css string.
-
-   Every theme MUST provide at minimum:
-     --bg  --txt  --txt-dim  --txt-muted  --hot
-     --bdr  --bhi
-     --r  --rs
-     --cpu  --gpu  --fan  --ssd  --ram  --net
-     --w1…--w5
-     --meter  --dot-off-warn  --dot-off-meter  --spark-grid  --spark-vtick
-     --font-ui  --font-num  --font-code
+   THEMES catalogue, size presets, applyTheme() and applySize().
+   To add a theme, append an entry to THEMES (the in-app Theme Builder's
+   generated CSS can be pasted in as the `css` string). Unlisted tokens fall
+   back to the defaults in monitor.css, but a theme should define at least:
+     --bg --txt --txt-dim --txt-muted --hot   --bdr --bhi   --r --rs
+     --cpu --gpu --fan --ssd --ram --net      --w1…--w5
+     --meter --dot-off-warn --dot-off-meter --spark-grid --spark-vtick
+     --font-ui --font-num --font-code
    ════════════════════════════════════════════════════════════════════════════ */
 "use strict";
 
@@ -198,40 +193,40 @@ const THEMES = {
     name: "Solarized Dark",
     swatches: ["#002b36", "#268bd2", "#2aa198", "#b58900", "#93a1a1"],
     css: `:root{
-    --bg:#002b36;
-    --txt:#eee8d5;
-    --txt-dim:#93a1a1;
-    --txt-muted:#586e75;
-    --hot:#dc322f;
+  --bg:#002b36;
+  --txt:#eee8d5;
+  --txt-dim:#93a1a1;
+  --txt-muted:#586e75;
+  --hot:#dc322f;
 
-    --bdr:rgba(147,161,161,.10);
-    --bhi:rgba(147,161,161,.18);
+  --bdr:rgba(147,161,161,.10);
+  --bhi:rgba(147,161,161,.18);
 
-    --r:8px; --rs:5px;
+  --r:8px; --rs:5px;
 
-    --cpu:#268bd2;
-    --gpu:#2aa198;
-    --fan:#b58900;
-    --ssd:#6c71c4;
-    --ram:#93a1a1;
-    --net:#859900;
+  --cpu:#268bd2;
+  --gpu:#2aa198;
+  --fan:#b58900;
+  --ssd:#6c71c4;
+  --ram:#93a1a1;
+  --net:#859900;
 
-    --w1:#859900;
-    --w2:#2aa198;
-    --w3:#b58900;
-    --w4:#cb4b16;
-    --w5:#dc322f;
+  --w1:#859900;
+  --w2:#2aa198;
+  --w3:#b58900;
+  --w4:#cb4b16;
+  --w5:#dc322f;
 
-    --meter:rgba(38,139,210,.45);
-    --dot-off-warn:rgba(147,161,161,.12);
-    --dot-off-meter:rgba(147,161,161,.08);
-    --spark-grid:rgba(147,161,161,.07);
-    --spark-vtick:rgba(147,161,161,.04);
+  --meter:rgba(38,139,210,.45);
+  --dot-off-warn:rgba(147,161,161,.12);
+  --dot-off-meter:rgba(147,161,161,.08);
+  --spark-grid:rgba(147,161,161,.07);
+  --spark-vtick:rgba(147,161,161,.04);
 
-    --font-ui:"Source Sans 3",system-ui,sans-serif;
-    --font-num:"Source Code Pro",ui-monospace,monospace;
-    --font-code:"Source Code Pro",ui-monospace,monospace;
-  }`,
+  --font-ui:"Source Sans 3",system-ui,sans-serif;
+  --font-num:"Source Code Pro",ui-monospace,monospace;
+  --font-code:"Source Code Pro",ui-monospace,monospace;
+}`,
   },
 
   "tokyo-night": {
@@ -271,7 +266,7 @@ const THEMES = {
   --font-ui:"Inter",system-ui,sans-serif;
   --font-num:"JetBrains Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
-  }`,
+}`,
   },
 
   "wandering-waters": {
@@ -311,7 +306,7 @@ const THEMES = {
   --font-ui:"Space Grotesk",system-ui,sans-serif;
   --font-num:"IBM Plex Mono",ui-monospace,monospace;
   --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
-  }`,
+}`,
   },
 
   "nixie-nocturne": {
@@ -475,17 +470,14 @@ const THEMES = {
   },
 };
 
-// Track which CSS custom properties were last set by applyTheme so we can
-// cleanly remove them before applying the next theme (prevents cross-theme
-// leakage — e.g. Misty Metal sets --bg-card/--bg-bar overrides that must not
-// bleed into the next theme if it doesn't define them).
+// Vars set by the last applyTheme(), removed before the next one so a
+// theme's extras (e.g. Misty Metal's --bg-card) can't leak into the next.
 let _lastThemeVars = [];
 
 function applyTheme(key, customCSS = null) {
   const css = customCSS ?? THEMES[key]?.css ?? THEMES["misty-metal"].css;
   const root = document.documentElement;
 
-  // Remove vars from the previous theme before applying the new one
   _lastThemeVars.forEach((v) => root.style.removeProperty(v));
   _lastThemeVars = [];
 
@@ -496,7 +488,7 @@ function applyTheme(key, customCSS = null) {
     _lastThemeVars.push(n);
   }
 
-  // Keep the <style> tag in sync for devtools / copy
+  // Mirror into the <style> tag for devtools.
   document.getElementById("theme-vars").textContent = css;
   cfg.theme = key;
   if (customCSS) cfg.customThemeCSS = customCSS;
@@ -509,6 +501,9 @@ function applyTheme(key, customCSS = null) {
   });
 }
 
+// Size presets. Each preset's CSS vars are the single source of truth: the
+// JS-side `width` and `canvas` (used by autoResize() and the sparkline
+// canvases) are derived from --dash-w / --canvas-w / --canvas-h below.
 const SIZES = {
   s: {
     label: "S",
@@ -532,8 +527,6 @@ const SIZES = {
       "--sz-mini-w": "64px",
       "--sz-mini-bar": "16px",
     },
-    width: 440,
-    canvas: { w: 162, h: 92 },
   },
   m: {
     label: "M",
@@ -557,8 +550,6 @@ const SIZES = {
       "--sz-mini-w": "70px",
       "--sz-mini-bar": "18px",
     },
-    width: 500,
-    canvas: { w: 180, h: 108 },
   },
   l: {
     label: "L",
@@ -582,12 +573,17 @@ const SIZES = {
       "--sz-mini-w": "76px",
       "--sz-mini-bar": "20px",
     },
-    width: 580,
-    canvas: { w: 204, h: 124 },
   },
 };
 
-// All var keys managed by size
+for (const sz of Object.values(SIZES)) {
+  sz.width = parseInt(sz.vars["--dash-w"], 10);
+  sz.canvas = {
+    w: parseInt(sz.vars["--canvas-w"], 10),
+    h: parseInt(sz.vars["--canvas-h"], 10),
+  };
+}
+
 const SIZE_VAR_KEYS = Object.keys(SIZES.m.vars);
 
 function applySize(key, rebuild = true) {

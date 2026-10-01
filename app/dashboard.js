@@ -1,25 +1,34 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — dashboard.js
-   ────────────────────────────────────────────────────────────────────────────
    The core of the app: CARD_DEFS, buildCards(), card/row drag-reordering,
-   renderDashboard(), and the MultiSpark sparkline renderer that feeds each
+   renderDashboard(), and the MultiSpark sparkline renderer feeding each
    card's canvas.
-   Depends on: themes.js, state.js, ui-widgets.js (must load first).
+   Depends on: themes.js, state.js, ui-widgets.js (load first).
    ════════════════════════════════════════════════════════════════════════════ */
 "use strict";
 
-// ═══════════════════════════════════════════════════════════════
-//  DASHBOARD — card definitions
-// ═══════════════════════════════════════════════════════════════
+// Structural change: rebuild every card, refill live values, refit the window.
+function rebuildDashboard() {
+  buildCards();
+  renderDashboard(liveDevices);
+  requestAnimationFrame(() => autoResize());
+}
+// Persist cfg, then rebuildDashboard().
+function commitAndRebuild() {
+  saveCfg();
+  rebuildDashboard();
+}
 
-// ── Card type reference ──────────────────────────────────────────
-//  "spark"  — canvas + rows. sparkKey picks the series a row feeds;
-//             dynamicNorm:true auto-scales Y instead of fixed 0-100;
-//             noPlot:true shows the value but skips the chart.
-//  "sensor" — rows only, no canvas.
-//  Rows with pctSid render as bar-rows, else sr rows. Every card also
-//  accepts custom rows (cfg.customRows) — see customRowsFor().
-// ────────────────────────────────────────────────────────────────
+
+// ═══════════════════════════════════════════════════════════════
+//  CARD DEFINITIONS
+//  type "spark"  — canvas + rows. Row.sparkKey picks the series a row feeds;
+//                  dynamicNorm auto-scales Y instead of a fixed 0–100;
+//                  noPlot shows the value without plotting it.
+//  type "sensor" — rows only, no canvas.
+//  Rows with pctSid render as bar rows, the rest as "sr" rows. Every card
+//  also accepts user-added rows (cfg.customRows) — see customRowsFor().
+// ═══════════════════════════════════════════════════════════════
 const CARD_DEFS = [
   {
     id: "cpu",
@@ -27,29 +36,10 @@ const CARD_DEFS = [
     cls: "cpu",
     type: "spark",
     rows: [
-      {
-        sid: "cpu_temp",
-        lbl: "TEMP",
-        mode: "warn",
-        sparkKey: "temp",
-        typeFilter: ["temp"],
-      },
-      {
-        // CPU load comes from Linux /proc/stat — auto-assigned
-        sid: "cpu_load",
-        lbl: "LOAD",
-        mode: "warn",
-        sparkKey: "load",
-        autoLinux: true,
-        pctSid: "cpu_load", // bar row — % of capacity, no used/total pair
-      },
-      {
-        sid: "cpu_fan",
-        lbl: "FAN",
-        mode: "meter",
-        sparkKey: "fan",
-        typeFilter: ["rpm"],
-      },
+      { sid: "cpu_temp", lbl: "TEMP", mode: "warn", sparkKey: "temp", typeFilter: ["temp"] },
+      // Load comes from Linux /proc/stat, auto-assigned.
+      { sid: "cpu_load", lbl: "LOAD", mode: "warn", sparkKey: "load", autoLinux: true, pctSid: "cpu_load" },
+      { sid: "cpu_fan", lbl: "FAN", mode: "meter", sparkKey: "fan", typeFilter: ["rpm"] },
     ],
   },
   {
@@ -58,28 +48,9 @@ const CARD_DEFS = [
     cls: "gpu",
     type: "spark",
     rows: [
-      {
-        sid: "gpu_temp",
-        lbl: "TEMP",
-        mode: "warn",
-        sparkKey: "temp",
-        typeFilter: ["temp"],
-      },
-      {
-        sid: "gpu_load",
-        lbl: "LOAD",
-        mode: "warn",
-        sparkKey: "load",
-        typeFilter: ["duty"],
-        pctSid: "gpu_load", // bar row — % of capacity, no used/total pair
-      },
-      {
-        sid: "gpu_fan",
-        lbl: "FAN",
-        mode: "meter",
-        sparkKey: "fan",
-        typeFilter: ["rpm"],
-      },
+      { sid: "gpu_temp", lbl: "TEMP", mode: "warn", sparkKey: "temp", typeFilter: ["temp"] },
+      { sid: "gpu_load", lbl: "LOAD", mode: "warn", sparkKey: "load", typeFilter: ["duty"], pctSid: "gpu_load" },
+      { sid: "gpu_fan", lbl: "FAN", mode: "meter", sparkKey: "fan", typeFilter: ["rpm"] },
     ],
   },
   {
@@ -116,20 +87,8 @@ const CARD_DEFS = [
     cls: "net",
     type: "spark",
     rows: [
-      {
-        sid: "lnx_net_rx",
-        lbl: "↓ RX",
-        autoLinux: true,
-        sparkKey: "temp",
-        dynamicNorm: true,
-      },
-      {
-        sid: "lnx_net_tx",
-        lbl: "↑ TX",
-        autoLinux: true,
-        sparkKey: "load",
-        dynamicNorm: true,
-      },
+      { sid: "lnx_net_rx", lbl: "↓ RX", autoLinux: true, sparkKey: "temp", dynamicNorm: true },
+      { sid: "lnx_net_tx", lbl: "↑ TX", autoLinux: true, sparkKey: "load", dynamicNorm: true },
     ],
   },
   {
@@ -138,26 +97,13 @@ const CARD_DEFS = [
     cls: "fan",
     type: "spark",
     rows: [
-      {
-        sid: "case_temp",
-        lbl: "AMB",
-        mode: "warn",
-        sparkKey: "temp",
-        typeFilter: ["temp"],
-      },
-      {
-        // Not a real sensor slot — averages duty%
-        sid: "case_fan_avg",
-        lbl: "FAN AVG",
-        mode: "meter",
-        sparkKey: "fan",
-        unit: "%",
-        computedFanAvg: true,
-      },
+      { sid: "case_temp", lbl: "AMB", mode: "warn", sparkKey: "temp", typeFilter: ["temp"] },
+      // Computed, not a real sensor slot: mean duty% of the card's fan rows.
+      { sid: "case_fan_avg", lbl: "FAN AVG", mode: "meter", sparkKey: "fan", unit: "%", computedFanAvg: true },
     ],
   },
   {
-    // Storage: auto-generated from Linux disk data (no static slots)
+    // One bar row per mounted disk, generated from Linux disk data.
     id: "storage",
     lbl: "STORAGE",
     cls: "ssd",
@@ -167,53 +113,66 @@ const CARD_DEFS = [
   },
 ];
 
-// ── Helpers used by buildCards ───────────────────────────────────
-// dashStyle: "solid" | "dashed" | "dotted"
-// Element order: [accent] [lbl flex:1] [dots] [val] [unit]
+
+// ═══════════════════════════════════════════════════════════════
+//  ROW BUILDERS
+// ═══════════════════════════════════════════════════════════════
+// Vertical accent bar beside a row; dashStyle: "solid" | "dashed" | "dotted".
 function _accentBg(color, dashStyle) {
   if (dashStyle === "dashed")
     return `repeating-linear-gradient(to bottom,${color} 0px,${color} 4px,transparent 4px,transparent 8px)`;
   if (dashStyle === "dotted")
     return `repeating-linear-gradient(to bottom,${color} 0px,${color} 2px,transparent 2px,transparent 5px)`;
-  return color; // solid
+  return color;
 }
 
+// Dot readout HTML for a row at `lvl`, in the row's chosen dot style.
+const _rowDots = (row, lvl) =>
+  makeDots(lvl, getRowStyle(row) === "dots-meter" ? "meter" : "warn");
+
+// data-sub feeds the hover tooltip; it's filled in by the render pass.
 function _buildSrRow(row, accentColor, dashStyle = "solid") {
   const sd = SLOTS.find((s) => s.id === row.sid);
-  // Custom rows aren't in SLOTS — derive unit from the assigned slot
-  // instead, or from row.unit for computed rows with no real slot.
+  // Custom rows aren't in SLOTS: take the unit from the assigned slot, or
+  // from row.unit for computed rows.
   const unit = sd?.unit ?? cfg.slots[row.sid]?.unit ?? row.unit ?? "";
+  const showDots = row.mode && getRowStyle(row) !== "num-only";
   const srow = el("div", "sr");
   srow.id = "sr-" + row.sid;
   srow.dataset.sid = row.sid;
-  srow.dataset.sub = "--"; // populated with peak info on first render tick
+  srow.dataset.sub = "--";
   // Order: [accent] [lbl flex:1] [val] [unit] [dots]
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
 <span class="sr-lbl">${esc(row.lbl)}</span>
 <span class="sr-val" id="sv-${row.sid}">--</span>
 <span class="sr-unit">${unit}</span>
-${row.mode && getRowStyle(row) !== "num-only" ? `<span id="sd-${row.sid}">${makeDots(0, getRowStyle(row) === "dots-meter" ? "meter" : "warn")}</span>` : ""}`;
+${showDots ? `<span id="sd-${row.sid}">${_rowDots(row, 0)}</span>` : ""}`;
   return srow;
 }
 
 function _buildBarRow(row, baseColor, dashStyle = "solid") {
-  const label = row.lbl;
   const srow = el("div", "sr");
   srow.id = "bar-" + row.sid;
-  srow.dataset.sub = "--"; // populated with used/total and/or peak on render
+  srow.dataset.sub = "--";
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
-<span class="sr-lbl" id="bl-${row.sid}">${esc(label)}</span>
+<span class="sr-lbl" id="bl-${row.sid}">${esc(row.lbl)}</span>
 ${row.usedSid || row.totalSid ? `<span class="br-sub" id="bv-${row.sid}" aria-hidden="true">--</span>` : ""}
 <span class="br-pct-num" id="bp-${row.sid}">--</span><span class="br-pct-unit">%</span>
 <div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
   return srow;
 }
 
-// Accent color + line-dash style for a spark-card row, by sparkKey.
-// noPlot rows (context-only, not actually plotted) get a neutral dim
-// accent instead — used by the non-autoLinux branch in buildCards().
+// Bar or sr row, per the row's chosen style.
+const _buildRow = (row, accent, dash) =>
+  getRowStyle(row) === "bar"
+    ? _buildBarRow(row, accent, dash)
+    : _buildSrRow(row, accent, dash);
+
+// Accent colour + line-dash style for a spark-card row. The dash doubles as
+// the legend for that row's sparkline: fan dotted, load dashed, temp solid.
+// noPlot rows get a neutral dim accent since nothing is plotted for them.
 function _sparkAccent(row, cardColor, fanLine, loadColor) {
   if (row.noPlot) return { accent: withAlpha(cssVar("--txt-dim"), 0.45), dash: "solid" };
   if (row.sparkKey === "fan") return { accent: fanLine, dash: "dotted" };
@@ -221,36 +180,32 @@ function _sparkAccent(row, cardColor, fanLine, loadColor) {
   return { accent: cardColor, dash: "solid" };
 }
 
-// Per-card sparkline toggle — cfg.sparkOff[cardId] === true means the card's
-// canvas + plotted-row split are skipped and every row (built-in + custom)
-// renders flat, the same way Storage's sensor-only rows do.
-function isSparkEnabled(cardId) {
-  return !cfg.sparkOff?.[cardId];
-}
-function setSparkEnabled(cardId, on) {
-  cfg.sparkOff ??= {};
-  if (on) delete cfg.sparkOff[cardId];
-  else cfg.sparkOff[cardId] = true;
-  saveCfg();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+
+// ═══════════════════════════════════════════════════════════════
+//  PER-CARD PREFERENCES
+// ═══════════════════════════════════════════════════════════════
+// Flags live in cfg[key][cardId] = true; absent means false.
+function _setCardFlag(key, cardId, flagged) {
+  cfg[key] ??= {};
+  if (flagged) cfg[key][cardId] = true;
+  else delete cfg[key][cardId];
 }
 
-// Per-card sparkline peak-marker toggle — used to live as a single global
-// drawer setting, but peaks don't mean much on some series (an ambient
-// case-temp sparkline's "session high" is just whatever the room did),
-// so it's per-card now, same pattern as isSparkEnabled/setSparkEnabled.
-function isPeakEnabled(cardId) {
-  return !cfg.peakOff?.[cardId];
+// Sparkline on/off. Off drops the canvas and the plotted/context split: every
+// row renders flat, like Storage's.
+const isSparkEnabled = (cardId) => !cfg.sparkOff?.[cardId];
+function setSparkEnabled(cardId, on) {
+  _setCardFlag("sparkOff", cardId, !on);
+  commitAndRebuild();
 }
+
+// Sparkline peak markers. Per card because peaks mean little on some series
+// (an ambient temp's "session high" is just the room).
+const isPeakEnabled = (cardId) => !cfg.peakOff?.[cardId];
 function setPeakEnabled(cardId, on) {
-  cfg.peakOff ??= {};
-  if (on) delete cfg.peakOff[cardId];
-  else cfg.peakOff[cardId] = true;
+  _setCardFlag("peakOff", cardId, !on);
   saveCfg();
-  // Redraw immediately rather than waiting on the next data push — the
-  // spark instance already exists, no need for a full buildCards().
+  // The spark instance already exists, so redraw without a full rebuild.
   const spark = sparks[cardId];
   if (spark) {
     spark.showPeaks = on;
@@ -258,124 +213,119 @@ function setPeakEnabled(cardId, on) {
   }
 }
 
-// Per-card header alert-pulse toggle — cfg.cardAlertOff[cardId] === true
-// suppresses the hdr-warm/hdr-hot pulse no matter how bad a reading
-// gets; the header's plain accent bar still shows, it just never
-// flashes. Same per-card pattern as isSparkEnabled/isPeakEnabled.
-// Applies to every card type (unlike Chart/Peaks, which are spark-only)
-// since any card with a warn-mode row can accumulate an alert level.
-function isCardAlertEnabled(cardId) {
-  return !cfg.cardAlertOff?.[cardId];
-}
+// Header alert pulse (hdr-warm/hdr-hot). Off keeps the plain accent bar but
+// never flashes. Applies to every card with a warn-mode row.
+const isCardAlertEnabled = (cardId) => !cfg.cardAlertOff?.[cardId];
 function setCardAlertEnabled(cardId, on) {
-  cfg.cardAlertOff ??= {};
-  if (on) delete cfg.cardAlertOff[cardId];
-  else cfg.cardAlertOff[cardId] = true;
+  _setCardFlag("cardAlertOff", cardId, !on);
   saveCfg();
-  // hdr-warm/hdr-hot are recomputed fresh every render — no rebuild
-  // needed, just force the next pass now instead of waiting on data.
+  // Alert classes are recomputed on every render, so just render now.
   renderDashboard(liveDevices);
 }
 
-// Manual per-card visibility override. Cards normally appear only when
-// they have live/assigned data — this lets a card with autoLinux rows
-// (which show themselves the moment Linux stats arrive, with no
-// "clear assignment" escape hatch) be suppressed anyway. Hidden cards
-// still render in edit mode, dimmed, with a "Show card" affordance —
-// same show/hide-while-editing pattern as hidden Storage mounts.
-function isCardHidden(cardId) {
-  return !!cfg.cardHidden?.[cardId];
-}
+// Manual hide. Hidden cards still render in edit mode, dimmed, with a "Hidden"
+// badge that restores them. Needed because autoLinux rows show themselves as
+// soon as Linux stats arrive and have no "clear assignment" escape hatch.
+const isCardHidden = (cardId) => !!cfg.cardHidden?.[cardId];
 function setCardHidden(cardId, hidden) {
-  cfg.cardHidden ??= {};
-  if (hidden) cfg.cardHidden[cardId] = true;
-  else delete cfg.cardHidden[cardId];
-  saveCfg();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
+  _setCardFlag("cardHidden", cardId, hidden);
+  commitAndRebuild();
 }
 
-// Per-card "mini" collapse — shrinks the whole card down to just its
-// header row (title + a few headline numbers + a severity pill), body
-// hidden. Purely a viewing-density preference, so toggling is cheap:
-// no buildCards() rebuild, just a class flip + resize — the card's
-// canvas/spark instance and its plotted history keep running
-// underneath, unaffected, so expanding back is instant and gap-free.
-// Forced off while editing (see buildCards()) since a collapsed card
-// hides every affordance you'd need to reconfigure it.
-function isCardMini(cardId) {
-  return !!cfg.cardMini?.[cardId];
+// Custom card title.
+const cardLabel = (def) => cfg.cardLabels?.[def.id] || def.lbl;
+function setCardLabel(cardId, label) {
+  cfg.cardLabels ??= {};
+  const def = CARD_DEFS.find((d) => d.id === cardId);
+  const trimmed = (label || "").trim();
+  if (trimmed && trimmed !== def?.lbl) cfg.cardLabels[cardId] = trimmed;
+  else delete cfg.cardLabels[cardId];
+  commitAndRebuild();
 }
-function setCardMini(cardId, mini) {
-  cfg.cardMini ??= {};
-  if (mini) cfg.cardMini[cardId] = true;
-  else delete cfg.cardMini[cardId];
-  saveCfg();
-  const card = document.getElementById("card-" + cardId);
-  if (card) card.classList.toggle("mini", mini);
+
+// CARD_DEFS in the user's saved drag order; cards missing from it go last.
+function orderedCardDefs() {
+  const order = cfg.cardOrder;
+  if (!order || !order.length) return CARD_DEFS;
+  const byId = new Map(CARD_DEFS.map((d) => [d.id, d]));
+  const out = [];
+  for (const id of order) {
+    if (byId.has(id)) {
+      out.push(byId.get(id));
+      byId.delete(id);
+    }
+  }
+  out.push(...byId.values());
+  return out;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+//  MINI (COLLAPSED) CARDS
+//  A mini card shrinks to its header: title, a few headline numbers, and a
+//  severity bar per number. It's a viewing-density preference, so toggling is
+//  a class flip — no rebuild — and the card's canvas/spark keep running
+//  underneath, making expansion instant and gap-free. Forced off while
+//  editing (see buildCards()), since a collapsed card hides every affordance
+//  needed to reconfigure it.
+// ═══════════════════════════════════════════════════════════════
+const isCardMini = (cardId) => !!cfg.cardMini?.[cardId];
+
+// Cards currently on screen and not hidden.
+const _visibleCardIds = () =>
+  orderedCardDefs()
+    .map((d) => d.id)
+    .filter((id) => document.getElementById("card-" + id) && !isCardHidden(id));
+
+// Syncs a card's class and its header chevron with `mini`.
+function _applyMiniState(cardId, mini) {
+  document.getElementById("card-" + cardId)?.classList.toggle("mini", mini);
   const btn = document.getElementById("mini-tog-" + cardId);
   if (btn) {
     btn.innerHTML = mini ? _ICON_CHEVRON_DOWN : _ICON_CHEVRON_UP;
     btn.title = mini ? "Expand" : "Collapse";
   }
+}
+
+function setCardMini(cardId, mini) {
+  _setCardFlag("cardMini", cardId, mini);
+  saveCfg();
+  _applyMiniState(cardId, mini);
   _updateMiniAllBtn();
   requestAnimationFrame(() => autoResize());
 }
 
-// Bulk collapse/expand — what used to be the taskbar-minimize button
-// (not much use in a borderless widget with no taskbar affordance).
-// One state mutation + one DOM/save pass rather than looping
-// setCardMini() per card, so it stays a single localStorage write.
+// Collapse/expand every visible card in one pass (a single save).
 function toggleAllCardsMini() {
-  const ids = orderedCardDefs()
-    .map((d) => d.id)
-    .filter((id) => document.getElementById("card-" + id) && !isCardHidden(id));
+  const ids = _visibleCardIds();
   if (!ids.length) return;
-  const next = !ids.every((id) => isCardMini(id));
-  cfg.cardMini ??= {};
+  const next = !ids.every(isCardMini);
   for (const id of ids) {
-    if (next) cfg.cardMini[id] = true;
-    else delete cfg.cardMini[id];
-    const card = document.getElementById("card-" + id);
-    if (card) card.classList.toggle("mini", next);
-    const btn = document.getElementById("mini-tog-" + id);
-    if (btn) {
-      btn.innerHTML = next ? _ICON_CHEVRON_DOWN : _ICON_CHEVRON_UP;
-      btn.title = next ? "Expand" : "Collapse";
-    }
+    _setCardFlag("cardMini", id, next);
+    _applyMiniState(id, next);
   }
   saveCfg();
   _updateMiniAllBtn();
   requestAnimationFrame(() => autoResize());
 }
 
-// Keeps the sbar "collapse/expand all" icon honest — e.g. if the user
-// collapses cards one by one until every visible card happens to be
-// mini, the button should already read "Expand all" without needing
-// its own click first.
+// Keeps the status bar's collapse/expand-all icon honest when cards were
+// collapsed one by one.
 function _updateMiniAllBtn() {
   const btn = document.getElementById("bb-mini-all");
   if (!btn) return;
-  const ids = orderedCardDefs()
-    .map((d) => d.id)
-    .filter((id) => document.getElementById("card-" + id) && !isCardHidden(id));
-  const allMini = ids.length > 0 && ids.every((id) => isCardMini(id));
+  const ids = _visibleCardIds();
+  const allMini = ids.length > 0 && ids.every(isCardMini);
   btn.innerHTML = allMini ? _ICON_CHEVRON_ALL_DOWN : _ICON_CHEVRON_ALL_UP;
   btn.title = allMini ? "Expand all" : "Collapse all";
 }
 
-// Short (≤4 char) labels for the mini row's headline numbers — the
-// full row.lbl ("FAN AVG", "↓ RX") is too wide for a single collapsed
-// line. Falls back to a stripped/truncated version of row.lbl for
-// anything not listed here (e.g. a future card's rows).
-// Fixed column count for the mini row grid — every card pads to (or
-// truncates at) this many slots so values line up across cards once
-// several are collapsed and stacked (see the render loop in
-// renderDashboard). 3 comfortably covers every card today (CPU/GPU use
-// all 3; MEMORY, NET, CHASSIS, and STORAGE use 2).
+// Every card's mini row has the same number of slots (missing ones render
+// empty), so values line up in columns when several cards are collapsed.
 const MINI_SLOTS = 3;
 
+// Short labels for the headline numbers; other rows fall back to their
+// stripped, truncated row label.
 const MINI_LBL = {
   cpu_temp: "T",
   cpu_load: "L",
@@ -397,30 +347,21 @@ function _miniLbl(row) {
     "—"
   );
 }
-// Compact unit suffix appended straight onto the number — only for
-// symbols short enough not to blow out a 58px slot (°, %). Anything
-// wordier (RPM, KB/s, W) is skipped; the abbreviated label already
-// gives enough context (e.g. "F" for fan implies RPM).
+// Only short symbols fit a mini slot; wordier units (RPM, KB/s, W) are
+// dropped, since the label already implies them.
 function _miniUnitSuffix(unit) {
   if (unit === "°C") return "°";
   if (unit === "%") return "%";
   return "";
 }
 
-// Gathers up to 3 headline {lbl, str, bar, full} values for a card's
-// collapsed mini row. `full` is the un-abbreviated row label, shown as
-// a hover tooltip since "T"/"SWP"/"AMB" aren't self-explanatory on
-// first sight. `bar` is always a CSS color — warn-mode metrics
-// (temp/load) get the graduated --w1..--w5 severity ramp; everything
-// else (fan, RX/TX, Storage's summary) gets a flat on/off read using
-// the same --meter / --dot-off-meter convention the full-view meter
-// dots already use (see makeDots) — not a severity signal, just "is
-// there something happening here", so every slot reads consistently
-// instead of some having a bar and others leaving a gap.
-// Spark-type cards just read their own row.sid values (already
-// exactly what the full view shows — temp/load/fan, RAM/SWAP,
-// RX/TX, etc). Storage has no fixed rows (auto-generated per disk), so
-// it gets a bespoke summary instead: busiest visible disk + a count.
+// Up to MINI_SLOTS headline {lbl, str, bar, full} values for a card's mini
+// row. `full` is the un-abbreviated label, used as a hover tooltip. `bar` is
+// a CSS colour: warn-mode metrics use the --w1…--w5 severity ramp; everything
+// else gets the flat on/off --meter / --dot-off-meter read the full view's
+// meter dots use, so every slot has a bar.
+// Spark cards read their own rows; Storage, having no fixed rows, reports its
+// busiest visible disk plus a disk count.
 function _miniHeadline(def, devices) {
   const items = [];
   const meterBar = (v) =>
@@ -428,36 +369,28 @@ function _miniHeadline(def, devices) {
   const warnBar = (lvl) => (lvl > 0 ? `var(--w${lvl})` : "var(--dot-off-warn)");
 
   if (def.autoDisks) {
-    const linuxDev = devices.find((d) => d.uid === "linux-system");
-    const lat = getLatest(linuxDev);
-    const diskChs =
-      lat?.channels?.filter((ch) => /^Disk .+ Usage$/.test(ch.name)) ?? [];
-    const visible = diskChs.filter((ch) => {
-      const mount = ch.name.replace(/^Disk /, "").replace(/ Usage$/, "");
-      return !(cfg.hiddenMounts ?? []).includes(mount);
-    });
-    if (!visible.length) return items;
-    const busiest = visible.reduce((a, b) =>
-      (b.duty ?? 0) > (a.duty ?? 0) ? b : a,
+    const disks = diskChannels(getLatest(devices.find((d) => d.uid === "linux-system")));
+    if (!disks.length) return items;
+    const { ch, mount } = disks.reduce((a, b) =>
+      (b.ch.duty ?? 0) > (a.ch.duty ?? 0) ? b : a,
     );
-    const mount = busiest.name.replace(/^Disk /, "").replace(/ Usage$/, "");
-    const mountLbl = mount === "/" ? "ROOT" : (mount.split("/").pop() || mount).toUpperCase();
     items.push({
-      lbl: mountLbl.slice(0, 5),
-      str: Math.round(busiest.duty ?? 0) + _miniUnitSuffix("%"),
-      bar: meterBar(busiest.duty),
+      lbl: pathLabel(mount).toUpperCase().slice(0, 5),
+      str: Math.round(ch.duty ?? 0) + _miniUnitSuffix("%"),
+      bar: meterBar(ch.duty),
       full: mount === "/" ? "Root — busiest disk" : `${mount} — busiest disk`,
     });
-    if (visible.length > 1) {
+    if (disks.length > 1) {
       items.push({
         lbl: "DISKS",
-        str: String(visible.length),
-        bar: meterBar(visible.length),
+        str: String(disks.length),
+        bar: meterBar(disks.length),
         full: "Visible disks",
       });
     }
     return items;
   }
+
   for (const row of def.rows || []) {
     if (row.computedFanAvg) {
       const avg = _chassisFanAvg(devices);
@@ -474,10 +407,11 @@ function _miniHeadline(def, devices) {
     if (!slot) continue;
     const v = getSlotValue(devices, slot);
     if (v === undefined) continue;
-    const sd2 = SLOTS.find((s) => s.id === row.sid);
-    const unit = sd2?.unit ?? row.unit ?? "";
+    const unit = SLOTS.find((s) => s.id === row.sid)?.unit ?? row.unit ?? "";
     const bar =
-      row.mode === "warn" ? warnBar(warnLevel(row.sid, v)) : meterBar(getFanDuty(devices, slot) ?? v);
+      row.mode === "warn"
+        ? warnBar(warnLevel(row.sid, v))
+        : meterBar(getFanDuty(devices, slot) ?? v);
     items.push({
       lbl: _miniLbl(row),
       str: fmt1(v, unit) + _miniUnitSuffix(unit),
@@ -485,62 +419,19 @@ function _miniHeadline(def, devices) {
       full: row.lbl,
     });
   }
-  return items.slice(0, 3);
-}
-
-// Per-card display-label override — mirrors the rename affordance custom
-// rows already have; built-in card titles (CPU/GPU/etc.) couldn't be
-// touched before this.
-function cardLabel(def) {
-  return cfg.cardLabels?.[def.id] || def.lbl;
-}
-function setCardLabel(cardId, label) {
-  cfg.cardLabels ??= {};
-  const def = CARD_DEFS.find((d) => d.id === cardId);
-  const trimmed = (label || "").trim();
-  if (trimmed && trimmed !== def?.lbl) cfg.cardLabels[cardId] = trimmed;
-  else delete cfg.cardLabels[cardId];
-  saveCfg();
-  buildCards();
-  renderDashboard(liveDevices);
-  requestAnimationFrame(() => autoResize());
-}
-
-// Applies the user's saved drag order to CARD_DEFS — same pattern as
-// customRowsFor()/rowOrder for custom rows. Cards not yet in the saved
-// order (e.g. freshly relevant after a new assignment) fall in at the end.
-function orderedCardDefs() {
-  const order = cfg.cardOrder;
-  if (!order || !order.length) return CARD_DEFS;
-  const byId = new Map(CARD_DEFS.map((d) => [d.id, d]));
-  const out = [];
-  for (const id of order) {
-    if (byId.has(id)) {
-      out.push(byId.get(id));
-      byId.delete(id);
-    }
-  }
-  out.push(...byId.values());
-  return out;
+  return items.slice(0, MINI_SLOTS);
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-//  CARD REORDERING — drag via header grip, edit-mode only.
-//  Manual pointer-based sort (not native HTML5 DnD) so the drag
-//  feedback stays consistent with the rest of the app's chrome.
+//  DRAG REORDERING (edit mode only)
+//  Manual pointer-based sort rather than native HTML5 DnD, so drag feedback
+//  matches the rest of the app's chrome.
 // ═══════════════════════════════════════════════════════════════
-function _persistCardOrder() {
-  cfg.cardOrder = [...document.querySelectorAll("#cards > .card")].map((c) =>
-    c.id.replace(/^card-/, ""),
-  );
-  saveCfg();
-}
-
-function _cardDragAfterElement(container, y) {
-  const els = [...container.querySelectorAll(".card:not(.dragging)")];
+// The item in `list` that the pointer at `y` is just above, or null to append.
+function _dragAfterElement(list, itemSelector, y) {
   let closest = { offset: -Infinity, element: null };
-  for (const child of els) {
+  for (const child of list.querySelectorAll(`${itemSelector}:not(.dragging)`)) {
     const box = child.getBoundingClientRect();
     const offset = y - box.top - box.height / 2;
     if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
@@ -548,152 +439,162 @@ function _cardDragAfterElement(container, y) {
   return closest.element;
 }
 
+// Wires drag-sorting on #cards. Dragging a `gripSelector` element moves its
+// enclosing `itemSelector` within `listFor(grip)`, then calls onDrop(list).
+function _makeSortable({ gripSelector, itemSelector, listFor, onDrop }) {
+  document.getElementById("cards").addEventListener("mousedown", (e) => {
+    if (!editMode) return;
+    const grip = e.target.closest(gripSelector);
+    if (!grip) return;
+    const item = grip.closest(itemSelector);
+    const list = listFor(grip);
+    if (!item || !list) return;
+    e.preventDefault();
+    item.classList.add("dragging");
+
+    const onMove = (e2) => {
+      const after = _dragAfterElement(list, itemSelector, e2.clientY);
+      if (after == null) list.appendChild(item);
+      else list.insertBefore(item, after);
+    };
+    const onUp = () => {
+      item.classList.remove("dragging");
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      onDrop(list);
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+}
+
+// Cards, dragged by their header grip.
 function initCardSort() {
-  const container = document.getElementById("cards");
-  let dragEl = null;
-
-  container.addEventListener("mousedown", (e) => {
-    if (!editMode) return;
-    const grip = e.target.closest(".card-grip");
-    if (!grip) return;
-    dragEl = grip.closest(".card");
-    if (!dragEl) return;
-    e.preventDefault();
-    dragEl.classList.add("dragging");
-
-    const onMove = (e2) => {
-      const after = _cardDragAfterElement(container, e2.clientY);
-      if (after == null) container.appendChild(dragEl);
-      else container.insertBefore(dragEl, after);
-    };
-    const onUp = () => {
-      dragEl.classList.remove("dragging");
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      _persistCardOrder();
-      dragEl = null;
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+  _makeSortable({
+    gripSelector: ".card-grip",
+    itemSelector: ".card",
+    listFor: () => document.getElementById("cards"),
+    onDrop: (list) => {
+      cfg.cardOrder = [...list.querySelectorAll(":scope > .card")].map((c) =>
+        c.id.replace(/^card-/, ""),
+      );
+      saveCfg();
+    },
   });
 }
 
-
-// ═══════════════════════════════════════════════════════════════
-//  CUSTOM-ROW REORDERING — drag via row grip, edit-mode only.
-//  Same manual pointer-based pattern as card reordering above,
-//  scoped to whichever .custom-rows-list wrapper the grip lives in
-//  so a drag never mixes with disk/named rows sharing that section.
-// ═══════════════════════════════════════════════════════════════
-function _persistCustomRowOrder(cardId, list) {
-  cfg.rowOrder ??= {};
-  cfg.rowOrder[cardId] = [...list.querySelectorAll(":scope > .sr")].map(
-    (r) => r.dataset.sid,
-  );
-  saveCfg();
-}
-
-function _rowDragAfterElement(list, y) {
-  const els = [...list.querySelectorAll(".sr:not(.dragging)")];
-  let closest = { offset: -Infinity, element: null };
-  for (const child of els) {
-    const box = child.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset) closest = { offset, element: child };
-  }
-  return closest.element;
-}
-
+// Custom rows, dragged by their row grip. The sort is scoped to the row's own
+// .custom-rows-list so it never mixes with disk/named rows in that section.
 function initRowSort() {
-  const container = document.getElementById("cards");
-  let dragEl = null;
-
-  container.addEventListener("mousedown", (e) => {
-    if (!editMode) return;
-    const grip = e.target.closest(".row-grip");
-    if (!grip) return;
-    const list = grip.closest(".custom-rows-list");
-    dragEl = grip.closest(".sr");
-    if (!dragEl || !list) return;
-    e.preventDefault();
-    dragEl.classList.add("dragging");
-
-    const onMove = (e2) => {
-      const after = _rowDragAfterElement(list, e2.clientY);
-      if (after == null) list.appendChild(dragEl);
-      else list.insertBefore(dragEl, after);
-    };
-    const onUp = () => {
-      dragEl.classList.remove("dragging");
-      document.removeEventListener("mousemove", onMove);
-      document.removeEventListener("mouseup", onUp);
-      _persistCustomRowOrder(list.dataset.cardId, list);
-      buildCards();
-      renderDashboard(liveDevices);
-      requestAnimationFrame(() => autoResize());
-      dragEl = null;
-    };
-    document.addEventListener("mousemove", onMove);
-    document.addEventListener("mouseup", onUp);
+  _makeSortable({
+    gripSelector: ".row-grip",
+    itemSelector: ".sr",
+    listFor: (grip) => grip.closest(".custom-rows-list"),
+    onDrop: (list) => {
+      cfg.rowOrder ??= {};
+      cfg.rowOrder[list.dataset.cardId] = [...list.querySelectorAll(":scope > .sr")].map(
+        (r) => r.dataset.sid,
+      );
+      commitAndRebuild();
+    },
   });
 }
 
-// Full dashboard rebuild: tears down and re-creates every card's DOM
-// from CARD_DEFS + cfg (slots, custom rows, mini/hidden/order state).
-// Called on any structural change (theme, size, edit toggle, row add/
-// remove/reorder) — renderDashboard() then fills in live values.
-function buildCards() {
-  const c = document.getElementById("cards");
-  c.innerHTML = "";
-  sparks = {};
 
-  if (editMode) c.classList.add("editing");
-  else c.classList.remove("editing");
+// ═══════════════════════════════════════════════════════════════
+//  BUILD CARDS
+// ═══════════════════════════════════════════════════════════════
+// A card shows once it has something to display: an assigned slot, Linux
+// data for an autoLinux/disk card, custom rows, or (in edit mode) slots
+// waiting to be assigned.
+function _cardHasContent(def, linuxLat) {
+  const hasAssigned = def.rows?.some((r) => !r.autoLinux && cfg.slots[r.sid]);
+  const hasAutoLinux = def.rows?.some((r) => r.autoLinux) && !!linuxLat;
+  const hasDiskRows =
+    def.autoDisks && diskChannels(linuxLat, { includeHidden: true }).length > 0;
+  const hasCustomRows = (cfg.customRows?.[def.id]?.length ?? 0) > 0;
+  const hasEditRows =
+    editMode &&
+    (def.rows?.some((r) => !r.autoLinux && r.typeFilter) || def.autoDisks);
+  return !!(hasAssigned || hasAutoLinux || hasDiskRows || hasCustomRows || hasEditRows);
+}
 
-  const linuxDev = liveDevices.find((d) => d.uid === "linux-system");
-  const linuxLat = linuxDev ? getLatest(linuxDev) : null;
-  const linuxHasData = !!linuxLat;
+// "⋯" menu for a card header: colour, chart/peaks/alert toggles, rename, hide.
+function _cardMenuItems(def) {
+  const varName = "--" + def.cls;
+  const items = [
+    {
+      type: "color",
+      label: cardLabel(def) + " color",
+      value: cssVar(varName) || "#888888",
+      onChange: (hex) => {
+        if (_tbSetVar) _tbSetVar(varName, hex);
+      },
+    },
+  ];
+  const toggle = (isOn, setOn, onOpt, offOpt) => ({
+    type: "segmented",
+    current: isOn(def.id) ? "on" : "off",
+    options: [
+      { value: "on", ...onOpt },
+      { value: "off", ...offOpt },
+    ],
+    onSelect: (v) => setOn(def.id, v === "on"),
+  });
 
-  for (const def of orderedCardDefs()) {
-    // Manual hide overrides everything except edit mode, where a hidden
-    // card still renders (dimmed) so there's a way back to "Shown".
-    if (isCardHidden(def.id) && !editMode) continue;
+  if (def.type === "spark") {
+    items.push(
+      toggle(
+        isSparkEnabled,
+        setSparkEnabled,
+        { label: "Chart", title: "Show plotted sparkline" },
+        { label: "Rows", title: "Show as plain sensor rows, no chart" },
+      ),
+      toggle(
+        isPeakEnabled,
+        setPeakEnabled,
+        { label: "Peaks", title: "Mark each series' session-high on the chart" },
+        { label: "No peaks", title: "Hide the peak markers on this card" },
+      ),
+    );
+  }
+  // Storage never scores an alert level (disk fullness isn't a "something's
+  // wrong" signal; see renderDashboard), so the toggle would do nothing.
+  if (def.id !== "storage") {
+    items.push(
+      toggle(
+        isCardAlertEnabled,
+        setCardAlertEnabled,
+        { label: "Alert flash", title: "Pulse the header when a reading gets bad" },
+        { label: "No flash", title: "Keep the header still no matter how bad a reading gets" },
+      ),
+    );
+  }
+  items.push({
+    label: "Rename",
+    onClick: () => {
+      const nl = prompt("Card name:", cardLabel(def));
+      if (nl !== null) setCardLabel(def.id, nl);
+    },
+  });
+  // Unhiding is the "Hidden" badge's job, and this menu doesn't render while
+  // a card is hidden.
+  items.push({
+    label: "Hide card",
+    danger: true,
+    onClick: () => setCardHidden(def.id, true),
+  });
+  return items;
+}
 
-    // ── Visibility ────────────────────────────────────────────
-    const hasAssigned = def.rows?.some((r) => !r.autoLinux && cfg.slots[r.sid]);
-    const hasAutoLinux = def.rows?.some((r) => r.autoLinux) && linuxHasData;
-    const hasDiskRows =
-      def.autoDisks &&
-      linuxHasData &&
-      linuxLat.channels?.some((ch) => /^Disk .+ Usage$/.test(ch.name));
-    const hasCustomRows = (cfg.customRows?.[def.id]?.length ?? 0) > 0;
-    const hasEditRows =
-      editMode &&
-      (def.rows?.some((r) => !r.autoLinux && r.typeFilter) || def.autoDisks);
-
-    if (
-      !hasAssigned &&
-      !hasAutoLinux &&
-      !hasDiskRows &&
-      !hasCustomRows &&
-      !hasEditRows
-    )
-      continue;
-
-    const card = el("div", "card");
-    card.id = "card-" + def.id;
-    const hidden = isCardHidden(def.id);
-    if (hidden) card.classList.add("card-hidden-preview");
-    const mini = isCardMini(def.id) && !editMode;
-    card.classList.toggle("mini", mini);
-    // While hidden, the badge is the only affordance — no separate "⋯"
-    // menu competing for the same job (and nothing else in that menu is
-    // worth exposing on a card you've just taken out of the layout).
-    card.innerHTML = `<div class="card-hdr ${def.cls}" id="hdr-${def.id}">${
-      editMode
-        ? '<button class="card-grip" title="Drag to reorder" type="button"><svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg></button>'
-        : ""
-    }<span class="card-ttl">${esc(cardLabel(def))}</span>
+// Card header markup and its click handlers.
+function _buildCardHeader(card, def, { hidden, mini }) {
+  // A hidden card's only affordance is its badge (no "⋯" menu).
+  card.innerHTML = `<div class="card-hdr ${def.cls}" id="hdr-${def.id}">${
+    editMode
+      ? `<button class="card-grip" title="Drag to reorder" type="button">${_ICON_GRIP}</button>`
+      : ""
+  }<span class="card-ttl">${esc(cardLabel(def))}</span>
     <span class="card-mini-vals" id="mini-${def.id}"></span>${
       hidden
         ? '<button class="card-hidden-badge" type="button" title="Click to unhide">Hidden</button>'
@@ -707,289 +608,215 @@ function buildCards() {
         ? `<button class="card-mini-toggle" id="mini-tog-${def.id}" title="${mini ? "Expand" : "Collapse"}" type="button">${mini ? _ICON_CHEVRON_DOWN : _ICON_CHEVRON_UP}</button>`
         : ""
     }</div>`;
+
+  if (!editMode && !hidden) {
+    const toggleMini = () => setCardMini(def.id, !isCardMini(def.id));
+    card.querySelector(".card-mini-toggle").onclick = (e) => {
+      e.stopPropagation();
+      toggleMini();
+    };
+    // The whole header toggles, not just the small chevron.
+    const hdrEl = card.querySelector(".card-hdr");
+    hdrEl.classList.add("card-hdr-toggleable");
+    hdrEl.onclick = toggleMini;
+  }
+
+  const hiddenBadge = card.querySelector(".card-hidden-badge");
+  if (hiddenBadge) {
+    hiddenBadge.onclick = (e) => {
+      e.stopPropagation();
+      setCardHidden(def.id, false);
+    };
+  }
+
+  if (editMode && !hidden) {
+    const moreBtn = card.querySelector(".card-more");
+    moreBtn.onclick = (e) => {
+      e.stopPropagation();
+      _openRowMenu(moreBtn, _cardMenuItems(def));
+    };
+  }
+}
+
+// Storage rows: one bar per visible mount, plus (in edit mode) a hide button
+// on each and a "show" row for every hidden mount.
+function _buildDiskRows(body, cardColor, linuxLat) {
+  for (const { mount } of diskChannels(linuxLat)) {
+    // used/total only need to be truthy here to get the "used/total" sub-span;
+    // renderDashboard() fills in the values right after.
+    const srow = _buildBarRow(
+      { sid: diskSid(mount), lbl: pathLabel(mount), usedSid: true, totalSid: true },
+      cardColor,
+    );
+    if (editMode) {
+      const hideBtn = el("button", "slot-clr");
+      hideBtn.title = `Hide ${mount}`;
+      hideBtn.textContent = "×";
+      hideBtn.onclick = (e) => {
+        e.stopPropagation();
+        cfg.hiddenMounts ??= [];
+        if (!cfg.hiddenMounts.includes(mount)) cfg.hiddenMounts.push(mount);
+        commitAndRebuild();
+      };
+      srow.appendChild(hideBtn);
+    }
+    body.appendChild(srow);
+  }
+
+  if (editMode) {
+    for (const mount of cfg.hiddenMounts ?? []) {
+      const rrow = el("div", "sr hidden-mount");
+      rrow.innerHTML = `<span class="sr-accent" style="background:${cardColor};opacity:.3"></span>
+<span class="sr-lbl">${esc(pathLabel(mount))}</span>`;
+      const restBtn = el("button", "assign-badge");
+      restBtn.textContent = "show";
+      restBtn.onclick = (e) => {
+        e.stopPropagation();
+        cfg.hiddenMounts = cfg.hiddenMounts.filter((m) => m !== mount);
+        commitAndRebuild();
+      };
+      rrow.appendChild(restBtn);
+      body.appendChild(rrow);
+    }
+  }
+}
+
+function _buildSensorCardBody(card, def, cardColor, linuxLat) {
+  const body = el("div", "card-rows-full");
+  card.appendChild(body);
+
+  if (def.autoDisks && linuxLat) _buildDiskRows(body, cardColor, linuxLat);
+
+  // Named rows: no "sensor" card uses them today (Storage is disks only),
+  // but the path stays generic. Only custom rows are drag-reorderable.
+  for (const row of def.rows || []) {
+    if (!row.autoLinux && !cfg.slots[row.sid] && !editMode) continue;
+    const elem = _buildRow(row, cardColor);
+    if (editMode) _hardRowMenu(elem, row);
+    body.appendChild(elem);
+  }
+  _renderCustomRowSection(def, body);
+}
+
+function _buildSparkCardBody(card, def, colors, linuxHasData) {
+  const { cardColor, loadColor, fanLine } = colors;
+  const sparkOn = isSparkEnabled(def.id);
+  // rcol holds the plotted rows; ctxBody the "context" rows (noPlot + custom)
+  // shown below the chart so plotted and context rows stay visually distinct.
+  let rcol, ctxBody;
+
+  if (sparkOn) {
+    const body = el("div", "card-spark");
+    card.appendChild(body);
+
+    const scol = el("div", "spark-col");
+    body.appendChild(scol);
+    const {
+      canvas: { w: CW, h: CH },
+    } = SIZES[cfg.size] || SIZES.s;
+    const dpr = window.devicePixelRatio || 1;
+    const cv = document.createElement("canvas");
+    cv.width = CW * dpr;
+    cv.height = CH * dpr;
+    cv.style.width = CW + "px";
+    cv.style.height = CH + "px";
+    scol.appendChild(cv);
+    sparks[def.id] = new MultiSpark(cv, {
+      cardColor,
+      loadColor,
+      fanLine,
+      W: CW,
+      H: CH,
+      dpr,
+      showPeaks: isPeakEnabled(def.id),
+    });
+    for (const r of def.rows) {
+      if (r.dynamicNorm) sparks[def.id].setDynamic(r.sparkKey, true);
+    }
+
+    rcol = el("div", "card-rows");
+    body.appendChild(rcol);
+    ctxBody = el("div", "card-spark-ctx");
+  } else {
+    // No canvas, no plotted/context split: every row renders flat.
+    const body = el("div", "card-rows-full");
+    card.appendChild(body);
+    rcol = ctxBody = body;
+  }
+
+  const accentFor = (row) =>
+    sparkOn
+      ? _sparkAccent(row, cardColor, fanLine, loadColor)
+      : { accent: cardColor, dash: "solid" };
+
+  for (const row of def.rows) {
+    if (row.computedFanAvg) {
+      if (!_chassisFanRows().length && !editMode) continue;
+      const { accent, dash } = accentFor(row);
+      rcol.appendChild(_buildSrRow(row, accent, dash));
+      continue;
+    }
+    if (row.autoLinux) {
+      if (!cfg.slots[row.sid] && !linuxHasData) continue;
+      const { accent, dash } = accentFor(row);
+      const elem = _buildRow(row, accent, dash);
+      if (editMode) _hardRowMenu(elem, row, { isAutoLinux: true });
+      rcol.appendChild(elem);
+      continue;
+    }
+    // CC-sourced rows: shown once assigned, or while editing.
+    if (!cfg.slots[row.sid] && !editMode) continue;
+    const { accent, dash } = accentFor(row);
+    const elem = _buildRow(row, accent, dash);
+    if (editMode) _hardRowMenu(elem, row);
+    (sparkOn && row.noPlot ? ctxBody : rcol).appendChild(elem);
+  }
+
+  _renderCustomRowSection(def, ctxBody);
+
+  // In flat mode ctxBody is already attached.
+  if (sparkOn && ctxBody.childElementCount > 0) card.appendChild(ctxBody);
+}
+
+// Tears down and recreates every card's DOM from CARD_DEFS + cfg (slots,
+// custom rows, mini/hidden/order state). Called on any structural change;
+// renderDashboard() then fills in live values.
+function buildCards() {
+  const c = document.getElementById("cards");
+  c.innerHTML = "";
+  sparks = {};
+  c.classList.toggle("editing", editMode);
+
+  const linuxLat = getLatest(liveDevices.find((d) => d.uid === "linux-system"));
+
+  for (const def of orderedCardDefs()) {
+    // A hidden card still renders in edit mode, dimmed, so it can be restored.
+    if (isCardHidden(def.id) && !editMode) continue;
+    if (!_cardHasContent(def, linuxLat)) continue;
+
+    const card = el("div", "card");
+    card.id = "card-" + def.id;
+    const hidden = isCardHidden(def.id);
+    const mini = isCardMini(def.id) && !editMode;
+    if (hidden) card.classList.add("card-hidden-preview");
+    card.classList.toggle("mini", mini);
+    _buildCardHeader(card, def, { hidden, mini });
     c.appendChild(card);
 
-    if (!editMode && !hidden) {
-      const miniBtn = card.querySelector(".card-mini-toggle");
-      miniBtn.onclick = (e) => {
-        e.stopPropagation();
-        setCardMini(def.id, !isCardMini(def.id));
-      };
-      // Whole header toggles, not just the chevron — a tiny 18px button
-      // is a fussy target on a widget this size. The tooltip spans
-      // inside .card-mini-vals still get their own hover title; a click
-      // anywhere else in the header (including on them) just toggles.
-      const hdrEl = card.querySelector(".card-hdr");
-      hdrEl.classList.add("card-hdr-toggleable");
-      hdrEl.onclick = () => setCardMini(def.id, !isCardMini(def.id));
-    }
-
-    const hiddenBadge = card.querySelector(".card-hidden-badge");
-    if (hiddenBadge) {
-      hiddenBadge.onclick = (e) => {
-        e.stopPropagation();
-        setCardHidden(def.id, false);
-      };
-    }
-
-    if (editMode && !hidden) {
-      const moreBtn = card.querySelector(".card-more");
-      moreBtn.onclick = (e) => {
-        e.stopPropagation();
-        const varName = "--" + def.cls;
-        const current = cssVar(varName) || "#888888";
-        const items = [
-          {
-            type: "color",
-            label: cardLabel(def) + " color",
-            value: current,
-            onChange: (hex) => {
-              if (_tbSetVar) _tbSetVar(varName, hex);
-            },
-          },
-        ];
-        if (def.type === "spark") {
-          items.push({
-            type: "segmented",
-            current: isSparkEnabled(def.id) ? "on" : "off",
-            options: [
-              { value: "on", label: "Chart", title: "Show plotted sparkline" },
-              { value: "off", label: "Rows", title: "Show as plain sensor rows, no chart" },
-            ],
-            onSelect: (v) => setSparkEnabled(def.id, v === "on"),
-          });
-          items.push({
-            type: "segmented",
-            current: isPeakEnabled(def.id) ? "on" : "off",
-            options: [
-              { value: "on", label: "Peaks", title: "Mark each series' session-high on the chart" },
-              { value: "off", label: "No peaks", title: "Hide the peak markers on this card" },
-            ],
-            onSelect: (v) => setPeakEnabled(def.id, v === "on"),
-          });
-        }
-        // Storage never scores an alert level (disk fullness isn't a
-        // "something's wrong" signal here — see renderDashboard), so
-        // there's nothing for this toggle to do on that card.
-        if (def.id !== "storage") {
-          items.push({
-            type: "segmented",
-            current: isCardAlertEnabled(def.id) ? "on" : "off",
-            options: [
-              { value: "on", label: "Alert flash", title: "Pulse the header when a reading gets bad" },
-              { value: "off", label: "No flash", title: "Keep the header still no matter how bad a reading gets" },
-            ],
-            onSelect: (v) => setCardAlertEnabled(def.id, v === "on"),
-          });
-        }
-        items.push({
-          label: "Rename",
-          onClick: () => {
-            const nl = prompt("Card name:", cardLabel(def));
-            if (nl !== null) setCardLabel(def.id, nl);
-          },
-        });
-        // Unhiding happens by clicking the "Hidden" badge directly on the
-        // card (this menu doesn't even render while hidden — see above),
-        // so there's no redundant "un-hide" entry to maintain here.
-        items.push({
-          label: "Hide card",
-          danger: true,
-          onClick: () => setCardHidden(def.id, true),
-        });
-        _openRowMenu(moreBtn, items);
-      };
-    }
-
     const cardColor = cssVar("--" + def.cls);
-    const fanColor = cssVar("--fan");
-    const loadColor = withAlpha(cardColor, 0.55);
-    const fanLine = def.cls === "fan" ? cardColor : fanColor;
-
-    // ── spark ─────────────────────────────────────────────────
     if (def.type === "spark") {
-      const sparkOn = isSparkEnabled(def.id);
-      let body, rcol, ctxBody;
-
-      if (sparkOn) {
-        body = el("div", "card-spark");
-        card.appendChild(body);
-
-        const scol = el("div", "spark-col");
-        body.appendChild(scol);
-        const {
-          canvas: { w: CW, h: CH },
-        } = SIZES[cfg.size] || SIZES.s;
-        const dpr = window.devicePixelRatio || 1;
-        const cv = document.createElement("canvas");
-        cv.width = CW * dpr;
-        cv.height = CH * dpr;
-        cv.style.width = CW + "px";
-        cv.style.height = CH + "px";
-        scol.appendChild(cv);
-        sparks[def.id] = new MultiSpark(cv, {
+      _buildSparkCardBody(
+        card,
+        def,
+        {
           cardColor,
-          loadColor,
-          fanLine,
-          W: CW,
-          H: CH,
-          dpr,
-          showPeaks: isPeakEnabled(def.id),
-        });
-        for (const r of def.rows) {
-          if (r.dynamicNorm) sparks[def.id].setDynamic(r.sparkKey, true);
-        }
-
-        rcol = el("div", "card-rows");
-        body.appendChild(rcol);
-
-        // ── Context section (noPlot + custom rows) ────────────────
-        // Built separately and appended below the spark grid so it's
-        // visually unambiguous what is plotted vs what is context.
-        ctxBody = el("div", "card-spark-ctx");
-      } else {
-        // Sparkline off — no canvas, no plotted/context split. Every
-        // row (built-in + custom) renders flat, same visual language
-        // as a "sensor"-type card like Storage.
-        body = el("div", "card-rows-full");
-        card.appendChild(body);
-        rcol = body;
-        ctxBody = body;
-      }
-
-      for (const row of def.rows) {
-        if (row.computedFanAvg) {
-          if (!_chassisFanRows().length && !editMode) continue;
-          const { accent, dash } = sparkOn
-            ? _sparkAccent(row, cardColor, fanLine, loadColor)
-            : { accent: cardColor, dash: "solid" };
-          rcol.appendChild(_buildSrRow(row, accent, dash));
-          continue;
-        }
-        if (row.autoLinux) {
-          if (!cfg.slots[row.sid] && !linuxHasData) continue;
-          const { accent, dash } = sparkOn
-            ? _sparkAccent(row, cardColor, fanLine, loadColor)
-            : { accent: cardColor, dash: "solid" };
-          const elem =
-            getRowStyle(row) === "bar"
-              ? _buildBarRow(row, accent, dash)
-              : _buildSrRow(row, accent, dash);
-          if (editMode) _hardRowMenu(elem, row, { isAutoLinux: true });
-          rcol.appendChild(elem);
-          continue;
-        }
-        // CC / noPlot rows — show if assigned or in editMode
-        if (!cfg.slots[row.sid] && !editMode) continue;
-        const { accent, dash } = sparkOn
-          ? _sparkAccent(row, cardColor, fanLine, loadColor)
-          : { accent: cardColor, dash: "solid" };
-        const elem =
-          getRowStyle(row) === "bar"
-            ? _buildBarRow(row, accent, dash)
-            : _buildSrRow(row, accent, dash);
-        if (editMode) _hardRowMenu(elem, row);
-        // noPlot rows go in the context section below the spark grid —
-        // when the sparkline is off, ctxBody === rcol, so this is a no-op
-        if (sparkOn && row.noPlot) {
-          ctxBody.appendChild(elem);
-        } else {
-          rcol.appendChild(elem);
-        }
-      }
-
-      // Custom rows always live in the context section (== body when flat)
-      _renderCustomRowSection(def, ctxBody);
-
-      // Only attach ctxBody separately if it has visible children and it
-      // isn't already `body` (which was appended above in flat mode)
-      if (sparkOn && ctxBody.childElementCount > 0) {
-        card.appendChild(ctxBody);
-      }
-    }
-
-    // ── sensor ────────────────────────────────────────────────
-    else if (def.type === "sensor") {
-      const body = el("div", "card-rows-full");
-      card.appendChild(body);
-
-      // Auto-disk: rows generated from live Linux disk data
-      if (def.autoDisks && linuxLat) {
-        const diskChs =
-          linuxLat.channels?.filter((ch) => /^Disk .+ Usage$/.test(ch.name)) ??
-          [];
-
-        for (const ch of diskChs) {
-          const mount = ch.name.replace(/^Disk /, "").replace(/ Usage$/, "");
-          if ((cfg.hiddenMounts ?? []).includes(mount)) continue;
-          const safeId = "ad-" + mount.replace(/[^a-zA-Z0-9]/g, "_");
-          const mountLbl =
-            mount === "/" ? "root" : mount.split("/").pop() || mount;
-          // usedSid/totalSid just need to be truthy here to get the
-          // "used/total" sub-span rendered — real values are filled in
-          // by the renderDashboard() pass that always follows buildCards().
-          const srow = _buildBarRow(
-            { sid: safeId, lbl: mountLbl, usedSid: true, totalSid: true },
-            cardColor,
-          );
-          if (editMode) {
-            const hideBtn = el("button", "slot-clr");
-            hideBtn.title = `Hide ${mount}`;
-            hideBtn.textContent = "×";
-            hideBtn.onclick = (e) => {
-              e.stopPropagation();
-              cfg.hiddenMounts ??= [];
-              if (!cfg.hiddenMounts.includes(mount))
-                cfg.hiddenMounts.push(mount);
-              saveCfg();
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
-            };
-            srow.appendChild(hideBtn);
-          }
-          body.appendChild(srow);
-        }
-
-        // Show hidden mounts with restore affordance
-        if (editMode && cfg.hiddenMounts?.length) {
-          for (const mount of cfg.hiddenMounts) {
-            const mountLbl =
-              mount === "/" ? "root" : mount.split("/").pop() || mount;
-            const rrow = el("div", "sr hidden-mount");
-            rrow.innerHTML = `<span class="sr-accent" style="background:${cardColor};opacity:.3"></span>
-<span class="sr-lbl">${esc(mountLbl)}</span>`;
-            const restBtn = el("button", "assign-badge");
-            restBtn.textContent = "show";
-            restBtn.onclick = (e) => {
-              e.stopPropagation();
-              cfg.hiddenMounts = cfg.hiddenMounts.filter((m) => m !== mount);
-              saveCfg();
-              buildCards();
-              renderDashboard(liveDevices);
-              requestAnimationFrame(() => autoResize());
-            };
-            rrow.appendChild(restBtn);
-            body.appendChild(rrow);
-          }
-        }
-      }
-
-      // Named rows — currently unused by any "sensor"-type card (Storage
-      // is autoDisks-only with rows:[]), kept generic for whatever the
-      // next sensor-type card needs. Not drag-reorderable — only custom
-      // rows are (see .custom-rows-list / initRowSort()).
-      for (const row of def.rows || []) {
-        const assigned = cfg.slots[row.sid];
-        if (!row.autoLinux && !assigned && !editMode) continue;
-        const elem =
-          getRowStyle(row) === "bar"
-            ? _buildBarRow(row, cardColor)
-            : _buildSrRow(row, cardColor);
-        if (editMode) _hardRowMenu(elem, row);
-        body.appendChild(elem);
-      }
-      _renderCustomRowSection(def, body);
+          loadColor: withAlpha(cardColor, 0.55),
+          fanLine: def.cls === "fan" ? cardColor : cssVar("--fan"),
+        },
+        !!linuxLat,
+      );
+    } else if (def.type === "sensor") {
+      _buildSensorCardBody(card, def, cardColor, linuxLat);
     }
   }
 
@@ -1001,238 +828,135 @@ function buildCards() {
 // ═══════════════════════════════════════════════════════════════
 //  RENDER DASHBOARD
 // ═══════════════════════════════════════════════════════════════
+// Unit for a custom row, derived from its slot (custom rows aren't in SLOTS).
+const _slotUnit = (slot) =>
+  slot.unit ??
+  (slot.field === "duty"
+    ? "%"
+    : slot.field === "rpm"
+      ? "RPM"
+      : slot.kind === "temp"
+        ? "°C"
+        : "");
 
-function renderDashboard(devices, { pushSparks = false } = {}) {
-  // Per-card rollup for the header alert bar — reset every tick and
-  // filled in as rows are walked below (named rows + custom rows).
-  // Only "warn"-mode severity counts; meter-mode (fan duty) is
-  // intensity, not a problem signal. Storage is excluded entirely —
-  // disk fullness isn't the kind of "something's wrong" this is for.
-  const cardAlert = {};
-  const bumpAlert = (cardId, lvl) => {
-    if (typeof lvl !== "number") return;
-    cardAlert[cardId] = Math.max(cardAlert[cardId] ?? 0, lvl);
-  };
+// Writes a row's value and dot ramp, then records its peak. Returns the
+// reading and its level (undefined while there's no reading).
+function _paintRow(devices, row, slot, unit) {
+  const v = getSlotValue(devices, slot);
+  const sv = document.getElementById("sv-" + row.sid);
+  const sd = document.getElementById("sd-" + row.sid);
+  if (sv) sv.textContent = fmt1(v, unit);
+  let lvl;
+  if (v !== undefined) {
+    lvl =
+      row.mode === "warn"
+        ? warnLevel(row.sid, v)
+        : fanDotLevel(v, getFanDuty(devices, slot), row.sid);
+    if (sd) sd.innerHTML = _rowDots(row, lvl);
+  }
+  _trackPeak(row.sid, v);
+  return { v, lvl };
+}
 
-  for (const def of CARD_DEFS) {
-    // ── Named rows (standard + autoLinux) ────────────────────
-    for (const row of def.rows || []) {
-      // Computed rows (currently just Chassis's FAN AVG) have no real
-      // cfg.slots entry to guard on below, and — unlike every other
-      // row — used to only get a value from the sparkline-feed loop
-      // further down, which never runs at all once the card's display
-      // is switched to "Rows" (no MultiSpark instance exists to feed).
-      // Handling it here instead means it updates regardless of
-      // Chart/Rows mode, same as everything else.
-      if (row.computedFanAvg) {
-        const avg = _chassisFanAvg(devices);
-        const sv = document.getElementById("sv-" + row.sid);
-        const sd = document.getElementById("sd-" + row.sid);
-        if (sv) sv.textContent = fmt1(avg, "%");
-        if (avg !== undefined) {
-          if (sd) {
-            sd.innerHTML = makeDots(
-              dutyLevel(avg),
-              getRowStyle(row) === "dots-meter" ? "meter" : "warn",
-            );
-          }
-        }
-        _trackPeak(row.sid, avg);
-        _updatePeakTip(row.sid, "%");
-        continue;
-      }
-      if (!cfg.slots[row.sid]) continue;
+// Fills a bar row's fill, percentage, used/total text and hover tip.
+function _paintBar(sid, baseColor, pctRaw, used, total) {
+  const pct = clampPct(pctRaw);
+  const bf = document.getElementById("bf-" + sid);
+  if (bf) {
+    bf.style.width = `${pct}%`;
+    bf.style.background = barColorForPct(pct, baseColor);
+  }
+  const bp = document.getElementById("bp-" + sid);
+  if (bp) bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
+  const bv = document.getElementById("bv-" + sid);
+  if (bv) bv.textContent = barText(used, total);
+  _updatePeakTip(sid, "%", barText(used, total));
+}
 
-      const slot = cfg.slots[row.sid];
-      const v = getSlotValue(devices, slot);
-      const sv = document.getElementById("sv-" + row.sid);
-      const sd = document.getElementById("sd-" + row.sid);
-      const sd2 = SLOTS.find((s) => s.id === row.sid);
-      if (sv) sv.textContent = fmt1(v, sd2?.unit ?? "");
-      if (v !== undefined) {
-        const lvl =
-          row.mode === "warn"
-            ? warnLevel(row.sid, v)
-            : fanDotLevel(v, getFanDuty(devices, slot), row.sid);
-        if (sd) {
-          sd.innerHTML = makeDots(
-            lvl,
-            getRowStyle(row) === "dots-meter" ? "meter" : "warn",
-          );
-        }
-        if (row.mode === "warn") bumpAlert(def.id, lvl);
-      }
-      _trackPeak(row.sid, v);
+// Chassis FAN AVG: computed, so it has no slot for the named-row path. It's
+// painted independently of the chart so it updates in Rows mode too.
+function _paintFanAvgRow(devices, row) {
+  const avg = _chassisFanAvg(devices);
+  const sv = document.getElementById("sv-" + row.sid);
+  const sd = document.getElementById("sd-" + row.sid);
+  if (sv) sv.textContent = fmt1(avg, "%");
+  if (avg !== undefined && sd) sd.innerHTML = _rowDots(row, dutyLevel(avg));
+  _trackPeak(row.sid, avg);
+  _updatePeakTip(row.sid, "%");
+}
 
-      if ((def.type === "sensor" || def.type === "spark") && row.pctSid) {
-        const used = row.usedSid
-          ? getSlotValue(devices, cfg.slots[row.usedSid])
-          : undefined;
-        const total = row.totalSid
-          ? getSlotValue(devices, cfg.slots[row.totalSid])
-          : undefined;
-        const pctRaw = getSlotValue(devices, slot);
-        const pct = clampPct(pctRaw);
+function _paintNamedRow(devices, def, row, bumpAlert) {
+  const slot = cfg.slots[row.sid];
+  const unit = SLOTS.find((s) => s.id === row.sid)?.unit ?? "";
+  const { v, lvl } = _paintRow(devices, row, slot, unit);
+  if (lvl !== undefined && row.mode === "warn") bumpAlert(def.id, lvl);
 
-        const bf = document.getElementById("bf-" + row.sid);
-        const bv = document.getElementById("bv-" + row.sid);
-        const bp = document.getElementById("bp-" + row.sid);
+  if ((def.type === "sensor" || def.type === "spark") && row.pctSid) {
+    const used = row.usedSid ? getSlotValue(devices, cfg.slots[row.usedSid]) : undefined;
+    const total = row.totalSid ? getSlotValue(devices, cfg.slots[row.totalSid]) : undefined;
+    const rowVisible =
+      v !== undefined || (typeof used === "number" && typeof total === "number");
+    document.getElementById("bar-" + row.sid)?.classList.toggle("bar-hide", !rowVisible);
+    _paintBar(row.sid, cssVar("--" + def.cls), v, used, total);
+  } else {
+    _updatePeakTip(row.sid, unit);
+  }
+}
 
-        const rowVisible =
-          pctRaw !== undefined ||
-          (typeof used === "number" && typeof total === "number");
-        const rowEl = document.getElementById("bar-" + row.sid);
-        if (rowEl) rowEl.classList.toggle("bar-hide", !rowVisible);
-
-        if (bf) {
-          bf.style.width = `${pct}%`;
-          bf.style.background = barColorForPct(pct, cssVar("--" + def.cls));
-        }
-        if (bp)
-          bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
-        if (bv) bv.textContent = barText(used, total);
-        _updatePeakTip(row.sid, "%", barText(used, total));
-      } else {
-        _updatePeakTip(row.sid, sd2?.unit ?? "");
-      }
+// Storage bars. Returns false if a mount has no DOM row yet, in which case
+// the cards were rebuilt and this render pass should stop.
+function _paintDiskRows(devices) {
+  const lat = getLatest(devices.find((d) => d.uid === "linux-system"));
+  if (!lat) return true;
+  for (const { ch, mount } of diskChannels(lat)) {
+    const sid = diskSid(mount);
+    if (!document.getElementById("bar-" + sid)) {
+      buildCards();
+      return false;
     }
+    const used = lat.channels.find((c) => c.name === `Disk ${mount} Used`)?.watts;
+    const total = lat.channels.find((c) => c.name === `Disk ${mount} Total`)?.watts;
+    const pctRaw = typeof ch.duty === "number" ? ch.duty : undefined;
+    _trackPeak(sid, pctRaw);
+    _paintBar(sid, cssVar("--ssd"), pctRaw, used, total);
+  }
+  return true;
+}
 
-    // ── Auto-disk rows ────────────────────────────────────────
-    if (def.autoDisks) {
-      const linuxDev = devices.find((d) => d.uid === "linux-system");
-      const lat = getLatest(linuxDev);
-      if (lat) {
-        const diskChs =
-          lat.channels?.filter((ch) => /^Disk .+ Usage$/.test(ch.name)) ?? [];
-        for (const ch of diskChs) {
-          const mount = ch.name.replace(/^Disk /, "").replace(/ Usage$/, "");
-          if ((cfg.hiddenMounts ?? []).includes(mount)) continue;
-          const safeId = "ad-" + mount.replace(/[^a-zA-Z0-9]/g, "_");
-          // If the DOM row doesn't exist yet, trigger a rebuild
-          if (!document.getElementById("bar-" + safeId)) {
-            buildCards();
-            return;
-          }
-          const usedCh = lat.channels?.find(
-            (c) => c.name === `Disk ${mount} Used`,
-          );
-          const totalCh = lat.channels?.find(
-            (c) => c.name === `Disk ${mount} Total`,
-          );
-          const pctRaw = typeof ch.duty === "number" ? ch.duty : undefined;
-          const used = usedCh?.watts;
-          const total = totalCh?.watts;
-          const pct = clampPct(pctRaw ?? 0);
-          const bf = document.getElementById("bf-" + safeId);
-          const bv = document.getElementById("bv-" + safeId);
-          const bp = document.getElementById("bp-" + safeId);
-          if (bf) {
-            bf.style.width = `${pct}%`;
-            bf.style.background = barColorForPct(pct, cssVar("--ssd"));
-          }
-          if (bp)
-            bp.textContent = pctRaw !== undefined ? `${Math.round(pct)}` : "--";
-          if (bv) bv.textContent = barText(used, total);
-          _trackPeak(safeId, pctRaw);
-          _updatePeakTip(safeId, "%", barText(used, total));
-        }
+// Appends this tick's points to a spark card's series.
+function _feedSpark(devices, def, spark) {
+  spark.tick();
+  for (const row of def.rows) {
+    if (row.computedFanAvg) {
+      const avg = _chassisFanAvg(devices);
+      if (avg !== undefined) {
+        spark.setNorm("fan", 100);
+        spark.push("fan", avg);
       }
+      continue;
     }
-
-    // ── Spark canvas feeds ────────────────────────────────────
-    // Text/dot readouts above already update on every call (SSE
-    // arrival, Linux stats push, etc. — irregular cadence). Actually
-    // appending a new point to the plotted history only happens when
-    // pushSparks is set, i.e. from the fixed 1 Hz ticker below — so
-    // every plotted pixel-step represents exactly one real second,
-    // instead of one step per (irregularly-timed) data event.
-    const spark = sparks[def.id];
-    if (!spark || !def.rows) continue;
-
-    if (def.type === "spark") {
-      if (pushSparks) spark.tick();
-      for (const row of def.rows) {
-        if (row.computedFanAvg) {
-          // Value/dots/peak already handled in the always-runs loop
-          // above — this branch is spark-canvas-only, so it's a no-op
-          // whenever the card has no chart (Rows mode) or this isn't a
-          // tick frame.
-          if (pushSparks) {
-            const avg = _chassisFanAvg(devices);
-            if (avg !== undefined) {
-              spark.setFanNorm(100);
-              spark.push("fan", avg);
-            }
-          }
-          continue;
-        }
-        if (!pushSparks) continue; // nothing else in this branch is spark-only
-        if (!cfg.slots[row.sid] || !row.sparkKey || row.noPlot) continue;
-        const v = getSlotValue(devices, cfg.slots[row.sid]);
-        if (row.sparkKey === "fan") {
-          const duty = getFanDuty(devices, cfg.slots[row.sid]);
-          if (duty !== undefined) {
-            spark.setFanNorm(100);
-            spark.push("fan", duty);
-          } else if (v !== undefined) {
-            spark.trackFanMax(v);
-            spark.push("fan", v);
-          }
-        } else {
-          spark.push(row.sparkKey, v, sessionPeaks[row.sid]);
-        }
+    const slot = cfg.slots[row.sid];
+    if (!slot || !row.sparkKey || row.noPlot) continue;
+    const v = getSlotValue(devices, slot);
+    if (row.sparkKey === "fan") {
+      const duty = getFanDuty(devices, slot);
+      if (duty !== undefined) {
+        spark.setNorm("fan", 100);
+        spark.push("fan", duty);
+      } else if (v !== undefined) {
+        spark.trackMax("fan", v);
+        spark.push("fan", v);
       }
+    } else {
+      spark.push(row.sparkKey, v, sessionPeaks[row.sid]);
     }
   }
+}
 
-  // ── Custom rows — update all cards ───────────────────────────
-  // renderDashboard's main loop above handles def.rows only;
-  // custom rows use the same slot machinery but live in cfg.customRows.
-  for (const [cardId, rows] of Object.entries(cfg.customRows ?? {})) {
-    for (const row of rows) {
-      const slot = cfg.slots[row.sid];
-      if (!slot) continue;
-      const v = getSlotValue(devices, slot);
-      const sv = document.getElementById("sv-" + row.sid);
-      const sd = document.getElementById("sd-" + row.sid);
-      // Derive unit from the slot itself (custom rows aren't in SLOTS)
-      const unit =
-        slot.unit ??
-        (slot.field === "duty"
-          ? "%"
-          : slot.field === "rpm"
-            ? "RPM"
-            : slot.kind === "temp"
-              ? "°C"
-              : "");
-      if (sv) sv.textContent = fmt1(v, unit);
-      if (v !== undefined) {
-        const lvl =
-          row.mode === "warn"
-            ? warnLevel(row.sid, v)
-            : fanDotLevel(v, getFanDuty(devices, slot), row.sid);
-        if (sd) {
-          sd.innerHTML = makeDots(
-            lvl,
-            getRowStyle(row) === "dots-meter" ? "meter" : "warn",
-          );
-        }
-        if (row.mode === "warn") bumpAlert(cardId, lvl);
-      }
-      _trackPeak(row.sid, v);
-      _updatePeakTip(row.sid, unit);
-    }
-  }
-
-  // ── Header alert bar (+ mini-row headline/dots) ────────────────
-  // Silent through levels 1–3 (routine fluctuation) — only the top two
-  // bands touch the card's own accent bar, and Storage never does.
-  // Mini-row values are kept current on every pass regardless of
-  // collapsed state, so toggling mini is an instant class flip.
-  // Padded to a fixed 3 slots (see MINI_SLOTS) so a card with fewer
-  // headline values than another still lines up column-for-column with
-  // it once both are collapsed and stacked — a real grid, not just
-  // each card's own cluster hugging the right edge at its own width.
+// Header alert bar and mini-row values. Only the top two severity bands touch
+// a card's accent bar (levels 1–3 are routine fluctuation), and Storage never
+// does. Mini values stay current while collapsed, so expanding is a class flip.
+function _paintHeaders(devices, cardAlert) {
   for (const def of CARD_DEFS) {
     const hdr = document.getElementById("hdr-" + def.id);
     if (!hdr) continue;
@@ -1240,15 +964,12 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
     const miniVals = document.getElementById("mini-" + def.id);
     if (miniVals) {
       const heads = _miniHeadline(def, devices);
-      const slots = Array.from(
-        { length: MINI_SLOTS },
-        (_, i) => heads[i] ?? null,
-      );
-      miniVals.innerHTML = slots
-        .map((it) => {
-          if (!it) return `<span class="mini-val mini-val-empty"></span>`;
-          return `<span class="mini-val" title="${esc(it.full)}"><span class="mini-bar" style="background:${it.bar}"></span><span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`;
-        })
+      miniVals.innerHTML = Array.from({ length: MINI_SLOTS }, (_, i) => heads[i] ?? null)
+        .map((it) =>
+          it
+            ? `<span class="mini-val" title="${esc(it.full)}"><span class="mini-bar" style="background:${it.bar}"></span><span class="mini-val-lbl">${esc(it.lbl)}</span><span class="mini-val-num">${esc(it.str)}</span></span>`
+            : `<span class="mini-val mini-val-empty"></span>`,
+        )
         .join("");
     }
 
@@ -1263,74 +984,90 @@ function renderDashboard(devices, { pushSparks = false } = {}) {
   }
 }
 
-// ── Fixed-rate sparkline ticker ──────────────────────────────────
-// The dashboard re-renders on every SSE packet and every 2 s Linux
-// stats push — two independent, irregularly-interleaved sources.
-// Sampling the sparkline history on that schedule made each plotted
-// step cover a different, unpredictable slice of real time (some
-// nearly back-to-back, some ~2 s apart), so the trace visibly
-// kinked/trailed off instead of reading as a clean N-second window.
-// Feeding the graphs from their own steady 1 s clock instead means
-// every horizontal step is worth exactly one real second — see
-// MultiSpark's MAX/BAR for how that maps to a clean 60 s window.
+// Fills the cards with live values. Text, dots and bars update on every call
+// (SSE packet, Linux stats push, …); sparkline points are added only when
+// pushSparks is set, by the fixed 1 Hz ticker below.
+function renderDashboard(devices, { pushSparks = false } = {}) {
+  // Per-card worst warn-level this pass, for the header alert. Only "warn"
+  // rows count (meter rows show intensity, not a problem), and Storage is
+  // left out entirely.
+  const cardAlert = {};
+  const bumpAlert = (cardId, lvl) => {
+    if (typeof lvl !== "number") return;
+    cardAlert[cardId] = Math.max(cardAlert[cardId] ?? 0, lvl);
+  };
+
+  for (const def of CARD_DEFS) {
+    for (const row of def.rows || []) {
+      if (row.computedFanAvg) _paintFanAvgRow(devices, row);
+      else if (cfg.slots[row.sid]) _paintNamedRow(devices, def, row, bumpAlert);
+    }
+
+    if (def.autoDisks && !_paintDiskRows(devices)) return;
+
+    const spark = sparks[def.id];
+    if (pushSparks && spark && def.type === "spark") _feedSpark(devices, def, spark);
+  }
+
+  // Custom rows live in cfg.customRows, not def.rows.
+  for (const [cardId, rows] of Object.entries(cfg.customRows ?? {})) {
+    for (const row of rows) {
+      const slot = cfg.slots[row.sid];
+      if (!slot) continue;
+      const unit = _slotUnit(slot);
+      const { lvl } = _paintRow(devices, row, slot, unit);
+      if (lvl !== undefined && row.mode === "warn") bumpAlert(cardId, lvl);
+      _updatePeakTip(row.sid, unit);
+    }
+  }
+
+  _paintHeaders(devices, cardAlert);
+}
+
+// Sparklines are fed from their own steady 1 s clock. Sampling on render
+// events (SSE packets and the 2 s Linux push, irregularly interleaved) made
+// each plotted step span a different slice of real time and the trace kink;
+// on this clock every step is exactly one second (see MultiSpark's MAX/BAR).
 setInterval(() => {
   if (phase === "dashboard") renderDashboard(liveDevices, { pushSparks: true });
 }, 1000);
 
 
 // ═══════════════════════════════════════════════════════════════
-//  MULTI-SERIES SPARKLINE — up to 3 series, drawn fan→load→temp so
-//  temp sits on top: temp solid+fill, load dashed, fan dotted. Grid
-//  lines at 25/50/75/100%; the line-style samples double as the
-//  legend (no separate HTML strip).
+//  MULTI-SERIES SPARKLINE
+//  Up to three series drawn fan → load → temp so temp sits on top: temp
+//  solid with fill, load dashed, fan dotted. Gridlines at 25/50/75/100%.
+//  The line styles double as the legend (see _sparkAccent), so there's no
+//  separate HTML key.
 // ═══════════════════════════════════════════════════════════════
 class MultiSpark {
   constructor(canvas, { cardColor, loadColor, fanLine, W, H, dpr = 1, showPeaks = true } = {}) {
-    this.cv = canvas;
     this.ctx = canvas.getContext("2d");
     this.ctx.scale(dpr, dpr);
     this.W = W;
     this.H = H;
     this.showPeaks = showPeaks;
-    this.MAX = 61; // data points kept — 60 one-second intervals = a clean 60s/1min window
-    this.BAR = 10; // vertical marker every 10s — 60/10 divides evenly, no leftover at the edge
+    this.MAX = 61; // points kept: 60 one-second intervals = a clean 1-minute window
+    this.BAR = 10; // vertical marker every 10 s (60/10 leaves no remainder at the edge)
 
+    const series = (color, dash, lw, fill) => ({
+      data: [],
+      norm: 100,
+      dynamic: false,
+      color,
+      dash,
+      lw,
+      fill,
+      peak: undefined,
+    });
     this.S = {
-      temp: {
-        data: [],
-        norm: 100,
-        dynamic: false,
-        color: cardColor,
-        dash: [],
-        lw: 1.6,
-        fill: true,
-        peak: undefined,
-      },
-      load: {
-        data: [],
-        norm: 100,
-        dynamic: false,
-        color: loadColor,
-        dash: [5, 3],
-        lw: 1.2,
-        fill: false,
-        peak: undefined,
-      },
-      fan: {
-        data: [],
-        norm: 100,
-        dynamic: false,
-        color: fanLine,
-        dash: [2, 4],
-        lw: 1.0,
-        fill: false,
-        peak: undefined,
-      },
+      temp: series(cardColor, [], 1.6, true),
+      load: series(loadColor, [5, 3], 1.2, false),
+      fan: series(fanLine, [2, 4], 1.0, false),
     };
 
-    // Peak markers are real DOM elements (not canvas-drawn) parented
-    // to .spark-col (position:relative) so they can spill past the
-    // canvas's own border instead of being clipped to its bitmap.
+    // Peak markers are DOM elements rather than canvas drawings, parented to
+    // .spark-col (position: relative) so they can spill past the canvas edge.
     this.peakDots = {};
     const container = canvas.parentElement;
     for (const key of Object.keys(this.S)) {
@@ -1341,23 +1078,20 @@ class MultiSpark {
       this.peakDots[key] = dot;
     }
 
-    // Wall-clock timestamps paralleling the data buffers, for an honest
-    // time-horizon label (push cadence isn't perfectly regular).
+    // Wall-clock times parallel to the data, since push cadence isn't
+    // perfectly regular and the time-horizon label should be honest.
     this.times = [];
   }
 
-  // Call once per render tick (not per push) so the time-horizon label
-  // reflects real elapsed time even when a card's series don't all
-  // push on the same tick.
+  // Call once per render tick (not per push) so the label reflects real
+  // elapsed time even when a card's series don't all push on the same tick.
   tick() {
     this.times.push(Date.now());
     if (this.times.length > this.MAX) this.times.shift();
   }
 
-  // Mark a series as auto-scaling — its norm re-derives from whatever
-  // is actually in the visible window (×1.2 headroom), rather than
-  // staying fixed at 100. Use for metrics with no natural 0–100
-  // ceiling (e.g. network throughput in KB/s).
+  // Auto-scale a series from its visible window (×1.2 headroom) instead of
+  // a fixed 100. For metrics with no natural ceiling, e.g. network KB/s.
   setDynamic(key, dynamic = true) {
     const s = this.S[key];
     if (s) s.dynamic = dynamic;
@@ -1366,43 +1100,28 @@ class MultiSpark {
     const s = this.S[key];
     if (s) s.norm = n;
   }
-  // Locks two dynamic series to one Y-scale (e.g. RX/TX) so their heights
-  // stay comparable instead of each auto-scaling to its own peak.
+  // Put several dynamic series on one Y-scale (RX/TX) so their heights stay
+  // comparable.
   setSharedNorm(keys) {
     if (!Array.isArray(keys) || keys.length < 2) return;
-
     const values = [];
-
     for (const key of keys) {
       const s = this.S[key];
-      if (!s) continue;
-      values.push(...s.data);
+      if (s) values.push(...s.data);
     }
-
     const norm = Math.max(0.05, ...values) * 1.2;
-
     for (const key of keys) {
       const s = this.S[key];
       if (s) s.norm = norm;
     }
   }
-  // Recomputed from the visible window every call (not a one-way
-  // ratchet) so the scale shrinks back down once a spike scrolls out
-  // of view, instead of small values staying pinned near the floor.
+  // Recomputed from the visible window each time (not a one-way ratchet), so
+  // the scale relaxes once a spike scrolls out of view.
   trackMax(key, val) {
     const s = this.S[key];
     if (!s || typeof val !== "number" || isNaN(val)) return;
     const recentMax = Math.max(val, ...s.data);
     s.norm = Math.max(0.05, recentMax * 1.2);
-  }
-
-  // Back-compat wrappers — fan duty/RPM dual-mode feed in
-  // renderDashboard() calls these by name.
-  setFanNorm(n) {
-    this.setNorm("fan", n);
-  }
-  trackFanMax(rpm) {
-    this.trackMax("fan", rpm);
   }
 
   push(key, val, peakOverride) {
@@ -1413,18 +1132,14 @@ class MultiSpark {
     if (s.data.length > this.MAX) s.data.shift();
     if (s.dynamic) {
       this.trackMax(key, val);
-      // RX/TX share one scale so their bars stay comparable.
-      if (this.S.temp && this.S.load && key !== "fan") {
-        this.setSharedNorm(["temp", "load"]);
-      }
-      // Peak tracks the windowed max (not all-time) so it always lands
-      // within the currently-drawn scale; true all-time high still
-      // shows via the row's hover tooltip.
+      // RX and TX (temp/load series) share one scale.
+      if (key !== "fan") this.setSharedNorm(["temp", "load"]);
+      // Windowed max, not all-time, so the marker always lands inside the
+      // drawn scale; the all-time high still shows in the row's hover tip.
       s.peak = Math.max(val, ...s.data);
     } else if (typeof peakOverride === "number") {
-      // Caller has a persistent, correctly-scaled peak already (e.g.
-      // sessionPeaks, which survives card rebuilds) — trust it over
-      // this instance's own short-lived tracking.
+      // The caller's peak (sessionPeaks) survives card rebuilds, so it beats
+      // this instance's short-lived tracking.
       s.peak = peakOverride;
     } else if (s.peak === undefined || val > s.peak) {
       s.peak = val;
@@ -1435,24 +1150,22 @@ class MultiSpark {
   draw() {
     const { ctx, W, H, S, MAX, BAR } = this;
 
-    const GH = H;
-
     ctx.clearRect(0, 0, W, H);
 
     const xOf = (i, len) => (i + MAX - len) * (W / (MAX - 1));
     const yOf = (v, norm) => {
       const p = Math.min(1, Math.max(0, v / (norm || 1)));
-      return GH - p * GH * 0.86 - GH * 0.04;
+      return H - p * H * 0.86 - H * 0.04;
     };
 
-    // ── Horizontal gridlines ── alpha is fixed here (not themed) since
-    // some themes' --spark-grid is too faint to read; midline is brighter.
+    // Horizontal gridlines. Alpha is fixed here, not themed: some themes'
+    // --spark-grid is too faint to read. The midline is brighter.
     ctx.save();
     ctx.lineWidth = 0.5;
     ctx.setLineDash([]);
     const gridColor = cssVar("--spark-grid") || "rgba(255,255,255,0.06)";
     for (const pct of [0.25, 0.5, 0.75, 1.0]) {
-      const y = GH - pct * GH * 0.86 - GH * 0.04;
+      const y = yOf(pct, 1);
       ctx.strokeStyle = withAlpha(gridColor, pct === 0.5 ? 0.22 : 0.13);
       ctx.beginPath();
       ctx.moveTo(0, y);
@@ -1460,7 +1173,7 @@ class MultiSpark {
       ctx.stroke();
     }
 
-    // ── Vertical time markers ─────────────────────────────────
+    // Vertical time markers
     const maxLen = Math.max(...Object.values(S).map((s) => s.data.length), 2);
     ctx.strokeStyle = withAlpha(
       cssVar("--spark-vtick") || "rgba(255,255,255,0.04)",
@@ -1470,27 +1183,27 @@ class MultiSpark {
       const x = xOf(i, maxLen);
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, GH);
+      ctx.lineTo(x, H);
       ctx.stroke();
     }
     ctx.restore();
 
-    // ── Series: fan → load → temp ─────────────────────────────
+    // Series, fan → load → temp
     for (const key of ["fan", "load", "temp"]) {
       const s = S[key];
       if (s.data.length < 2) continue;
 
       if (s.fill) {
-        const g = ctx.createLinearGradient(0, 0, 0, GH);
+        const g = ctx.createLinearGradient(0, 0, 0, H);
         g.addColorStop(0, withAlpha(s.color, 0.22));
         g.addColorStop(1, withAlpha(s.color, 0.0));
         ctx.save();
         ctx.beginPath();
-        ctx.moveTo(xOf(0, s.data.length), GH);
+        ctx.moveTo(xOf(0, s.data.length), H);
         s.data.forEach((v, i) =>
           ctx.lineTo(xOf(i, s.data.length), yOf(v, s.norm)),
         );
-        ctx.lineTo(xOf(s.data.length - 1, s.data.length), GH);
+        ctx.lineTo(xOf(s.data.length - 1, s.data.length), H);
         ctx.closePath();
         ctx.fillStyle = g;
         ctx.fill();
@@ -1511,8 +1224,6 @@ class MultiSpark {
       ctx.stroke();
       ctx.restore();
 
-      // Peak marker (DOM element, see constructor) — gated behind a
-      // preference since not everyone wants the extra marks.
       const dot = this.peakDots[key];
       if (dot) {
         if (this.showPeaks && s.peak !== undefined) {
@@ -1525,16 +1236,15 @@ class MultiSpark {
       }
     }
 
-    // ── Time-horizon label — real elapsed span (push cadence isn't
-    // perfectly regular), drawn on a scrim so it stays legible over
-    // whatever's plotted near the floor.
+    // Time-horizon label, drawn on a scrim so it stays legible over
+    // whatever is plotted near the floor.
     const span = _fmtSpan(
       this.times.length >= 2
         ? this.times[this.times.length - 1] - this.times[0]
         : undefined,
     );
     if (span) {
-      const fontSize = Math.max(7, Math.round(GH * 0.088));
+      const fontSize = Math.max(7, Math.round(H * 0.088));
       const label = `-${span}`;
       ctx.save();
       ctx.font = `${fontSize}px ${cssVar("--font-num") || "monospace"}`;
@@ -1547,10 +1257,10 @@ class MultiSpark {
         cssVar("--bg-canvas") || "rgba(0,0,0,0.18)",
         0.82,
       );
-      ctx.fillRect(0, GH - boxH, boxW, boxH);
+      ctx.fillRect(0, H - boxH, boxW, boxH);
       ctx.fillStyle = withAlpha(cssVar("--txt-dim") || "#888", 0.85);
       ctx.textBaseline = "bottom";
-      ctx.fillText(label, padX, GH - padY);
+      ctx.fillText(label, padX, H - padY);
       ctx.restore();
     }
   }
