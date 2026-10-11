@@ -12,8 +12,10 @@ CC Widget is built to feel like part of your desktop, not another bulky monitori
 
 * **Live hardware telemetry** - CPU/GPU temps and load, fan speeds, RAM/swap, disk usage, network throughput - sourced from the [CoolerControl](https://gitlab.com/coolercontrol/coolercontrol) daemon and local Linux system stats
 * **Sparkline graphs** with session peak markers, per-metric
-* **Three size presets** (S/M/L) to fit your screen and eyesight
-* **A real theme system** - over a dozen built-in themes plus a live theme builder with WCAG contrast checking, so you can tune colors and confirm they're actually readable before committing
+* **Three size presets** (S/M/L) and a choice of screen corner to anchor to, so it sits where you want it
+* **A real theme system** - eleven built-in themes plus a live theme builder with contrast checking, so you can tune colors and confirm they're actually readable before committing. Pick a random theme on every launch if you like variety
+* **Save & Share** - copy a theme as text to send to a friend (or paste one you were sent), and export or import your whole setup - theme, layout, and window position - as a file
+* **Try it before you connect** - a new install starts in demo mode with sample data, so you can look around and set things up before pasting in a token
 * **Configurable dashboard** - assign any sensor to any row, add custom rows, even track arbitrary folder sizes on disk
 * **Lightweight** - GTK3 + WebKit2, no Electron, minimal footprint
 * **Native desktop integration** - proper `.desktop` launcher, optional autostart, standard icon placement
@@ -54,7 +56,9 @@ Launch CC Widget from your app launcher, or:
 python3 ~/.local/share/cc-widget/launch.py
 ```
 
-You'll be asked for your CoolerControl daemon URL and an access token. Create a token in CoolerControl under **Settings → Access Protection → Access Tokens**, paste it in, and you're connected.
+The settings drawer opens on first launch in demo mode. Under **System → Connection**, enter your CoolerControl daemon URL and an access token (the token field pulses until you fill it in). Create a token in CoolerControl under **Settings → Access Protection → Access Tokens**, paste it in, and you're connected.
+
+Open the drawer any time from the gear in the bottom bar. It holds Size, Position, Theme, Connection, and Save & Share, plus **Reset Widget** at the bottom if you want to start over.
 
 ---
 
@@ -103,14 +107,31 @@ cc-widget/
 ├── uninstall.sh
 ├── README.md
 └── app/
-    ├── launch.py
-    ├── monitor.html
+    ├── launch.py            GTK/WebKit window: sizing, anchoring, position
+    ├── monitor.html         page structure and the settings drawer
     ├── monitor.css
-    ├── monitor.js
-    ├── themes.js
+    ├── themes.js            theme catalog and size presets
+    ├── state.js             config, shared helpers, icons
+    ├── platform-linux.js    daemon connection and system stats
+    ├── ui-widgets.js        row menus, sensor picker, custom rows
+    ├── dashboard.js         cards, rows, sparklines
+    ├── app-modes.js         boot, demo mode, theme builder, entry point
+    ├── dev.js               developer tools (not installed, see below)
     ├── icon.svg
     └── ...
 ```
+
+The scripts are plain files loaded in order from `monitor.html` - no build step, no bundler.
+
+---
+
+## Development
+
+Run straight from a clone with `python3 app/launch.py`.
+
+`app/dev.js` is optional. If it's present next to `monitor.html`, it adds a **Dev** zone to the drawer: extra demo scenarios (Idle, Gaming, Stress), a theme auto-cycle button, and a "simulate first launch" action. If it's missing, the app skips it silently.
+
+The installer never copies `dev.js` into `~/.local/share/cc-widget`, so installed copies don't get the Dev zone even though the file ships in the repo.
 
 ---
 
