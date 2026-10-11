@@ -291,11 +291,6 @@ function onSSEPacket(payload) {
   ccDevices = payload.devices ?? [];
   refreshDevices();
   if (phase === "connecting") {
-    bootStepDone("daemon", () => {
-      bootStep("live", "active");
-      bootState("Starting telemetry");
-    });
-
     phase = "dashboard";
 
     // First-time setup (nothing CC-assignable configured yet) opens in edit mode.
@@ -310,12 +305,7 @@ function onSSEPacket(payload) {
     // Linux stats arrive on Python's own 2 s timer. Wait for the first
     // sample so the card rebuild it triggers lands before the boot reveal,
     // otherwise it can resize the window again after the reveal.
-    linuxStatsReady.then(() => {
-      bootStepDone("live", () => {
-        bootState("Online");
-        setTimeout(hideBootScreen, BOOT_READ_DELAY);
-      });
-    });
+    linuxStatsReady.then(hideBootScreen);
 
     requestAnimationFrame(_syncEditChrome);
   }
@@ -326,20 +316,13 @@ function onSSEPacket(payload) {
 // ═══════════════════════════════════════════════════════════════
 //  CONNECTION STATUS
 // ═══════════════════════════════════════════════════════════════
-// Writes the status dot + text to the status bar and to the drawer's
-// Connection section, which mirror each other.
+// Writes the status dot + text to the status bar.
 function _paintStatus(dotClass, text) {
   const cls = "sdot" + (dotClass ? " " + dotClass : "");
   document.getElementById("sdot").className = cls;
   const stxt = document.getElementById("stxt");
   stxt.textContent = text;
   stxt.classList.toggle("demo-active", demoMode);
-
-  const csdot = document.getElementById("conn-status-dot");
-  const cstxt = document.getElementById("conn-status-text");
-  if (csdot) csdot.className = cls;
-  if (cstxt) cstxt.textContent = text;
-  _updateConnTooltip(dotClass);
 }
 
 function setStatus(cls, msg = "") {
@@ -364,19 +347,6 @@ function setStatus(cls, msg = "") {
 // Demo Mode with no token saved).
 function _resetConnIndicator() {
   _paintStatus(null, "—");
-}
-
-// Longer hover explanation for the drawer's Connection readout.
-function _updateConnTooltip(dotClass) {
-  const wrap = document.getElementById("conn-status");
-  if (!wrap) return;
-  const tips = {
-    demo: "Showing sample data. Paste a token below to connect your real hardware.",
-    ok: "Connected to your daemon.",
-    err: "Couldn't reach the daemon — check the URL and token below.",
-    spin: "Attempting to connect…",
-  };
-  wrap.title = tips[dotClass] || "";
 }
 
 

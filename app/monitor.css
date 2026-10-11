@@ -1,12 +1,13 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — monitor.css
-   § 1 Token defaults (the "Deep Space" theme; applyTheme() overrides them
-       at runtime via inline styles on :root).
+   § 1 Baseline tokens. Surfaces, borders and alpha overlays are defined ONLY
+       here and shared by every theme except Misty Metal, which overrides
+       them. Each theme in themes.js sets the palette (--bg, --cpu, --w1…) on
+       top via inline styles on :root; the palette values below are just a
+       fallback for partial custom CSS.
    § 2 Static ruleset: all component CSS, referencing those tokens.
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* ── § 1  Token defaults ────────────────────────────────────────────────── */
-/* ── Active theme — injected/overwritten by applyTheme() ── */
 /* --txt-dim is the floor for anything meant to be READ (labels, captions,
    secondary values). --txt-muted is for decorative fills only (idle dots,
    hairline-adjacent chrome) and isn't legible as text in most themes: never
@@ -72,26 +73,8 @@
     padding: 0;
 }
 
-/* ── Size scale defaults (S = 440px) — overridden by applySize() ── */
-:root {
-    --sz-lbl: 11px;
-    --sz-val: 16px;
-    --sz-unit: 10px;
-    --sz-hdr: 12px;
-    --sz-meta: 11px;
-    --sz-pct: 16px;
-    --sz-dot: 8px;
-    --sz-track: 7px;
-    --pad-card: 10px;
-    --pad-row: 3px;
-    --canvas-w: 162px;
-    --canvas-h: 92px;
-    --canvas-lh: 62px;
-    --sz-mini-lbl: 9.5px;
-    --sz-mini-val: 13px;
-    --sz-mini-w: 64px;
-    --sz-mini-bar: 16px;
-}
+/* Size-scale vars (--sz-*, --canvas-*, --dash-w …) are set at boot by
+   applySize() from SIZES in themes.js, the single source of truth. */
 
 html,
 body {
@@ -130,8 +113,8 @@ body {
     border: none;
     color: var(--txt-dim);
     opacity: 0.45;
-    width: 21px;
-    height: 21px;
+    width: 28px;
+    height: 28px;
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -155,11 +138,29 @@ body {
     color: var(--accent);
 }
 .bb-icon {
-    width: 10px;
-    height: 10px;
+    width: 13px;
+    height: 13px;
     pointer-events: none;
     flex-shrink: 0;
     display: block;
+}
+/* Status-bar buttons: the largest icons in the UI, since they are the
+   always-visible controls. */
+#sbar .bb-icon {
+    width: 16px;
+    height: 16px;
+}
+.row-menu-seg-btn .bb-icon {
+    width: 15px;
+    height: 15px;
+}
+/* Direction arrow ahead of a row label (RX / TX). */
+.sr-lbl .bb-icon {
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    margin-right: 3px;
+    vertical-align: -1px;
 }
 
 /* ── Main row: dashboard + settings drawer side by side ────────── */
@@ -198,7 +199,7 @@ body {
     flex: 1;
     flex-shrink: 0;
     overflow-y: auto;
-    padding: 9px 11px 36px; /* extra bottom pad clears sbar */
+    padding: 9px 11px 43px; /* extra bottom pad clears sbar */
 }
 .drawer-inner::-webkit-scrollbar {
     width: 3px;
@@ -234,24 +235,6 @@ body {
     min-height: 0;
 }
 
-/* ── Connection status (drawer) ───────────────────────────────
-   Mirrors the sbar's dot + text (same .sdot classes); the wrapper's title
-   attribute carries the longer explanation. Sits inline in the "Connection"
-   .grp-hdr-row, so it has no block spacing of its own. */
-.conn-status {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: none;
-    letter-spacing: normal;
-    color: var(--txt-dim);
-    cursor: default;
-}
-.conn-status .sdot {
-    flex-shrink: 0;
-}
 .field {
     margin-bottom: 11px;
 }
@@ -281,8 +264,7 @@ body {
         box-shadow 0.15s;
 }
 .field input:focus {
-    border-color: var(--bdr-accent);
-    box-shadow: 0 0 0 3px var(--bg-sel);
+    border-color: var(--accent);
 }
 /* Token field's show/hide toggle: inside the input's own box, so the field
       doesn't grow relative to the other .field inputs. */
@@ -316,7 +298,8 @@ body {
     opacity: 1;
     color: var(--txt);
 }
-/* First-run flash on the token field: a few pulses, then it settles. */
+/* Unmissable first-run cue: the token field pulses until something is typed
+   (toggled by _syncTokenFlash() in app-modes.js). */
 @keyframes token-flash {
     0%,
     100% {
@@ -329,7 +312,13 @@ body {
     }
 }
 .field input.flash-attn {
-    animation: token-flash 0.85s ease-in-out 3;
+    animation: token-flash 1.1s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+    .field input.flash-attn {
+        animation: none;
+        border-color: var(--accent);
+    }
 }
 .btn {
     border: none;
@@ -340,8 +329,6 @@ body {
     cursor: pointer;
     transition:
         opacity 0.15s,
-        box-shadow 0.15s,
-        transform 0.15s,
         background 0.15s,
         color 0.15s,
         border-color 0.15s;
@@ -353,12 +340,7 @@ body {
     margin-top: 4px;
 }
 .btn-p:hover {
-    opacity: 0.92;
-    box-shadow: 0 0 0 3px var(--bdr-accent);
-    transform: translateY(-1px);
-}
-.btn-p:active {
-    transform: translateY(0);
+    opacity: 0.85;
 }
 .btn-s {
     background: var(--bg-hover-subtle);
@@ -399,7 +381,7 @@ body {
 }
 
 /* ── Connection (drawer) ───────────────────────────────────────
-   Same bordered-container look as .tb-group. */
+   Fields are children of the Connection header (see .grp-body). */
 /* Plain vertical stack of fields, used in Connection and Demo Mode. No
       border or background: these are form fields, not a distinct sub-unit. */
 .field-stack .field {
@@ -408,19 +390,11 @@ body {
 .field-stack .field:last-child {
     margin-bottom: 0;
 }
-/* Drawer field labels sit below the section header in the hierarchy:
-   sentence case, lighter, so they don't read as a second row of headers. */
-.field-stack .field label {
-    font-size: 10.5px;
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: 0.02em;
-}
 
 /* ── Picker overlay ────────────────────────────────────────── */
 .picker-overlay {
     position: absolute;
-    inset: 0 0 25px 0;
+    inset: 0 0 32px 0;
     background: var(--bg);
     z-index: 50;
     display: flex;
@@ -592,10 +566,13 @@ body {
 }
 .row-more {
     min-width: 18px;
-    text-align: center;
-    letter-spacing: 1px;
     color: var(--txt-dim);
     border-color: var(--bhi);
+}
+.assign-badge:has(.bb-icon) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 /* Card-header "…": opens the accent-colour popover. The drag grip is on the
       left (.card-grip), so this sits alone at the right edge. */
@@ -607,8 +584,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border: 1px solid var(--bhi);
     border-radius: 3px;
     padding: 0;
@@ -616,8 +593,6 @@ body {
     cursor: pointer;
     color: var(--txt-dim);
     opacity: 0.85;
-    font-size: 11px;
-    letter-spacing: 1px;
     transition:
         opacity 0.12s,
         background 0.12s,
@@ -640,8 +615,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
     border: none;
     padding: 0;
     background: none;
@@ -701,10 +676,9 @@ body {
     border-radius: 5px;
     cursor: pointer;
     flex-shrink: 0;
-    transition: transform 0.1s;
 }
 .row-menu-color-chip:hover {
-    transform: scale(1.08);
+    border-color: var(--txt-dim);
 }
 .row-menu-color-chip input[type="color"] {
     position: absolute;
@@ -779,6 +753,9 @@ body {
 }
 .row-menu-seg-btn {
     flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     background: none;
     border: none;
     color: var(--txt-dim);
@@ -804,8 +781,8 @@ body {
     border: none;
     color: var(--txt-dim);
     cursor: pointer;
-    font-size: 13px;
-    line-height: 1;
+    display: flex;
+    align-items: center;
     padding: 0 2px;
     flex-shrink: 0;
 }
@@ -822,44 +799,11 @@ body {
    Each option is a tiny screen preview: a monitor bezel with a widget chip
    docked in that corner. Icon-only (the label is the title tooltip) and a
    single row of 4, since it's a set-and-forget preference. */
-.anchor-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 5px;
-    margin-bottom: 12px;
-}
-.anchor-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 7px 0;
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs);
-    background: var(--bg-hover-subtle);
-    cursor: pointer;
-    transition:
-        border-color 0.15s,
-        background 0.15s,
-        transform 0.15s;
-}
-.anchor-btn:hover {
-    background: var(--bg-hover);
-    border-color: var(--bhi);
-    transform: translateY(-1px);
-}
-.anchor-btn:active {
-    transform: translateY(0);
-}
-.anchor-btn.active {
-    border-color: var(--accent);
-    background: var(--bg-sel);
-    box-shadow: 0 0 0 1px var(--bdr-accent);
-}
 /* Monitor bezel */
 .anchor-icon {
     position: relative;
-    width: 28px;
-    height: 18px;
+    width: 22px;
+    height: 14px;
     border: 1.5px solid var(--bhi);
     border-radius: 3px;
     background: var(--bg-canvas);
@@ -871,8 +815,8 @@ body {
 /* Widget chip docked at the represented corner */
 .anchor-dot {
     position: absolute;
-    width: 10px;
-    height: 7px;
+    width: 8px;
+    height: 5px;
     border-radius: 1.5px;
     background: var(--txt-dim);
     opacity: 0.55;
@@ -887,7 +831,6 @@ body {
 .anchor-btn.active .anchor-dot {
     background: var(--accent);
     opacity: 1;
-    box-shadow: 0 0 5px var(--bdr-accent);
 }
 .anchor-dot.tl {
     top: 2px;
@@ -910,101 +853,37 @@ body {
     display: none;
 }
 
-/* ── Startup / boot screen ─────────────────────────────────────── */
+/* ── Boot screen ───────────────────────────────────────────────
+   Covers the whole window until the first layout has settled (see
+   hideBootScreen() in app-modes.js), so the native resize is never seen. */
 
 #boot-screen {
     position: absolute;
     inset: 0;
     z-index: 1000;
-
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-
-    background:
-        radial-gradient(
-            circle at 50% 38%,
-            var(--bg-hover-subtle),
-            transparent 62%
-        ),
-        var(--bg);
+    background: var(--bg);
     color: var(--txt);
-
-    opacity: 1;
-    visibility: visible;
-
-    will-change: opacity;
-    transform: translateZ(0);
-
     transition:
         opacity 0.45s ease,
         visibility 0.45s ease;
 }
-
-/* Slow ambient wash of accent colour behind the mark. */
-#boot-screen::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: radial-gradient(
-        circle at 50% 32%,
-        var(--accent),
-        transparent 45%
-    );
-    opacity: 0.05;
-    animation: boot-ambient 3.6s ease-in-out infinite;
-    pointer-events: none;
-}
-
-@keyframes boot-ambient {
-    0%,
-    100% {
-        opacity: 0.04;
-    }
-    50% {
-        opacity: 0.09;
-    }
-}
-
 #boot-screen.hide {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
 }
 
-.boot-inner {
-    width: 230px;
-
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-
-    animation: boot-inner-in 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-}
-
-@keyframes boot-inner-in {
-    from {
-        opacity: 0;
-        transform: translateY(5px) scale(0.98);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-/* ── Small CC Widget mark ─────────────────────────────────────── */
-
+/* Mark: static bezel, spinning comet-trail ring, steady core. */
 .boot-mark {
     position: relative;
-
     width: 46px;
     height: 46px;
-
     margin-bottom: 14px;
 }
-
-/* Static outer bezel for the spinning ring. */
 .boot-mark::before {
     content: "";
     position: absolute;
@@ -1012,12 +891,9 @@ body {
     border: 1px solid var(--bdr);
     border-radius: 50%;
 }
-
-/* Soft comet trail instead of a hard single-colour arc. */
 .boot-mark-ring {
     position: absolute;
     inset: 3px;
-
     border-radius: 50%;
     background: conic-gradient(
         from 0deg,
@@ -1035,208 +911,32 @@ body {
         transparent calc(100% - 2px),
         #000 calc(100% - 2px)
     );
-
-    filter: drop-shadow(0 0 3px var(--accent));
     animation: boot-spin 1.3s linear infinite;
 }
-
 .boot-mark-core {
     position: absolute;
     inset: 15px;
-
     border-radius: 50%;
     background: var(--accent);
-    filter: drop-shadow(0 0 5px var(--accent));
-
-    animation: boot-pulse 1.6s ease-in-out infinite;
 }
-
 @keyframes boot-spin {
     to {
         transform: rotate(360deg);
     }
 }
 
-@keyframes boot-pulse {
-    0%,
-    100% {
-        opacity: 0.5;
-        transform: scale(0.82);
-    }
-
-    50% {
-        opacity: 1;
-        transform: scale(1);
-    }
-}
-
-/* ── Boot heading ──────────────────────────────────────────────── */
-
 .boot-brand {
     font-family: var(--font-num);
     font-size: 16px;
     letter-spacing: 0.16em;
-    color: var(--txt);
 }
-
 .boot-state {
     margin-top: 3px;
-
     font-family: var(--font-code);
     font-size: 9px;
     font-weight: 600;
     letter-spacing: 0.12em;
-
     color: var(--txt-dim);
-}
-
-/* ── Progress bar ─────────────────────────────────────────────── */
-/* Steady fill between the checklist's discrete steps, so the screen never
-      looks stalled. */
-
-.boot-progress {
-    width: 100%;
-    height: 2px;
-    margin-top: 13px;
-
-    background: var(--bdr);
-    border-radius: 2px;
-    overflow: hidden;
-}
-
-.boot-progress-fill {
-    height: 100%;
-    width: 4%;
-
-    background: linear-gradient(90deg, var(--accent), var(--gpu));
-    border-radius: 2px;
-    filter: drop-shadow(0 0 3px var(--accent));
-
-    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* ── Startup checklist ────────────────────────────────────────── */
-
-.boot-steps {
-    width: 100%;
-    margin-top: 20px;
-
-    display: flex;
-    flex-direction: column;
-    gap: 7px;
-}
-
-/* Idle/active/done read as one consistent hierarchy: --txt-dim throughout
-   (never the near-invisible --txt-muted, which is reserved for decorative
-   fills, not text), with idle steps dimmed further by opacity alone. The
-   mark's border/fill just inherits via currentColor, so the two can never
-   drift out of sync. */
-.boot-step {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    font-size: 10.5px;
-    color: var(--txt-dim);
-    opacity: 0.5;
-
-    transition:
-        color 0.18s ease,
-        opacity 0.18s ease;
-}
-
-.boot-step-mark {
-    position: relative;
-
-    width: 7px;
-    height: 7px;
-
-    flex-shrink: 0;
-
-    border: 1px solid currentColor;
-    border-radius: 50%;
-
-    transition:
-        border-color 0.18s ease,
-        background 0.18s ease,
-        transform 0.18s ease;
-}
-
-/* Active step */
-
-.boot-step.active {
-    color: var(--txt-dim);
-    opacity: 1;
-}
-
-.boot-step.active .boot-step-mark {
-    border-color: var(--accent);
-    background: var(--accent);
-    box-shadow: 0 0 0 3px var(--bg-hover-subtle);
-}
-
-/* Completed step */
-
-.boot-step.done {
-    color: var(--txt);
-    opacity: 1;
-}
-
-.boot-step.done .boot-step-mark {
-    border-color: var(--accent);
-    background: var(--accent);
-    animation: boot-step-pop 0.3s ease;
-}
-
-@keyframes boot-step-pop {
-    0% {
-        transform: scale(0.7);
-    }
-    60% {
-        transform: scale(1.2);
-    }
-    100% {
-        transform: scale(1);
-    }
-}
-
-.boot-step.done .boot-step-mark::after {
-    content: "";
-
-    position: absolute;
-
-    width: 3px;
-    height: 5px;
-
-    left: 1px;
-    top: -1px;
-
-    border-right: 1px solid var(--bg);
-    border-bottom: 1px solid var(--bg);
-
-    transform: rotate(45deg);
-}
-
-/* ── Footer ───────────────────────────────────────────────────── */
-
-.boot-footer {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-
-    margin-top: 23px;
-
-    font-family: var(--font-code);
-    font-size: 8px;
-    letter-spacing: 0.08em;
-
-    color: var(--txt-dim);
-    opacity: 0.6;
-}
-
-.boot-footer-dot {
-    color: var(--txt-dim);
-    opacity: 0.6;
 }
 
 /* ── Bar-top mode ─────────────────────────────────────────────
@@ -1250,62 +950,62 @@ body {
 
 /* ── Theme screen ──────────────────────────────────────────── */
 /* Three-tier header hierarchy for the settings drawer:
-   .zone-hdr   top-level zones (Appearance, System, Advanced). A coarse
-               grouping label: larger, accent-coloured, styled as the
-               header bar of its .zone-group box (like .card-hdr).
-   .zone-group the bordered box holding a zone's sections.
-   .grp-hdr    named sections within a zone (Size, Theme, Connection, …).
-               Small dim eyebrow; Connection, Demo Mode and First Launch are
-               collapsible (.grp-details / .grp-hdr-toggle).
-   .sub-hdr    sub-groups nested inside one .grp-hdr (e.g. the Theme Editor's
-               clusters). Dimmer, no rule: clearly subordinate. */
+   H1  .zone-hdr  a zone (Appearance, System, Dev): accent colour, ruled,
+                  same type as a card title.
+   H2  .grp-hdr   a section inside a zone (Theme, Connection, Save & Share):
+                  small bold caps in the primary text colour.
+   H3  .row-lbl   the label of one row or field (Size, Daemon URL, Theme):
+       (+ field   sentence case, regular weight, dim.
+       labels)
+   .sub-hdr       clusters nested inside the Theme Editor: dimmer still. */
 .zone-hdr {
-    display: flex;
-    align-items: center;
-    gap: 6px;
     font-size: var(--sz-hdr);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.07em;
     color: var(--accent);
     margin: 22px 0 0;
-    padding: 6px 9px;
-    background: var(--bg-card-hdr);
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs) var(--rs) 0 0;
-}
-.zone-hdr::before {
-    content: "";
-    width: 3px;
-    height: 12px;
-    border-radius: 2px;
-    background: currentColor;
-    flex-shrink: 0;
+    padding: 2px 0 4px;
+    border-bottom: 1px solid var(--bdr);
 }
 .zone-hdr:first-child {
     margin-top: 3px;
 }
-/* The zone label is the top edge of its box (same look as .card-hdr), so
-   the group sits flush beneath it and shares one seam. */
 .zone-group {
-    border: 1px solid var(--bdr);
-    border-top: none;
-    border-radius: 0 0 var(--rs) var(--rs);
-    overflow: hidden;
-    padding: 10px;
+    padding: 10px 0 0;
 }
-/* Sections within a zone: small dim eyebrow label, no bar or rule. */
 .grp-hdr {
-    font-size: 10.5px;
+    font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.09em;
-    color: var(--txt-dim);
-    margin: 16px 0 8px;
+    color: var(--txt);
+    margin: 20px 0 9px;
 }
-.zone-group > .grp-hdr:first-child,
-.zone-group > .grp-details:first-child > .grp-hdr {
+/* Appearance opens with a ~26px control strip that vertically centres its
+   label, which pushes that label ~7px below the rule. System and Dev open
+   with a bare header, so give it the same offset to match. */
+.zone-group > .grp-hdr:first-child {
+    margin-top: 7px;
+}
+/* Children of a section header on its own line (Connection's fields, Save &
+   Share's rows): indented so they read as belonging to the header above. */
+.grp-body {
+    margin-left: 2px;
+    padding-left: 10px;
+    border-left: 1px solid var(--bdr);
+}
+/* A button straight under a section header: the header's own margin is enough. */
+.grp-hdr + .btn {
     margin-top: 0;
+}
+.row-lbl,
+.field-stack .field label {
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: 0.02em;
+    color: var(--txt-dim);
 }
 /* Header variant with small icon-button actions on the right (Theme's
       Shuffle/Cycle toggles). */
@@ -1314,73 +1014,18 @@ body {
     align-items: center;
     justify-content: space-between;
 }
-/* Collapsible sections (Connection, Backup, Reset, Demo Mode, First Launch):
-   a <details>/<summary> whose summary looks exactly like a plain .grp-hdr,
-   plus a click target and arrow. */
-.grp-details > .grp-hdr-toggle {
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-}
-.grp-details > .grp-hdr-toggle::-webkit-details-marker {
-    display: none;
-}
-.grp-hdr-arrow {
-    width: 11px;
-    height: 11px;
-    color: var(--txt-dim);
-    flex-shrink: 0;
-    transition: transform 0.15s;
-}
-.grp-details[open] > .grp-hdr-toggle .grp-hdr-arrow {
-    transform: rotate(180deg);
-}
-.grp-hdr-toggle:hover .grp-hdr-arrow {
-    color: var(--txt);
-}
 .grp-hdr-actions {
     display: flex;
     gap: 2px;
     margin-left: 8px;
-}
-/* Groups a header's title with inline meta content (currently just
-   Connection's status dot+text) so they move together as one flex
-   item, leaving the caret as the only thing pinned to the far right —
-   keeps "Live" readable right after the label instead of stranded
-   next to the arrow with nothing tying it to what it's reporting on. */
-.grp-hdr-title-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-.grp-hdr-divider {
-    color: var(--txt-dim);
-    opacity: 0.45;
-    font-weight: 400;
-}
-/* Short dim descriptor next to a collapsed section's title (Demo
-   Mode's "Fake data preview", First Launch's "Resets token only") —
-   same job as Connection's live status text: a hint at what's inside
-   without needing to open it. Truncates rather than wraps if a title
-   and its hint don't both fit at once. */
-.grp-hdr-hint {
-    color: var(--txt-dim);
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: normal;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
 }
 .grp-hdr-icon-btn {
     background: none;
     border: none;
     color: var(--txt-dim);
     opacity: 0.55;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 4px;
     cursor: pointer;
     display: flex;
@@ -1404,8 +1049,8 @@ body {
     background: var(--bg-sel);
 }
 .grp-hdr-icon-btn svg {
-    width: 12px;
-    height: 12px;
+    width: 15px;
+    height: 15px;
     pointer-events: none;
 }
 .sub-hdr {
@@ -1426,141 +1071,171 @@ body {
     color: var(--txt-dim);
     opacity: 0.7;
 }
-.size-seg {
+/* Segmented controls (Size, Position): one bordered strip, equal segments,
+   a tinted fill on the active one. One per .ctl-row: label left, strip right. */
+.ctl-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.ctl-row + .ctl-row {
+    margin-top: 10px;
+}
+.ctl-row .grp-hdr {
+    margin: 0; /* Size / Position are sections too, just laid out inline */
+}
+.ctl-row .size-seg,
+.ctl-row .anchor-grid {
+    width: 176px; /* both strips share one width so their edges line up */
+    flex-shrink: 0;
+}
+.size-seg,
+.anchor-grid {
     display: flex;
     border: 1px solid var(--bdr);
     border-radius: var(--rs);
     overflow: hidden;
-    width: 100%;
 }
-.size-btn {
+.size-btn,
+.anchor-btn {
     flex: 1;
-    background: var(--bg-hover-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    background: none;
     border: none;
     border-right: 1px solid var(--bdr);
     color: var(--txt-dim);
+    font-family: var(--font-ui);
     font-size: 12px;
     font-weight: 700;
-    height: 30px;
+    letter-spacing: 0.04em;
     cursor: pointer;
     transition:
         background 0.15s,
-        color 0.15s,
-        box-shadow 0.15s;
-    font-family: var(--font-ui);
-    letter-spacing: 0.04em;
+        color 0.15s;
 }
-.size-btn:last-child {
+.size-btn .bb-icon {
+    width: 16px;
+    height: 16px;
+}
+.size-btn:last-child,
+.anchor-btn:last-child {
     border-right: none;
 }
-.size-btn:hover {
-    background: var(--bg-hover);
+.size-btn:hover,
+.anchor-btn:hover {
+    background: var(--bg-hover-subtle);
     color: var(--txt);
 }
-.size-btn.active {
+.size-btn.active,
+.anchor-btn.active {
     background: var(--bg-sel);
     color: var(--accent);
     box-shadow: inset 0 0 0 1px var(--bdr-accent);
 }
+/* Theme picker: one row per theme, name left and palette swatches right.
+   Idle rows are bare; only hover and the active row get a fill. */
 .theme-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 7px;
+    display: flex;
+    flex-direction: column;
     margin-bottom: 12px;
 }
 .theme-tile {
-    padding: 10px 11px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 5px 8px;
     border-radius: var(--rs);
     cursor: pointer;
-    border: 1px solid var(--bdr);
-    background: var(--bg-hover-subtle);
-    transition:
-        border-color 0.15s,
-        background 0.15s,
-        box-shadow 0.15s,
-        transform 0.15s;
+    transition: background 0.15s;
 }
 .theme-tile:hover {
-    border-color: var(--bhi);
-    background: var(--bg-input);
-    transform: translateY(-1px);
-}
-.theme-tile:active {
-    transform: translateY(0);
+    background: var(--bg-hover-subtle);
 }
 .theme-tile.active {
-    border-color: var(--accent);
     background: var(--bg-sel);
-    box-shadow: 0 0 0 1px var(--bdr-accent);
+    box-shadow: inset 0 0 0 1px var(--bdr-accent);
+}
+.theme-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--txt-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.theme-tile:hover .theme-name,
+.theme-tile.active .theme-name {
+    color: var(--txt);
 }
 .theme-swatches {
     display: flex;
-    gap: 3px;
-    margin-bottom: 7px;
-}
-.swatch {
-    flex: 1;
-    height: 9px;
-    border-radius: 2px;
+    gap: 2px;
     flex-shrink: 0;
 }
-.theme-name {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--txt);
+.swatch {
+    width: 12px;
+    height: 8px;
+    border-radius: 2px;
+    box-shadow: inset 0 0 0 1px var(--bdr); /* keeps the dark bg chip visible */
 }
 .theme-tile-custom {
-    border-style: dashed;
+    outline: 1px dashed var(--bdr);
+    outline-offset: -1px;
 }
-.theme-tile-custom .theme-swatches-custom {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 9px;
-    margin-bottom: 4px;
+.theme-tile-custom .theme-swatches {
     color: var(--txt-dim);
 }
-.theme-tile-custom.active .theme-swatches-custom {
+.theme-tile-custom.active .theme-swatches {
     color: var(--accent);
 }
-.tile-custom-icon {
-    font-size: 11px;
-    line-height: 1;
+.theme-tile-custom .bb-icon {
+    width: 13px;
+    height: 13px;
 }
 
-/* ── Theme Builder groups ─────────────────────────────────────
-   Background & Chrome, Warning Ramp and Share Theme sit under one "Theme
-   Editor" .grp-hdr. Each one's header is the top edge of its own box. */
-/* Folded into Theme: rendered only while Custom is the active tile. Scoped
-      to #theme-editor-inline since there's no generic .hide rule. */
+/* ── Custom theme row ─────────────────────────────────────────
+   The Custom row and the theme editor share one wrapper. While Custom is
+   active the wrapper takes the active-row fill and outline, so the row
+   reads as expanding into the editor. */
+.theme-custom {
+    margin-top: 4px;
+    border-radius: var(--rs);
+}
+.theme-custom:has(.theme-tile-custom.active) {
+    background: var(--bg-sel);
+    box-shadow: inset 0 0 0 1px var(--bdr-accent);
+}
+.theme-custom .theme-tile-custom {
+    margin-top: 0;
+}
+.theme-custom .theme-tile-custom.active {
+    background: none;
+    box-shadow: none;
+    outline: none;
+}
+/* The editor: the body of the Custom row. Rendered only while Custom is the
+   active tile (scoped to the id, since there's no generic .hide rule). */
+#theme-editor-inline {
+    padding: 0 10px 10px;
+}
 #theme-editor-inline.hide {
     display: none;
 }
+/* Background & Chrome / Warning Ramp: plain labelled clusters, no boxes. */
 .tb-group-hdr {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin: 10px 0 0;
-    padding: 7px 9px;
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs) var(--rs) 0 0;
-    border-bottom: none;
-    background: var(--bg-hover-subtle);
+    margin: 12px 0 6px;
 }
-/* The box below sits flush against its header, sharing one seam. */
-.tb-group-hdr + .tb-group {
-    margin-top: -1px;
-    border-radius: 0 0 var(--rs) var(--rs);
-}
-.tb-group {
-    border: 1px solid var(--bdr);
-    border-radius: var(--rs);
-    background: var(--bg-hover-subtle);
-    padding: 9px;
-    margin-bottom: 10px;
-}
-.tb-group:last-child {
-    margin-bottom: 0;
+.tb-group-hdr:first-child {
+    margin-top: 4px;
 }
 .tb-row {
     display: flex;
@@ -1578,11 +1253,10 @@ body {
     border: 1px solid var(--bhi);
     flex-shrink: 0;
     cursor: pointer;
-    transition: transform 0.1s;
     position: relative;
 }
 .tb-swatch:hover {
-    transform: scale(1.15);
+    border-color: var(--txt-dim);
 }
 .tb-swatch input[type="color"] {
     position: absolute;
@@ -1610,7 +1284,7 @@ body {
 }
 /* Neutral pill on the Background row: a hover target explaining the
       contrast badges. */
-.tb-wcag-pill {
+.tb-contrast-pill {
     font-family: var(--font-code);
     font-size: 8.5px;
     font-weight: 700;
@@ -1623,7 +1297,7 @@ body {
     cursor: help;
     flex-shrink: 0;
 }
-/* WCAG contrast badge — live ratio of a text colour against --bg */
+/* Contrast badge: live ratio of a text colour against --bg */
 .tb-contrast {
     font-family: var(--font-code);
     font-size: 9px;
@@ -1702,10 +1376,9 @@ body {
     border: 1px solid var(--bhi);
     cursor: pointer;
     position: relative;
-    transition: transform 0.1s;
 }
 .tb-warn-pip:hover {
-    transform: scaleY(1.08);
+    border-color: var(--txt-dim);
 }
 .tb-warn-pip input[type="color"] {
     position: absolute;
@@ -1748,69 +1421,37 @@ body {
 }
 #custom-css:focus {
     border-color: var(--bdr-accent);
-    box-shadow: 0 0 0 3px var(--bg-sel);
     color: var(--txt);
 }
-.tb-group-css .btn-p {
+/* ── Save & Share ─────────────────────────────────────────────
+   Two parallel rows: Theme (styling as text) and Everything (whole setup as
+   a file). Label left, button pair right, same width as the Size strip. */
+.data-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.data-row .btn-row {
+    width: 176px;
+    flex-shrink: 0;
+}
+.data-row + .data-row,
+.data-paste + .data-row {
     margin-top: 8px;
 }
-
-/* ── Share Theme (collapsible) ────────────────────────────────
-   Native <details>/<summary>; the summary uses the .tb-group-hdr chip look
-   and joins the body into one box while open. */
-.tb-share {
-    margin-bottom: 4px;
+.data-paste {
+    margin-top: 8px;
 }
-/* Adds to .tb-group-hdr only what differs here: it's clickable, and closed
-   it has no box below, so it needs full borders and all four corners. */
-.tb-share-summary {
-    cursor: pointer;
-    list-style: none;
-    user-select: none;
-    border-radius: var(--rs);
-    border-bottom: 1px solid var(--bdr);
-    padding-bottom: 7px;
-    transition:
-        background 0.12s,
-        border-color 0.12s;
-}
-.tb-share-summary:hover {
-    background: var(--bg-hover);
-    border-color: var(--bhi);
-}
-.tb-share-summary::-webkit-details-marker {
+.data-paste.hide {
     display: none;
 }
-.tb-share[open] .tb-share-summary {
-    border-radius: var(--rs) var(--rs) 0 0;
-    border-bottom: none;
-    padding-bottom: 8px; /* compensate the dropped 1px border so height holds steady */
-}
-.tb-share-arrow {
-    width: 11px;
-    height: 11px;
-    color: var(--txt-dim);
-    flex-shrink: 0;
-    transition: transform 0.15s;
-}
-.tb-share[open] .tb-share-arrow {
-    transform: rotate(180deg);
-}
-.tb-share-hint {
-    font-size: 10.5px;
-    color: var(--txt-dim);
-    line-height: 1.5;
-    margin-bottom: 8px;
-}
-.tb-share-btns {
-    display: flex;
-    gap: 6px;
+.data-paste .btn-p {
     margin-top: 8px;
 }
-.tb-share-btns .btn {
-    flex: 1;
-    width: auto;
-    margin-top: 0;
+/* Standalone at the bottom of the System zone, not part of Save & Share. */
+.data-reset {
+    margin-top: 24px;
 }
 
 /* ── Generic text-input modal (replaces native prompt()) ──────
@@ -1875,13 +1516,17 @@ body {
     border-bottom: 1px solid var(--bdr);
     background: var(--bg-card-hdr);
 }
+/* Alert marker on the header's left edge: absent unless a threshold trips
+   (see .hdr-warm / .hdr-hot below). */
 .card-hdr::before {
     content: "";
+    display: none;
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
     width: 3px;
-    height: 13px;
-    border-radius: 2px;
     background: currentColor;
-    flex-shrink: 0;
 }
 .card-hdr.cpu {
     color: var(--cpu);
@@ -1901,15 +1546,16 @@ body {
 .card-hdr.net {
     color: var(--net);
 }
-/* Header alert bar: moderate levels pulse in the card's own accent colour;
-      high swaps to danger red and pulses faster. Levels 1–3 stay silent. */
+/* Header alert marker: warm shows it in the card's own accent colour, hot
+   swaps to danger red. Levels 1–3 stay silent. */
 .card-hdr.hdr-warm::before {
-    animation: pulse 1.6s infinite;
+    display: block;
 }
 .card-hdr.hdr-hot::before {
+    display: block;
     background: var(--w5);
-    animation: pulse 0.9s infinite;
 }
+
 .card-grip {
     order: -1;
     display: flex;
@@ -1939,8 +1585,8 @@ body {
     cursor: grabbing;
 }
 .card-grip svg {
-    width: 10px;
-    height: 14px;
+    width: 12px;
+    height: 16px;
     pointer-events: none;
 }
 .card.dragging {
@@ -2041,8 +1687,8 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 14px;
-    height: 18px;
+    width: 16px;
+    height: 20px;
     flex-shrink: 0;
     border-radius: 3px;
     border: none;
@@ -2065,8 +1711,8 @@ body {
     cursor: grabbing;
 }
 .row-grip svg {
-    width: 8px;
-    height: 12px;
+    width: 10px;
+    height: 14px;
     pointer-events: none;
 }
 .sr.dragging {
@@ -2153,11 +1799,13 @@ body {
     border-radius: 4px;
     transition: background 0.1s;
 }
-.sr:hover {
-    background: var(--bg-hover-subtle);
+/* Stripe = this row's sparkline key (solid / dashed / dotted). Cards without
+   a graph have nothing to key, so no stripe. */
+.card-rows-full .sr-accent {
+    display: none;
 }
 .sr-accent {
-    width: 3px;
+    width: 2px;
     border-radius: 2px;
     align-self: stretch;
     flex-shrink: 0;
@@ -2263,8 +1911,8 @@ body {
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 0 3px 0 9px;
-    height: 25px;
+    padding: 0 4px 0 11px;
+    height: 32px;
     border-top: 1px solid var(--bdr);
     background: var(--bg-bar);
     font-size: var(--sz-meta);
@@ -2278,8 +1926,8 @@ body {
     -webkit-app-region: drag;
 }
 .sdot {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--txt-muted);
     flex-shrink: 0;
@@ -2292,7 +1940,6 @@ body {
 }
 .sdot.spin {
     background: var(--fan);
-    animation: pulse 1s infinite;
 }
 .sdot.demo {
     background: var(--net);
@@ -2314,13 +1961,4 @@ body {
     gap: 0;
     margin-left: auto;
     -webkit-app-region: no-drag;
-}
-@keyframes pulse {
-    0%,
-    100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.3;
-    }
 }

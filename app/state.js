@@ -94,8 +94,6 @@ function dutyLevel(duty) {
 //  STATE
 // ═══════════════════════════════════════════════════════════════
 // Optional build-time overrides for the connection settings.
-const HC_URL = "";
-const HC_TOKEN = "";
 
 let cfg = {
   baseUrl: "http://localhost:11987",
@@ -116,8 +114,6 @@ let cfg = {
   cardLabels: {},
   cardMini: {},
   anchorCorner: null,
-  demoScenario: "normal",
-  themeCycling: false,
   themeShuffleOnBoot: false,
 };
 let phase = "setup"; // setup → connecting → dashboard
@@ -146,10 +142,7 @@ let deviceMeta = {};
 let demoMode = false;
 let demoTimer = null;
 let demoCurves = null;
-let demoScenario = "normal"; // synced from cfg.demoScenario after loadCfg()
-let themeCycling = false;
-let themeCycleTimer = null;
-const THEME_CYCLE_MS = 6000;
+let demoScenario = "normal"; // dev.js can switch it
 
 function _fmtUptime(ms) {
   const s = Math.floor(ms / 1000);
@@ -177,9 +170,10 @@ function loadCfg() {
   try {
     Object.assign(cfg, JSON.parse(localStorage.getItem("ccm") || "{}"));
   } catch {}
-  if (HC_URL) cfg.baseUrl = HC_URL;
-  if (HC_TOKEN) cfg.token = HC_TOKEN;
 }
+// Calls window.dev[name] if the optional, gitignored dev.js defined it.
+const _dev = (name, ...args) => window.dev?.[name]?.(...args);
+
 function saveCfg() {
   localStorage.setItem("ccm", JSON.stringify(cfg));
 }
@@ -269,8 +263,8 @@ function withAlpha(color, a) {
   return `rgba(128,128,128,${a})`;
 }
 
-// WCAG 2.x contrast ratio between two #rrggbb colours: 1 (none) to 21.
-function wcagContrast(hex1, hex2) {
+// Contrast ratio between two #rrggbb colours: 1 (none) to 21.
+function contrastRatio(hex1, hex2) {
   const relLuminance = ([r, g, b]) => {
     const f = (c) => {
       c /= 255;
@@ -375,6 +369,24 @@ const _ICON_CHEVRON_ALL_DOWN = _svgIcon(1.5, `<polyline points="2,2.5 6,5.5 10,2
 const _EYE_PATH = `<path d="M1 6c1.4-2.6 3.2-3.9 5-3.9s3.6 1.3 5 3.9c-1.4 2.6-3.2 3.9-5 3.9S2.4 8.6 1 6z"/><circle cx="6" cy="6" r="1.4"/>`;
 const _ICON_EYE = _svgIcon(1.3, _EYE_PATH);
 const _ICON_EYE_OFF = _svgIcon(1.3, _EYE_PATH + `<line x1="1.3" y1="1.3" x2="10.7" y2="10.7"/>`);
+// Overflow / close / edit, plus the row-style and network-direction glyphs
+// that used to be Unicode characters (which fall back to a different font in
+// every theme). All share _svgIcon's 12×12 stroke style.
+const _DOT = (cx, extra = "") =>
+  `<circle cx="${cx}" cy="6" r="1.25" ${extra}/>`;
+const _ICON_MORE = _svgIcon(
+  1.5,
+  [2, 6, 10].map((x) => _DOT(x, 'fill="currentColor" stroke="none"')).join(""),
+);
+const _ICON_CLOSE = _svgIcon(1.75, `<line x1="2.5" y1="2.5" x2="9.5" y2="9.5"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/>`);
+const _ICON_PENCIL = _svgIcon(1.5, `<path d="M9 1.5l1.5 1.5-7 7L1 11l1-2.5 7-7z"/><line x1="8" y1="2.5" x2="9.5" y2="4"/>`);
+const _ICON_ARROW_DOWN = _svgIcon(1.5, `<line x1="6" y1="2" x2="6" y2="10"/><polyline points="3,7 6,10 9,7"/>`);
+const _ICON_ARROW_UP = _svgIcon(1.5, `<line x1="6" y1="10" x2="6" y2="2"/><polyline points="3,5 6,2 9,5"/>`);
+// Row display styles: bar / filled dots / hollow dots / number only.
+const _ICON_STYLE_BAR = _svgIcon(1.25, `<rect x="1" y="4.25" width="10" height="3.5" rx="1.75"/><rect x="1" y="4.25" width="5.5" height="3.5" rx="1.75" fill="currentColor"/>`);
+const _ICON_STYLE_DOTS_WARN = _svgIcon(1.25, [2.5, 6, 9.5].map((x) => `<circle cx="${x}" cy="6" r="1.5" fill="currentColor"/>`).join(""));
+const _ICON_STYLE_DOTS_METER = _svgIcon(1.25, [2.5, 6, 9.5].map((x) => `<circle cx="${x}" cy="6" r="1.5"/>`).join(""));
+const _ICON_STYLE_NUM = _svgIcon(1.25, `<line x1="4.5" y1="1.5" x2="3.5" y2="10.5"/><line x1="8.5" y1="1.5" x2="7.5" y2="10.5"/><line x1="1.5" y1="4.5" x2="10.5" y2="4.5"/><line x1="1.5" y1="7.5" x2="10.5" y2="7.5"/>`);
 // Six-dot drag grip, shared by card and row reordering.
 const _ICON_GRIP = `<svg viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.3"/><circle cx="8" cy="2" r="1.3"/><circle cx="2" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="2" cy="14" r="1.3"/><circle cx="8" cy="14" r="1.3"/></svg>`;
 
@@ -613,7 +625,7 @@ function setConfigOpen(open) {
       document.getElementById("tc-url").value = cfg.baseUrl;
       document.getElementById("tc-tok").value = cfg.token;
     }
-    _updateDemoButtons();
+    _dev("demoChanged");
   }
   requestAnimationFrame(() => autoResize());
 }

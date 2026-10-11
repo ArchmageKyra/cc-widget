@@ -87,8 +87,8 @@ const CARD_DEFS = [
     cls: "net",
     type: "spark",
     rows: [
-      { sid: "lnx_net_rx", lbl: "↓ RX", autoLinux: true, sparkKey: "temp", dynamicNorm: true },
-      { sid: "lnx_net_tx", lbl: "↑ TX", autoLinux: true, sparkKey: "load", dynamicNorm: true },
+      { sid: "lnx_net_rx", lbl: "RX", icon: _ICON_ARROW_DOWN, autoLinux: true, sparkKey: "temp", dynamicNorm: true },
+      { sid: "lnx_net_tx", lbl: "TX", icon: _ICON_ARROW_UP, autoLinux: true, sparkKey: "load", dynamicNorm: true },
     ],
   },
   {
@@ -144,7 +144,7 @@ function _buildSrRow(row, accentColor, dashStyle = "solid") {
   // Order: [accent] [lbl flex:1] [val] [unit] [dots]
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(accentColor, dashStyle)}"></span>
-<span class="sr-lbl">${esc(row.lbl)}</span>
+<span class="sr-lbl">${row.icon ?? ""}${esc(row.lbl)}</span>
 <span class="sr-val" id="sv-${row.sid}">--</span>
 <span class="sr-unit">${unit}</span>
 ${showDots ? `<span id="sd-${row.sid}">${_rowDots(row, 0)}</span>` : ""}`;
@@ -157,7 +157,7 @@ function _buildBarRow(row, baseColor, dashStyle = "solid") {
   srow.dataset.sub = "--";
   srow.innerHTML = `
 <span class="sr-accent" style="background:${_accentBg(baseColor, dashStyle)}"></span>
-<span class="sr-lbl" id="bl-${row.sid}">${esc(row.lbl)}</span>
+<span class="sr-lbl" id="bl-${row.sid}">${row.icon ?? ""}${esc(row.lbl)}</span>
 ${row.usedSid || row.totalSid ? `<span class="br-sub" id="bv-${row.sid}" aria-hidden="true">--</span>` : ""}
 <span class="br-pct-num" id="bp-${row.sid}">--</span><span class="br-pct-unit">%</span>
 <div class="br-track"><div class="br-fill" id="bf-${row.sid}" style="width:0%;background:${baseColor}"></div></div>`;
@@ -213,8 +213,8 @@ function setPeakEnabled(cardId, on) {
   }
 }
 
-// Header alert pulse (hdr-warm/hdr-hot). Off keeps the plain accent bar but
-// never flashes. Applies to every card with a warn-mode row.
+// Header alert marker (hdr-warm/hdr-hot). Off means the header never shows
+// one. Applies to every card with a warn-mode row.
 const isCardAlertEnabled = (cardId) => !cfg.cardAlertOff?.[cardId];
 function setCardAlertEnabled(cardId, on) {
   _setCardFlag("cardAlertOff", cardId, !on);
@@ -565,7 +565,7 @@ function _cardMenuItems(def) {
       toggle(
         isCardAlertEnabled,
         setCardAlertEnabled,
-        { label: "Alert flash", title: "Pulse the header when a reading gets bad" },
+        { label: "Header alert", title: "Mark the header when a reading gets bad" },
         { label: "No flash", title: "Keep the header still no matter how bad a reading gets" },
       ),
     );
@@ -601,7 +601,7 @@ function _buildCardHeader(card, def, { hidden, mini }) {
         : ""
     }${
       editMode && !hidden
-        ? '<button class="card-more" title="Card options" type="button">⋯</button>'
+        ? `<button class="card-more" title="Card options" type="button">${_ICON_MORE}</button>`
         : ""
     }${
       !editMode && !hidden
@@ -651,7 +651,7 @@ function _buildDiskRows(body, cardColor, linuxLat) {
     if (editMode) {
       const hideBtn = el("button", "slot-clr");
       hideBtn.title = `Hide ${mount}`;
-      hideBtn.textContent = "×";
+      hideBtn.innerHTML = _ICON_CLOSE;
       hideBtn.onclick = (e) => {
         e.stopPropagation();
         cfg.hiddenMounts ??= [];

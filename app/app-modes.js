@@ -1,87 +1,37 @@
 /* ════════════════════════════════════════════════════════════════════════════
    Theia monitor — app-modes.js
-   Screens and modes layered on the dashboard: boot sequence, reset/import/
-   export, Demo Mode, the theme builder, and theme cycling/shuffle. Ends with
-   the boot IIFE, so this file must load LAST (boot() calls into every other file).
+   Everything layered on top of the dashboard, plus the app entry point.
+   Sections, in file order:
+     1. BOOT SCREEN          — splash overlay until the first layout settles
+     2. RESET / IMPORT / EXPORT
+     3. DEMO MODE            — fake CC + Linux data (also the first-launch view)
+     4. THEME BUILDER        — colour pickers that write :root CSS live
+     5. THEME SCREEN         — tiles, cycling, shuffle-on-boot
+     6. APP ENTRY POINT      — boot IIFE; runs last, so this file loads LAST
    Depends on: themes.js, state.js, platform-linux.js, ui-widgets.js, dashboard.js.
    ════════════════════════════════════════════════════════════════════════════ */
 "use strict";
 
 // ═══════════════════════════════════════════════════════════════
-//  STARTUP / BOOT UI
+//  1. BOOT SCREEN
+//  Covers the window until the first layout has settled, so the native window
+//  resize (and the first card build) is never visible.
 // ═══════════════════════════════════════════════════════════════
 
-const BOOT_MIN_TIME = 450;
-
-// How long the finished dashboard ("Online") stays up before the boot screen fades.
-const BOOT_READ_DELAY = 2000;
-
-const bootStarted = {};
+// Upper bound: if the daemon never answers (SSE retries forever) the boot
+// screen would otherwise cover the UI indefinitely.
+const BOOT_FAILSAFE_MS = 8000;
+let _bootHidden = false;
+let _bootFailsafeTimer = null;
 
 // Resolves once the first Linux stats sample arrives, or after 3 s (e.g.
 // psutil missing). Python's push runs on its own 2 s timer, independent of
-// SSE, and boot's final resize needs both.
+// SSE, and the final resize needs both.
 let _resolveLinuxStatsReady;
 const linuxStatsReady = new Promise((resolve) => {
   _resolveLinuxStatsReady = resolve;
 });
 setTimeout(() => _resolveLinuxStatsReady?.(), 3000);
-
-// Boot checklist order, and the progress-bar % at each step's active/done
-// states — one table so the bar and checklist can't drift apart.
-const BOOT_PROGRESS = {
-  profile: { active: 8, done: 28 },
-  theme: { active: 34, done: 52 },
-  daemon: { active: 58, done: 82 },
-  live: { active: 86, done: 100 },
-};
-
-function _setBootProgress(pct) {
-  const fill = document.getElementById("boot-progress-fill");
-  if (fill) fill.style.width = pct + "%";
-}
-
-function bootStep(name, state = "active") {
-  const el = document.getElementById("boot-step-" + name);
-  const pct = BOOT_PROGRESS[name]?.[state];
-  if (pct !== undefined) _setBootProgress(pct);
-  if (!el) return;
-
-  el.classList.remove("active", "done", "error");
-  el.classList.add(state);
-
-  if (state === "active") {
-    bootStarted[name] = performance.now();
-  }
-}
-
-function bootState(text) {
-  const el = document.getElementById("boot-state");
-  if (el) el.textContent = text.toUpperCase();
-}
-
-// Marks a step "done" after it has been "active" for at least BOOT_MIN_TIME,
-// so fast steps still register on screen.
-function bootStepDone(name, callback) {
-  const started = bootStarted[name] ?? performance.now();
-  const elapsed = performance.now() - started;
-  const remaining = Math.max(0, BOOT_MIN_TIME - elapsed);
-
-  setTimeout(() => {
-    bootStep(name, "done");
-    callback?.();
-  }, remaining);
-}
-
-function waitBootStep(name) {
-  return new Promise((resolve) => bootStepDone(name, resolve));
-}
-
-// Upper bound on the boot screen: if the daemon never answers (SSE retries
-// forever) it would otherwise cover the UI indefinitely.
-const BOOT_FAILSAFE_MS = 8000;
-let _bootHidden = false;
-let _bootFailsafeTimer = null;
 
 function hideBootScreen() {
   if (_bootHidden) return;
@@ -118,22 +68,8 @@ function hideBootScreen() {
 
 
 // ═══════════════════════════════════════════════════════════════
-//  RESET
+//  2. RESET / IMPORT / EXPORT
 // ═══════════════════════════════════════════════════════════════
-// Clears only the saved token, so the next boot behaves like a first launch
-// (Demo Mode, drawer open) while theme, layout and assignments stay. Dev aid.
-function softResetWidget() {
-  if (
-    !confirm(
-      "Simulate a first launch? This clears only your saved connection token — theme, layout, and sensor assignments stay put.",
-    )
-  )
-    return;
-  cfg.token = "";
-  saveCfg();
-  location.reload();
-}
-
 // Clears all local config and reloads as a brand-new install.
 function resetWidget() {
   if (!confirm("Clear saved settings and token?")) return;
@@ -177,14 +113,14 @@ function connectNow() {
   const _upEl = document.getElementById("sbar-uptime");
   if (_upEl) _upEl.textContent = "";
   setStatus("spin", "Connecting…");
-  _updateDemoButtons();
+  _dev("demoChanged");
   rebuildDashboard();
   startSSE();
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-//  DEMO MODE
+//  3. DEMO MODE
 //  Fakes both data sources (CC's SSE devices and Python's Linux stats) with
 //  self-running curves, so the dashboard and theme editor can be previewed
 //  without a daemon. Pure client-side; no network or GTK calls.
@@ -254,18 +190,9 @@ class DemoCurve {
   }
 }
 
-// Per-scenario load curves. Disks, folders, ambient and NVMe temp are the
-// same in every scenario.
+// Per-scenario load curves (dev.js adds more). Disks, folders, ambient and
+// NVMe temp are the same in every scenario.
 const DEMO_SCENARIOS = {
-  idle: {
-    label: "Idle",
-    cpuLoad: { kind: "normal", min: 2, max: 30, target: 6 },
-    gpuLoad: { kind: "normal", min: 1, max: 18, target: 3 },
-    ram: { min: 20, max: 38, target: 26 },
-    swap: { min: 0, max: 3, target: 0.4 },
-    netRx: { kind: "normal", min: 5, max: 300, target: 35 },
-    netTx: { kind: "normal", min: 2, max: 100, target: 15 },
-  },
   normal: {
     label: "Normal",
     cpuLoad: { kind: "gaming", min: 3, max: 98, burstChance: 0.2 },
@@ -274,24 +201,6 @@ const DEMO_SCENARIOS = {
     swap: { min: 0, max: 14, target: 2 },
     netRx: { kind: "gaming", min: 15, max: 8500, burstChance: 0.2 },
     netTx: { kind: "gaming", min: 10, max: 1100, burstChance: 0.2 },
-  },
-  gaming: {
-    label: "Gaming",
-    cpuLoad: { kind: "gaming", min: 25, max: 100, burstChance: 0.65 },
-    gpuLoad: { kind: "gaming", min: 30, max: 100, burstChance: 0.7 },
-    ram: { min: 45, max: 88, target: 62 },
-    swap: { min: 0, max: 20, target: 4 },
-    netRx: { kind: "gaming", min: 200, max: 12000, burstChance: 0.55 },
-    netTx: { kind: "gaming", min: 100, max: 2000, burstChance: 0.55 },
-  },
-  stress: {
-    label: "Stress",
-    cpuLoad: { kind: "normal", min: 88, max: 100, target: 97 },
-    gpuLoad: { kind: "normal", min: 85, max: 100, target: 96 },
-    ram: { min: 70, max: 95, target: 88 },
-    swap: { min: 10, max: 45, target: 25 },
-    netRx: { kind: "normal", min: 3000, max: 9500, target: 6000 },
-    netTx: { kind: "normal", min: 400, max: 1800, target: 900 },
   },
 };
 
@@ -482,44 +391,6 @@ function demoTick() {
 let _demoSlotBackup = null;
 const DEMO_CC_SIDS = ["cpu_temp", "cpu_fan", "gpu_temp", "gpu_load", "gpu_fan", "case_temp"];
 
-// The drawer's Connection button toggles Demo Mode.
-function _updateDemoButtons() {
-  const drawerBtn = document.getElementById("btn-demo-drawer");
-  if (drawerBtn) {
-    drawerBtn.textContent = demoMode ? "Exit Demo Mode" : "Enter Demo Mode";
-    drawerBtn.onclick = demoMode ? exitDemoMode : enterDemoMode;
-  }
-  document.querySelectorAll("#demo-scenario-btns .size-btn").forEach((b) => {
-    b.classList.toggle("active", b.dataset.scenario === demoScenario);
-  });
-}
-
-// Pulses the token field to draw a first-time user's eye to it.
-function _flashTokenField() {
-  const inp = document.getElementById("tc-tok");
-  if (!inp) return;
-  inp.classList.add("flash-attn");
-  setTimeout(() => inp.classList.remove("flash-attn"), 2700);
-}
-
-// Switches scenario; if Demo Mode is running, rebuilds the curves and ticks
-// immediately so the change shows at once.
-function setDemoScenario(key) {
-  if (!DEMO_SCENARIOS[key] || key === demoScenario) {
-    demoScenario = key;
-    _updateDemoButtons();
-    return;
-  }
-  demoScenario = key;
-  cfg.demoScenario = key;
-  saveCfg();
-  _updateDemoButtons();
-  if (demoMode) {
-    demoCurves = _buildDemoCurves(demoScenario);
-    demoTick();
-  }
-}
-
 function enterDemoMode() {
   if (demoMode) return;
   demoMode = true;
@@ -572,7 +443,7 @@ function enterDemoMode() {
   setStatus("ok");
   if (!_connectTime) _connectTime = Date.now();
 
-  _updateDemoButtons();
+  _dev("demoChanged");
 
   if (demoTimer) clearInterval(demoTimer);
   demoTimer = setInterval(demoTick, DEMO_TICK_MS);
@@ -611,13 +482,13 @@ function exitDemoMode() {
 
   // No token: nothing to connect to, so reset the indicator to idle.
   _resetConnIndicator();
-  _updateDemoButtons();
+  _dev("demoChanged");
   rebuildDashboard();
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-//  THEME BUILDER — colour pickers that write :root CSS live to the active
+//  4. THEME BUILDER — colour pickers that write :root CSS live to the active
 //  theme. _tb* hooks are exposed so theme tiles and card menus can resync it.
 // ═══════════════════════════════════════════════════════════════
 let _tbSync = null;
@@ -710,8 +581,7 @@ function initThemeBuilder() {
     bar.style.background = `linear-gradient(to right, ${stops})`;
   }
 
-  // WCAG contrast of each text colour against --bg: ok ≥ 4.5:1 (AA body
-  // text), warn ≥ 3:1 (AA large text only), bad below that.
+  // Contrast of each text colour against --bg: ok ≥ 4.5:1, warn ≥ 3:1, else bad.
   const CONTRAST_PAIRS = [
     ["--txt", "tbc-txt"],
     ["--txt-dim", "tbc-txt-dim"],
@@ -721,17 +591,17 @@ function initThemeBuilder() {
     for (const [fgVar, badgeId] of CONTRAST_PAIRS) {
       const badge = document.getElementById(badgeId);
       if (!badge) continue;
-      const ratio = wcagContrast(bv[fgVar], bv["--bg"]);
+      const ratio = contrastRatio(bv[fgVar], bv["--bg"]);
       const grade = ratio >= 4.5 ? "ok" : ratio >= 3 ? "warn" : "bad";
       badge.textContent = ratio.toFixed(1) + ":1";
       badge.classList.remove("ok", "warn", "bad");
       badge.classList.add(grade);
       badge.title =
         grade === "ok"
-          ? "Passes WCAG AA for body text (≥4.5:1)"
+          ? "Good contrast"
           : grade === "warn"
-            ? "Passes WCAG AA for large text only (≥3:1) — risky for small labels"
-            : "Fails WCAG AA — hard to read against this background";
+            ? "Low contrast: fine for large text only"
+            : "Poor contrast: hard to read";
     }
   }
 
@@ -760,11 +630,9 @@ function initThemeBuilder() {
     liveApply();
   });
 
-  // Pickers write straight to the active theme; the textarea mirrors it as a
-  // "paste your own" path.
+  // Pickers write straight to the active theme.
   function liveApply() {
     const css = generateCSS();
-    document.getElementById("custom-css").value = css;
     applyTheme("custom", css);
     _markActiveTile("custom");
   }
@@ -855,7 +723,7 @@ function initThemeBuilder() {
 
 
 // ═══════════════════════════════════════════════════════════════
-//  THEME CYCLING & SHUFFLE
+//  5. THEME SCREEN — tiles, cycling & shuffle
 //  Cycle auto-advances through THEMES on a timer to preview them all.
 //  Shuffle picks a random theme at each boot. Both skip "custom", and any
 //  manual theme pick stops Cycle.
@@ -881,21 +749,7 @@ function _randomThemeKey() {
   return keys[Math.floor(Math.random() * keys.length)];
 }
 
-function _cycleToNextTheme() {
-  const keys = Object.keys(THEMES);
-  if (!keys.length) return;
-  const idx = (keys.indexOf(cfg.theme) + 1) % keys.length;
-  _applyThemeChoice(keys[idx]);
-}
-
-function _updateThemeToggleButtons() {
-  const cycleBtn = document.getElementById("btn-theme-cycle");
-  if (cycleBtn) {
-    cycleBtn.classList.toggle("on", themeCycling);
-    cycleBtn.title = themeCycling
-      ? "Stop auto-cycling themes"
-      : "Auto-cycle through themes every few seconds";
-  }
+function _updateShuffleButton() {
   const shuffleBtn = document.getElementById("btn-theme-shuffle");
   if (shuffleBtn) {
     shuffleBtn.classList.toggle("on", cfg.themeShuffleOnBoot);
@@ -905,27 +759,18 @@ function _updateThemeToggleButtons() {
   }
 }
 
-function setThemeCycling(on, { immediate = true } = {}) {
-  themeCycling = on;
-  cfg.themeCycling = on;
-  saveCfg();
-  if (themeCycleTimer) {
-    clearInterval(themeCycleTimer);
-    themeCycleTimer = null;
-  }
-  if (on) {
-    if (immediate) _cycleToNextTheme();
-    themeCycleTimer = setInterval(_cycleToNextTheme, THEME_CYCLE_MS);
-  }
-  _updateThemeToggleButtons();
-}
-
 function setThemeShuffleOnBoot(on) {
   cfg.themeShuffleOnBoot = on;
   saveCfg();
-  _updateThemeToggleButtons();
+  _updateShuffleButton();
   // Preview now; the real effect is on the next launch.
   if (on) _applyThemeChoice(_randomThemeKey());
+}
+
+// CSS of whichever theme is active (a preset's, or the custom one's).
+function currentThemeCSS() {
+  const css = cfg.theme === "custom" ? cfg.customThemeCSS : THEMES[cfg.theme]?.css;
+  return css || THEMES["misty-metal"].css;
 }
 
 function initThemeScreen() {
@@ -973,9 +818,9 @@ function initThemeScreen() {
     const tile = el("div", "theme-tile");
     tile.dataset.key = key;
     if (cfg.theme === key) tile.classList.add("active");
-    tile.innerHTML = `<div class="theme-swatches">${theme.swatches.map((c) => `<span class="swatch" style="background:${c}"></span>`).join("")}</div><div class="theme-name">${theme.name}</div>`;
+    tile.innerHTML = `<span class="theme-name">${theme.name}</span><span class="theme-swatches">${theme.swatches.map((c) => `<span class="swatch" style="background:${c}"></span>`).join("")}</span>`;
     tile.onclick = () => {
-      if (themeCycling) setThemeCycling(false);
+      _dev("themeChosen");
       _markActiveTile(key);
       themeEditorInline.classList.add("hide");
       applyTheme(key);
@@ -989,72 +834,81 @@ function initThemeScreen() {
   const customTile = el("div", "theme-tile theme-tile-custom");
   customTile.dataset.key = "custom";
   if (cfg.theme === "custom") customTile.classList.add("active");
-  customTile.innerHTML = `<div class="theme-swatches-custom"><span class="tile-custom-icon">✎</span></div><div class="theme-name">Custom…</div>`;
+  customTile.innerHTML = `<span class="theme-name">Custom…</span><span class="theme-swatches">${_ICON_PENCIL}</span>`;
   customTile.onclick = () => {
-    if (themeCycling) setThemeCycling(false);
+    _dev("themeChosen");
     _markActiveTile("custom");
     themeEditorInline.classList.remove("hide");
     // Regenerate from the live theme (kept in bv by _tbSync()), not the old
     // saved customThemeCSS, so "preset, then Custom" edits that preset.
     if (_tbGenerateCSS) applyTheme("custom", _tbGenerateCSS());
   };
-  g.appendChild(customTile);
+  // The Custom row and its editor share one wrapper, so the row reads as
+  // expanding into the editor while Custom is active.
+  const customWrap = el("div", "theme-custom");
+  customWrap.append(customTile, themeEditorInline);
+  g.appendChild(customWrap);
 
   initThemeBuilder();
 
   // The editor is shown exactly while the custom theme is active.
   themeEditorInline.classList.toggle("hide", cfg.theme !== "custom");
-  // Connection fields start open until a token is saved; the status stays
-  // visible in the collapsed summary either way.
-  document.getElementById("connection-details").open = !cfg.token;
 
-  // Share Theme (Copy / Load)
-  if (cfg.customThemeCSS)
-    document.getElementById("custom-css").value = cfg.customThemeCSS;
+  // Save & Share. "Theme" row = styling as text (Copy / Paste…); "Everything"
+  // row = whole config as a file (Export / Import, wired in boot).
+  const pasteBox = document.getElementById("theme-paste-box");
+  const pasteTa = document.getElementById("custom-css");
+  document.getElementById("btn-theme-paste").onclick = () => {
+    pasteBox.classList.toggle("hide");
+    if (!pasteBox.classList.contains("hide")) pasteTa.focus();
+  };
 
   document.getElementById("btn-theme-apply").onclick = () => {
-    const css = document.getElementById("custom-css").value.trim();
+    const css = pasteTa.value.trim();
     if (!css.includes("{") || !css.includes("}")) {
       alert("Paste a shared theme's :root { … } block first.");
       return;
     }
-    if (themeCycling) setThemeCycling(false);
+    _dev("themeChosen");
     applyTheme("custom", css);
     _markActiveTile("custom");
     if (_tbSync) _tbSync();
+    pasteTa.value = "";
+    pasteBox.classList.add("hide");
   };
 
-  // Copy the CSS box. execCommand comes first: it's synchronous and needs no
-  // permission, and the async Clipboard API may be missing in embedded
-  // WebKitGTK. Failing both, the text stays selected for a manual copy.
+  // execCommand first: synchronous, needs no permission, and the async
+  // Clipboard API may be missing in embedded WebKitGTK. If both fail, the CSS
+  // is dropped into the paste box, selected, for a manual copy.
   const copyBtn = document.getElementById("btn-theme-copy");
-  if (copyBtn) {
-    copyBtn.onclick = () => {
-      const ta = document.getElementById("custom-css");
-      ta.select();
-      ta.setSelectionRange(0, 999999);
-      let ok = false;
-      try {
-        ok = document.execCommand("copy");
-      } catch {
-        ok = false;
-      }
-      const flash = (label) => {
-        copyBtn.textContent = label;
-        setTimeout(() => (copyBtn.textContent = "Copy"), 1400);
-      };
-      if (ok) {
-        flash("Copied!");
-      } else if (navigator.clipboard?.writeText) {
-        navigator.clipboard
-          .writeText(ta.value)
-          .then(() => flash("Copied!"))
-          .catch(() => flash("Select & Copy"));
-      } else {
-        flash("Select & Copy");
-      }
+  copyBtn.onclick = () => {
+    const css = currentThemeCSS();
+    const tmp = document.createElement("textarea");
+    tmp.value = css;
+    tmp.style.cssText = "position:fixed;opacity:0;pointer-events:none";
+    document.body.appendChild(tmp);
+    tmp.select();
+    let ok = false;
+    try {
+      ok = document.execCommand("copy");
+    } catch {}
+    tmp.remove();
+
+    const flash = (label) => {
+      copyBtn.textContent = label;
+      setTimeout(() => (copyBtn.textContent = "Copy"), 1400);
     };
-  }
+    const manual = () => {
+      pasteTa.value = css;
+      pasteBox.classList.remove("hide");
+      pasteTa.select();
+      flash("Select & copy");
+    };
+    if (ok) flash("Copied!");
+    else if (navigator.clipboard?.writeText)
+      navigator.clipboard.writeText(css).then(() => flash("Copied!"), manual);
+    else manual();
+  };
 
   // Connection fields
   document.getElementById("tc-url").value = cfg.baseUrl;
@@ -1085,30 +939,26 @@ function initThemeScreen() {
   document.getElementById("tc-url").onchange = persist;
   document.getElementById("tc-tok").onchange = persist;
 
-  const cycleBtn = document.getElementById("btn-theme-cycle");
-  if (cycleBtn) cycleBtn.onclick = () => setThemeCycling(!themeCycling);
+  // First-run cue: the token field pulses (CSS .flash-attn) while it's empty
+  // and no token is saved, and stops as soon as the user types something.
+  const tokInput = document.getElementById("tc-tok");
+  const syncTokenFlash = () =>
+    tokInput.classList.toggle(
+      "flash-attn",
+      !cfg.token && !tokInput.value.trim(),
+    );
+  tokInput.addEventListener("input", syncTokenFlash);
+  syncTokenFlash();
+
   const shuffleBtn = document.getElementById("btn-theme-shuffle");
   if (shuffleBtn)
     shuffleBtn.onclick = () => setThemeShuffleOnBoot(!cfg.themeShuffleOnBoot);
-  _updateThemeToggleButtons();
-
-  const dsb = document.getElementById("demo-scenario-btns");
-  if (dsb) {
-    dsb.innerHTML = "";
-    for (const [key, scenario] of Object.entries(DEMO_SCENARIOS)) {
-      const btn = el("button", "size-btn");
-      btn.dataset.scenario = key;
-      btn.textContent = scenario.label;
-      btn.classList.toggle("active", demoScenario === key);
-      btn.onclick = () => setDemoScenario(key);
-      dsb.appendChild(btn);
-    }
-  }
+  _updateShuffleButton();
 }
 
 
 // ═══════════════════════════════════════════════════════════════
-//  BOOT
+//  6. APP ENTRY POINT — runs last
 // ═══════════════════════════════════════════════════════════════
 (async () => {
   // Backstop so the boot screen always clears; hideBootScreen() is idempotent.
@@ -1116,17 +966,8 @@ function initThemeScreen() {
 
   gtksend("boot"); // compact startup window size
 
-  bootStep("profile", "active");
-  bootState("Loading profile");
-
   loadCfg();
-  demoScenario = cfg.demoScenario || "normal";
-  if (cfg.themeCycling) setThemeCycling(true, { immediate: false });
-
-  await waitBootStep("profile");
-
-  bootStep("theme", "active");
-  bootState("Preparing interface");
+  _dev("init");
 
   initCardSort();
   initRowSort();
@@ -1143,35 +984,29 @@ function initThemeScreen() {
     );
   }
 
-  await waitBootStep("theme");
-
   // Restore the saved anchor corner: bar position here, and Python's resize math.
   if (cfg.anchorCorner) {
     _applyBarPosition(cfg.anchorCorner);
     gtksend("anchor:" + cfg.anchorCorner);
   }
 
-  document.getElementById("btn-soft-reset-drawer").onclick = softResetWidget;
   document.getElementById("btn-reset-drawer").onclick = resetWidget;
   document.getElementById("btn-export-settings").onclick = exportSettings;
   document.getElementById("btn-import-settings").onclick = importSettings;
-  _updateDemoButtons();
+  _dev("demoChanged");
 
   // New user (no token): start in Demo Mode with the drawer open at the
   // token field, rather than on a bare connect form.
   if (!cfg.token) {
     enterDemoMode();
     setConfigOpen(true);
-    // Wait for the drawer's slide-in to finish before flashing the field.
-    setTimeout(_flashTokenField, 500);
     hideBootScreen();
     return;
   }
 
   // Returning user: render the saved layout at once ("--" until the first
-  // packet) while the connection catches up behind the boot checklist.
-  bootStep("daemon", "active");
-  bootState("Connecting");
+  // packet) while the connection catches up behind the boot screen.
+  document.getElementById("boot-state").textContent = "CONNECTING";
 
   phase = "connecting";
   setStatus("spin", "Connecting…");

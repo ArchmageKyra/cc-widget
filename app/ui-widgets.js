@@ -37,10 +37,10 @@ function setRowStyle(row, style) {
 }
 
 const _STYLE_INFO = {
-  bar: { label: "▬", title: "Bar" },
-  "dots-warn": { label: "●●", title: "Warning dots" },
-  "dots-meter": { label: "○○", title: "Meter dots" },
-  "num-only": { label: "#", title: "Number only" },
+  bar: { icon: _ICON_STYLE_BAR, title: "Bar" },
+  "dots-warn": { icon: _ICON_STYLE_DOTS_WARN, title: "Warning dots" },
+  "dots-meter": { icon: _ICON_STYLE_DOTS_METER, title: "Meter dots" },
+  "num-only": { icon: _ICON_STYLE_NUM, title: "Number only" },
 };
 
 // "⋯" menu entry for switching a row's display style (null if there's no choice).
@@ -52,7 +52,7 @@ function _styleSegItem(row) {
     current: getRowStyle(row),
     options: options.map((v) => ({
       value: v,
-      label: _STYLE_INFO[v].label,
+      icon: _STYLE_INFO[v].icon,
       title: _STYLE_INFO[v].title,
     })),
     onSelect: (v) => setRowStyle(row, v),
@@ -63,7 +63,7 @@ function _styleSegItem(row) {
 // ═══════════════════════════════════════════════════════════════
 //  "⋯" MENU
 //  items: [{ label, danger?, onClick }]
-//       | [{ type: "segmented", options: [{value,label,title}], current, onSelect }]
+//       | [{ type: "segmented", options: [{value,icon|label,title}], current, onSelect }]
 //       | [{ type: "color", label?, value, onChange }]
 // ═══════════════════════════════════════════════════════════════
 let _rowMenuEl = null;
@@ -86,7 +86,8 @@ function _segmentedMenuEntry(it) {
       "button",
       "row-menu-seg-btn" + (opt.value === it.current ? " active" : ""),
     );
-    b.textContent = opt.label;
+    if (opt.icon) b.innerHTML = opt.icon;
+    else b.textContent = opt.label;
     if (opt.title) b.title = opt.title;
     b.onclick = (e) => {
       e.stopPropagation();
@@ -199,7 +200,7 @@ function _openRowMenu(anchorBtn, items) {
 // The "⋯" button that opens a row's menu; `buildItems()` returns the entries.
 function _makeMoreButton(buildItems) {
   const more = el("button", "assign-badge row-more");
-  more.textContent = "⋯";
+  more.innerHTML = _ICON_MORE;
   more.title = "Row options";
   more.onclick = (e) => {
     e.stopPropagation();
@@ -494,7 +495,7 @@ function _renderCustomRowSection(def, container) {
 const _pickerBody = () => document.getElementById("picker-body");
 const _showPicker = () => document.getElementById("picker").classList.remove("hide");
 
-// Accent-styled action row ("× Clear assignment", "Skip — …").
+// Accent-styled action row ("Clear assignment", "Skip — …").
 function _pickerActionRow(text, onClick) {
   const row = el("div", "picker-clr");
   row.innerHTML = `<span>${text}</span>`;
@@ -593,7 +594,7 @@ function openPicker(slotId, typeFilter, includeLinux = false, newRowCard = null)
 
   if (!newRowCard && slotId && cfg.slots[slotId]) {
     body.appendChild(
-      _pickerActionRow("× Clear assignment", () => {
+      _pickerActionRow("Clear assignment", () => {
         delete cfg.slots[slotId];
         saveCfg();
         closePicker();
@@ -704,7 +705,7 @@ function openDutyPairingStep(targetSid, hasNativeDuty) {
   body.appendChild(
     _pickerActionRow(
       hasNativeDuty
-        ? "✓ Use auto-detected duty channel"
+        ? "Use auto-detected duty channel"
         : "Skip — estimate from RPM instead",
       () => choose(),
     ),

@@ -281,7 +281,7 @@ const THEMES = {
   --txt:#F0E6D2;
   --txt-dim:#93ACA8;
   --txt-muted:#243B39;
-  --hot:#C9614A;
+  --hot:#D0564A;
 
   --bdr:rgba(147,172,168,.10);
   --bhi:rgba(147,172,168,.19);
@@ -290,19 +290,19 @@ const THEMES = {
 
   --cpu:#D97C4A;
   --gpu:#7FBF6B;
-  --fan:#E9DAC0;
+  --fan:#B4D2D8;
   --ssd:#6FB8D9;
   --ram:#4FC7BE;
   --net:#E8C97A;
-  --accent:#C792A8;
+  --accent:#EBAB82;
 
   --w1:#7FBF6B;
   --w2:#C7D56B;
   --w3:#E8C97A;
   --w4:#D97C4A;
-  --w5:#C9614A;
+  --w5:#D0564A;
 
-  --meter:rgba(217,124,74,.48);
+  --meter:rgba(180,210,216,.55);
   --dot-off-warn:rgba(240,230,210,.13);
   --dot-off-meter:rgba(240,230,210,.08);
   --spark-grid:rgba(111,184,217,.08);
@@ -603,7 +603,7 @@ function applySize(key, rebuild = true) {
   cfg.size = key;
   saveCfg();
   document
-    .querySelectorAll(".size-btn")
+    .querySelectorAll(".size-btn[data-size]")
     .forEach((b) => b.classList.toggle("active", b.dataset.size === key));
   if (rebuild && phase === "dashboard") {
     buildCards();

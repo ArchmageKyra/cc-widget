@@ -77,6 +77,14 @@
     }
   }
 
+  // One glyph per demo scenario (the strip is icon-only; labels are tooltips).
+  const SCENARIO_ICONS = {
+    idle: _svgIcon(1.3, `<path d="M9.8 7.3A4.3 4.3 0 1 1 4.7 2.2a3.4 3.4 0 0 0 5.1 5.1z"/>`),
+    normal: _svgIcon(1.3, `<polyline points="1,6 3.5,6 5,2.5 7,9.5 8.5,6 11,6"/>`),
+    gaming: _svgIcon(1.3, `<rect x="1" y="3.5" width="10" height="5.5" rx="2.6"/><path d="M3.6 6.25h2.2M4.7 5.15v2.2"/><path d="M8 5.6h.01M9.2 6.9h.01"/>`),
+    stress: _svgIcon(1.3, `<polygon points="7,1 3,6.6 5.7,6.6 5,11 9,5.2 6.3,5.2"/>`),
+  };
+
   // ── Drawer: "Dev" zone ───────────────────────────────────────
   function buildZone() {
     const drawer = document.querySelector(".drawer-inner");
@@ -85,25 +93,30 @@
     hdr.textContent = "Dev";
     const grp = el("div", "zone-group");
     grp.innerHTML = `
-      <div class="grp-hdr">Demo</div>
-      <div class="field-stack">
-        <div class="field">
-          <div class="size-seg" id="dev-scenarios"></div>
-        </div>
+      <div class="ctl-row">
+        <div class="grp-hdr">Demo</div>
+        <div class="size-seg" id="dev-scenarios"></div>
       </div>
-      <button class="btn btn-s" id="dev-demo-toggle" style="margin-top:10px"></button>
+      <div class="grp-body" style="margin-top:10px">
+        <button class="btn btn-s" id="dev-demo-toggle"></button>
+      </div>
       <div class="grp-hdr">First launch</div>
-      <button class="btn btn-s" id="dev-first-launch"
-        title="Clears only the saved token; theme, layout and sensors stay">
-        Simulate first launch
-      </button>`;
+      <div class="grp-body">
+        <button class="btn btn-s" id="dev-first-launch"
+          title="Clears only the saved token; theme, layout and sensors stay">
+          Simulate first launch
+        </button>
+      </div>`;
     drawer.append(hdr, grp);
 
     const strip = grp.querySelector("#dev-scenarios");
     for (const [key, s] of Object.entries(DEMO_SCENARIOS)) {
       const b = el("button", "size-btn");
       b.dataset.scenario = key;
-      b.textContent = s.label;
+      // Icon-only: four text labels don't fit the shared 176px strip.
+      b.innerHTML = SCENARIO_ICONS[key] ?? s.label;
+      b.title = s.label;
+      b.setAttribute("aria-label", s.label);
       b.onclick = () => setScenario(key);
       strip.appendChild(b);
     }

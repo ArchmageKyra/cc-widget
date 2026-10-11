@@ -112,6 +112,11 @@ fi
 mkdir -p "$INSTALL_DIR"
 cp -r "$SOURCE_DIR"/. "$INSTALL_DIR"/
 chmod +x "$INSTALL_DIR/launch.py"
+
+# Developer-only files live in the repo but never ship to users: dev.js adds
+# the Dev zone (demo scenarios, theme cycling, first-launch simulation) and is
+# loaded only if present, so removing it is safe.
+rm -f "$INSTALL_DIR/dev.js"
 ok "App files copied."
 
 mkdir -p "$CONFIG_DIR" "$CACHE_DIR"
