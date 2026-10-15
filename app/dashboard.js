@@ -713,7 +713,7 @@ function _buildSparkCardBody(card, def, colors, linuxHasData) {
     body.appendChild(scol);
     const {
       canvas: { w: CW, h: CH },
-    } = SIZES[cfg.size] || SIZES.s;
+    } = sizeMetrics();
     const dpr = window.devicePixelRatio || 1;
     const cv = document.createElement("canvas");
     cv.width = CW * dpr;

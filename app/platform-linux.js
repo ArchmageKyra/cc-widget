@@ -355,16 +355,15 @@ function _resetConnIndicator() {
 //  Measures the real content height and tells Python to fit the GTK window
 //  to it — no scrolling, no dead space.
 // ═══════════════════════════════════════════════════════════════
-const DRAWER_W = 320; // matches #drawer's fixed width in monitor.css
-
 function autoResize(force = false) {
   const boot = document.getElementById("boot-screen");
   if (!force && boot && !boot.classList.contains("hide")) return;
 
   const sbarH = document.getElementById("sbar").offsetHeight;
   const borders = 2; // #app top + bottom border
-  const screenPad = 24; // .screen padding: 12px × 2
-  const baseW = (SIZES[cfg.size] || SIZES.s).width;
+  const pad = getComputedStyle(document.getElementById("s-dash"));
+  const screenPad = parseFloat(pad.paddingTop) + parseFloat(pad.paddingBottom);
+  const { width: baseW, drawerW } = sizeMetrics();
   const cardsH = document.getElementById("cards").scrollHeight;
 
   let w = baseW;
@@ -375,9 +374,11 @@ function autoResize(force = false) {
     // drawer doesn't grow a hairline scrollbar).
     const inner = document.querySelector(".drawer-inner");
     const drawerH = inner ? inner.scrollHeight + 4 : 0;
-    w = baseW + DRAWER_W;
+    w = baseW + drawerW;
     contentH = Math.max(contentH, drawerH);
   }
 
-  gtksend("resize:" + w + ":" + (contentH + sbarH + borders));
+  gtksend(
+    "resize:" + Math.round(w) + ":" + Math.round(contentH + sbarH + borders),
+  );
 }

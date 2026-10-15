@@ -510,96 +510,42 @@ function applyTheme(key, customCSS = null) {
   });
 }
 
-// Size presets. Each preset's CSS vars are the single source of truth: the
-// JS-side `width` and `canvas` (used by autoResize() and the sparkline
-// canvases) are derived from --dash-w / --canvas-w / --canvas-h below.
+// Size presets. There is one design (Large; its rem tokens live in
+// monitor.css :root) and S/M/L only set the root font-size, so text, padding,
+// radii, canvases and the window all scale together. At Large 1rem is 17.83px:
+// labels 15.6px, values 19.5px, smallest text about 10.4px.
+const L_ROOT_PX = 17.8286;
 const SIZES = {
-  s: {
-    label: "S",
-    vars: {
-      "--sz-lbl": "11px",
-      "--sz-val": "16px",
-      "--sz-unit": "10px",
-      "--sz-hdr": "12px",
-      "--sz-meta": "11px",
-      "--sz-pct": "16px",
-      "--sz-dot": "8px",
-      "--sz-track": "7px",
-      "--pad-card": "10px",
-      "--pad-row": "3px",
-      "--canvas-w": "162px",
-      "--canvas-h": "92px",
-      "--canvas-lh": "62px",
-      "--dash-w": "440px",
-      "--sz-mini-lbl": "9.5px",
-      "--sz-mini-val": "13px",
-      "--sz-mini-w": "64px",
-      "--sz-mini-bar": "16px",
-    },
-  },
-  m: {
-    label: "M",
-    vars: {
-      "--sz-lbl": "12.5px",
-      "--sz-val": "19px",
-      "--sz-unit": "11px",
-      "--sz-hdr": "13.5px",
-      "--sz-meta": "12px",
-      "--sz-pct": "19px",
-      "--sz-dot": "9px",
-      "--sz-track": "8px",
-      "--pad-card": "12px",
-      "--pad-row": "4px",
-      "--canvas-w": "180px",
-      "--canvas-h": "108px",
-      "--canvas-lh": "72px",
-      "--dash-w": "500px",
-      "--sz-mini-lbl": "10.5px",
-      "--sz-mini-val": "14.5px",
-      "--sz-mini-w": "70px",
-      "--sz-mini-bar": "18px",
-    },
-  },
-  l: {
-    label: "L",
-    vars: {
-      "--sz-lbl": "14px",
-      "--sz-val": "22px",
-      "--sz-unit": "12px",
-      "--sz-hdr": "15px",
-      "--sz-meta": "13px",
-      "--sz-pct": "22px",
-      "--sz-dot": "10px",
-      "--sz-track": "9px",
-      "--pad-card": "14px",
-      "--pad-row": "5px",
-      "--canvas-w": "204px",
-      "--canvas-h": "124px",
-      "--canvas-lh": "84px",
-      "--dash-w": "580px",
-      "--sz-mini-lbl": "11.5px",
-      "--sz-mini-val": "16px",
-      "--sz-mini-w": "76px",
-      "--sz-mini-bar": "20px",
-    },
-  },
+  s: { label: "S", scale: 0.72 },
+  m: { label: "M", scale: 0.86 },
+  l: { label: "L", scale: 1 },
 };
 
-for (const sz of Object.values(SIZES)) {
-  sz.width = parseInt(sz.vars["--dash-w"], 10);
-  sz.canvas = {
-    w: parseInt(sz.vars["--canvas-w"], 10),
-    h: parseInt(sz.vars["--canvas-h"], 10),
+function _rootPx() {
+  return parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+}
+
+// Resolve a rem-valued CSS token (--dash-w, --canvas-w …) to whole px.
+function remVarPx(name) {
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+  return Math.round(parseFloat(v) * _rootPx());
+}
+
+// Pixel sizes JS needs (window width, canvases), derived from the CSS tokens.
+function sizeMetrics() {
+  return {
+    width: remVarPx("--dash-w"),
+    drawerW: remVarPx("--drawer-w"),
+    canvas: { w: remVarPx("--canvas-w"), h: remVarPx("--canvas-h") },
   };
 }
 
-const SIZE_VAR_KEYS = Object.keys(SIZES.m.vars);
-
 function applySize(key, rebuild = true) {
-  const sz = SIZES[key] || SIZES.s;
+  if (!SIZES[key]) key = "s";
   const root = document.documentElement;
-  SIZE_VAR_KEYS.forEach((v) => root.style.removeProperty(v));
-  Object.entries(sz.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+  const px = SIZES[key].scale * L_ROOT_PX;
+  root.style.fontSize = px.toFixed(4) + "px";
+  root.style.setProperty("--k", (px / 16).toFixed(4));
   cfg.size = key;
   saveCfg();
   document

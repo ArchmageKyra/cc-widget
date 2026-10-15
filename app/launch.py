@@ -88,8 +88,24 @@ os.makedirs(WEBKIT_CACHE_DIR, exist_ok=True)
 # The window starts small while WebKit loads; the frontend then requests its real size.
 BOOT_W, BOOT_H = 320, 300
 
-MIN_W, MAX_W = 300, 1200
-MIN_H, MAX_H = 200, 1400
+MIN_W, MIN_H = 300, 200
+
+
+def _max_window_size():
+    """Largest window the monitor under the widget can hold (the page scrolls
+    if content is taller). Falls back to a generous fixed cap."""
+    try:
+        display = Gdk.Display.get_default()
+        gdk_win = win.get_window()
+        mon = (
+            display.get_monitor_at_window(gdk_win)
+            if gdk_win
+            else display.get_primary_monitor()
+        )
+        geo = mon.get_geometry()
+        return geo.width, geo.height
+    except Exception:
+        return 3840, 2160
 
 ANCHOR_CORNERS = {
     "top-left",
@@ -395,8 +411,9 @@ def on_message(_manager, result) -> None:
                 width = win.get_size()[0]
                 height = int(parts[1])
 
-            width = max(MIN_W, min(width, MAX_W))
-            height = max(MIN_H, min(height, MAX_H))
+            max_w, max_h = _max_window_size()
+            width = max(MIN_W, min(width, max_w))
+            height = max(MIN_H, min(height, max_h))
 
             x, y = win.get_position()
             old_width, old_height = win.get_size()
