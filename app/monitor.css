@@ -63,12 +63,14 @@
     --rs: 6px;
 
     /* Size tokens: the Large design. Everything scales via html font-size. */
-    --sz-lbl: 0.875rem;
-    --sz-val: 1.0938rem;
-    --sz-pct: 1.0938rem;
-    --sz-unit: 0.7292rem;
-    --sz-hdr: 0.875rem;
-    --sz-meta: 0.6563rem;
+    --tx-ui: 1; /* per-theme text multipliers: compensate fonts with small */
+    --tx-num: 1; /* glyphs (set in themes.js; measured digit/cap height) */
+    --sz-lbl: calc(0.875rem * var(--tx-ui));
+    --sz-val: calc(1.0938rem * var(--tx-num));
+    --sz-pct: calc(1.0938rem * var(--tx-num));
+    --sz-unit: calc(0.7292rem * var(--tx-ui));
+    --sz-hdr: calc(0.875rem * var(--tx-ui));
+    --sz-meta: calc(0.6563rem * var(--tx-ui));
     --sz-dot: 0.625rem;
     --sz-track: 0.5625rem;
     --pad-card: 0.875rem;
@@ -77,8 +79,8 @@
     --canvas-h: 7.75rem;
     --canvas-lh: 5.25rem;
     --dash-w: 32rem;
-    --sz-mini-lbl: 0.6563rem;
-    --sz-mini-val: 0.875rem;
+    --sz-mini-lbl: calc(0.6563rem * var(--tx-ui));
+    --sz-mini-val: calc(0.875rem * var(--tx-num));
     --sz-mini-w: 4.75rem;
     --sz-mini-bar: 1.25rem;
     --drawer-w: 22rem;
@@ -104,7 +106,7 @@ body {
     height: 100%;
     background: transparent;
     font-family: var(--font-ui);
-    font-size: 0.875rem;
+    font-size: calc(0.875rem * var(--tx-ui));
     color: var(--txt);
     overflow: hidden;
     user-select: none;
@@ -172,8 +174,12 @@ html {
 /* Status-bar buttons: the largest icons in the UI, since they are the
    always-visible controls. */
 #sbar .bb-icon {
-    width: 1rem;
-    height: 1rem;
+    width: 1.25rem;
+    height: 1.25rem;
+}
+#sbar .bb {
+    width: 2.125rem;
+    height: 2.125rem;
 }
 .row-menu-seg-btn .bb-icon {
     width: 0.9375rem;
@@ -267,7 +273,7 @@ html {
       and .row-menu-color-lbl, so every small uppercase label matches. */
 .field label {
     display: block;
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -281,7 +287,7 @@ html {
     border-radius: calc(var(--rs) * var(--k));
     color: var(--txt);
     font-family: var(--font-code);
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-ui));
     padding: 0.4375rem 0.625rem;
     outline: none;
     transition:
@@ -349,7 +355,7 @@ html {
     border: none;
     border-radius: calc(var(--rs) * var(--k));
     padding: 0.5rem 0.875rem;
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-ui));
     font-weight: 600;
     cursor: pointer;
     transition:
@@ -439,7 +445,7 @@ html {
     flex-shrink: 0;
 }
 .picker-title {
-    font-size: 0.7778rem;
+    font-size: calc(0.7778rem * var(--tx-ui));
     font-weight: 700;
     letter-spacing: 0.05em;
     flex: 1;
@@ -458,7 +464,7 @@ html {
     border-radius: 2px;
 }
 .picker-sec {
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -486,19 +492,19 @@ html {
 }
 .picker-leaf-name {
     flex: 1;
-    font-size: 0.7778rem;
+    font-size: calc(0.7778rem * var(--tx-ui));
     color: var(--txt);
 }
 .picker-leaf-val {
     font-family: var(--font-num);
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-num));
     min-width: 2.375rem;
     text-align: right;
     color: var(--txt);
 }
 .picker-leaf-unit {
     font-family: var(--font-num);
-    font-size: 0.713rem;
+    font-size: calc(0.713rem * var(--tx-num));
     font-weight: 600;
     color: var(--txt-dim);
     min-width: 1.75rem;
@@ -512,7 +518,7 @@ html {
     border-radius: calc(var(--rs) * var(--k));
     cursor: pointer;
     color: var(--hot);
-    font-size: 0.7454rem;
+    font-size: calc(0.7454rem * var(--tx-ui));
     margin-bottom: 0.25rem;
     border: 1px solid transparent;
     transition: background 0.1s;
@@ -528,7 +534,7 @@ html {
     padding: 0.3125rem 0.5rem;
     border-radius: calc(var(--rs) * var(--k));
     cursor: pointer;
-    font-size: 0.7454rem;
+    font-size: calc(0.7454rem * var(--tx-ui));
     color: var(--txt-dim);
     border: 1px dashed var(--bdr);
     margin-top: 0.25rem;
@@ -544,7 +550,7 @@ html {
 }
 .picker-empty {
     padding: 1rem 0.5rem;
-    font-size: 0.7778rem;
+    font-size: calc(0.7778rem * var(--tx-ui));
     color: var(--txt-dim);
     text-align: center;
 }
@@ -565,7 +571,7 @@ html {
     background: var(--bg-hover-subtle);
 }
 .assign-badge {
-    font-size: 0.5833rem;
+    font-size: calc(0.5833rem * var(--tx-ui));
     color: var(--txt-dim);
     border: 1px solid var(--bdr);
     border-radius: 0.1875rem;
@@ -678,7 +684,7 @@ html {
     min-width: 8.75rem;
 }
 .row-menu-color-lbl {
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     font-weight: 700;
     color: var(--txt-dim);
     font-family: var(--font-ui);
@@ -723,7 +729,7 @@ html {
     border-radius: 0.3125rem;
     color: var(--txt);
     font-family: var(--font-code);
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-ui));
     padding: 0.25rem 0.4375rem;
     text-transform: lowercase;
 }
@@ -752,7 +758,7 @@ html {
     border: none;
     color: var(--txt);
     text-align: left;
-    font-size: 0.7454rem;
+    font-size: calc(0.7454rem * var(--tx-ui));
     font-family: var(--font-ui);
     padding: 0.375rem 0.5rem;
     border-radius: 0.25rem;
@@ -785,7 +791,7 @@ html {
     border: none;
     color: var(--txt-dim);
     font-family: var(--font-code);
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-ui));
     padding: 0.3125rem 0;
     border-radius: 0.25rem;
     cursor: pointer;
@@ -1001,7 +1007,7 @@ html {
     padding: 0.625rem 0 0;
 }
 .grp-hdr {
-    font-size: 0.7454rem;
+    font-size: calc(0.7454rem * var(--tx-ui));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.09em;
@@ -1027,7 +1033,7 @@ html {
 }
 .row-lbl,
 .field-stack .field label {
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-ui));
     font-weight: 500;
     text-transform: none;
     letter-spacing: 0.02em;
@@ -1080,7 +1086,7 @@ html {
     pointer-events: none;
 }
 .sub-hdr {
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.08em;
@@ -1135,7 +1141,7 @@ html {
     border-right: 1px solid var(--bdr);
     color: var(--txt-dim);
     font-family: var(--font-ui);
-    font-size: 0.8102rem;
+    font-size: calc(0.8102rem * var(--tx-ui));
     font-weight: 700;
     letter-spacing: 0.04em;
     cursor: pointer;
@@ -1188,7 +1194,7 @@ html {
 .theme-name {
     flex: 1;
     min-width: 0;
-    font-size: 0.875rem;
+    font-size: calc(0.875rem * var(--tx-ui));
     font-weight: 500;
     color: var(--txt-dim);
     white-space: nowrap;
@@ -1296,13 +1302,13 @@ html {
 }
 .tb-lbl {
     flex: 1;
-    font-size: 0.7454rem;
+    font-size: calc(0.7454rem * var(--tx-ui));
     color: var(--txt-dim);
     font-family: var(--font-ui);
 }
 .tb-hex {
     font-family: var(--font-code);
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     color: var(--txt-dim);
     min-width: 3.375rem;
     text-align: right;
@@ -1312,7 +1318,7 @@ html {
       contrast badges. */
 .tb-contrast-pill {
     font-family: var(--font-code);
-    font-size: 0.5833rem;
+    font-size: calc(0.5833rem * var(--tx-ui));
     font-weight: 700;
     letter-spacing: 0.04em;
     padding: 1.5px 0.375rem;
@@ -1326,7 +1332,7 @@ html {
 /* Contrast badge: live ratio of a text colour against --bg */
 .tb-contrast {
     font-family: var(--font-code);
-    font-size: 0.6157rem;
+    font-size: calc(0.6157rem * var(--tx-ui));
     font-weight: 700;
     padding: 1.5px 0.3125rem;
     border-radius: 0.1875rem;
@@ -1378,7 +1384,7 @@ html {
 }
 .tb-radius-val {
     font-family: var(--font-code);
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     color: var(--txt-dim);
     min-width: 1.75rem;
     text-align: right;
@@ -1434,7 +1440,7 @@ html {
     border-radius: calc(var(--rs) * var(--k));
     color: var(--txt-dim);
     font-family: var(--font-code);
-    font-size: 0.713rem;
+    font-size: calc(0.713rem * var(--tx-ui));
     padding: 0.4375rem 0.5625rem;
     outline: none;
     resize: none;
@@ -1506,13 +1512,13 @@ html {
     box-shadow: 0 0.5rem 1.75rem rgba(0, 0, 0, 0.45);
 }
 .text-modal-title {
-    font-size: 0.7778rem;
+    font-size: calc(0.7778rem * var(--tx-ui));
     font-weight: 700;
     color: var(--txt);
     margin-bottom: 0.625rem;
 }
 .text-modal-error {
-    font-size: 0.6806rem;
+    font-size: calc(0.6806rem * var(--tx-ui));
     color: var(--hot);
     margin: -0.25rem 0 0.5rem;
     line-height: 1.4;
@@ -1680,7 +1686,7 @@ html {
 }
 .card-hidden-badge {
     font-family: var(--font-ui);
-    font-size: 0.5833rem;
+    font-size: calc(0.5833rem * var(--tx-ui));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.06em;
@@ -1910,7 +1916,7 @@ html {
     position: fixed;
     z-index: 300;
     font-family: var(--font-num);
-    font-size: 0.713rem;
+    font-size: calc(0.713rem * var(--tx-num));
     color: var(--txt);
     background: var(--bg);
     border: 1px solid var(--bhi);
@@ -1937,11 +1943,11 @@ html {
     display: flex;
     align-items: center;
     gap: 0.25rem;
-    padding: 0 0.25rem 0 0.6875rem;
-    height: 2rem;
+    padding: 0 0.25rem 0 0.75rem;
+    height: 2.5rem;
     border-top: 1px solid var(--bdr);
     background: var(--bg-bar);
-    font-size: var(--sz-meta);
+    font-size: var(--sz-lbl);
     color: var(--txt-dim);
     flex-shrink: 0;
     z-index: 10; /* sits above the drawer */
@@ -1952,8 +1958,8 @@ html {
     -webkit-app-region: drag;
 }
 .sdot {
-    width: 0.4375rem;
-    height: 0.4375rem;
+    width: 0.5625rem;
+    height: 0.5625rem;
     border-radius: 50%;
     background: var(--txt-muted);
     flex-shrink: 0;
@@ -1977,7 +1983,7 @@ html {
 }
 .sbar-uptime {
     font-family: var(--font-num);
-    font-size: 0.6806rem;
+    font-size: calc(0.8125rem * var(--tx-num));
     color: var(--txt-dim);
     opacity: 0.75;
     letter-spacing: 0.02em;

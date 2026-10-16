@@ -1244,7 +1244,8 @@ class MultiSpark {
         : undefined,
     );
     if (span) {
-      const fontSize = Math.max(7, Math.round(H * 0.088));
+      const txNum = parseFloat(cssVar("--tx-num")) || 1;
+      const fontSize = Math.max(7, Math.round(H * 0.088 * txNum));
       const label = `-${span}`;
       ctx.save();
       ctx.font = `${fontSize}px ${cssVar("--font-num") || "monospace"}`;

@@ -229,6 +229,7 @@ const THEMES = {
   --font-ui:"Source Sans 3",system-ui,sans-serif;
   --font-num:"Source Code Pro",ui-monospace,monospace;
   --font-code:"Source Code Pro",ui-monospace,monospace;
+  --tx-ui:1.09; --tx-num:1.12;
 }`,
   },
 
@@ -352,6 +353,7 @@ const THEMES = {
   --font-ui:"Rajdhani",system-ui,sans-serif;
   --font-num:"VT323",ui-monospace,monospace;
   --font-code:"IBM Plex Mono",ui-monospace,monospace;
+  --tx-ui:1.12; --tx-num:1.3;
 }`,
   },
 
