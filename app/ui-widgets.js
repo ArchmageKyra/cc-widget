@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — ui-widgets.js
+   CC Widget — ui-widgets.js
    Per-row interactive widgetry shared across cards: display-style cycling,
    the "⋯" row menu, hover sub-tooltips, user-added custom rows, and the
    sensor picker overlay used to assign or reassign any row.
@@ -477,7 +477,9 @@ function _renderCustomRowSection(def, container) {
 
   if (editMode) {
     const addRow = el("div", "picker-add");
-    addRow.textContent = "+ Add row";
+    addRow.innerHTML = _ICON_PLUS;
+    addRow.title = "Add row";
+    addRow.setAttribute("aria-label", "Add row");
     addRow.onclick = () => openPicker(null, null, true, def.id);
     container.appendChild(addRow);
   }

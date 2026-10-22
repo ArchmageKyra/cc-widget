@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — dev.js  (LOCAL ONLY: keep it in .gitignore)
+   CC Widget — dev.js  (LOCAL ONLY: keep it in .gitignore)
    monitor.html loads this if it sits next to it and silently skips it if not,
    so deleting or ignoring the file ships a clean app.
 

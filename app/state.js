@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — state.js
+   CC Widget — state.js
    Global config/state, the sensor slot & warning-threshold model, generic
    utilities, and the settings-drawer/edit-mode toggles. Platform-agnostic:
    it only knows the generic devices/channels shape, never where data came from.
@@ -99,7 +99,7 @@ let cfg = {
   baseUrl: "http://localhost:11987",
   token: "",
   slots: {},
-  theme: "misty-metal",
+  theme: "deep-space",
   customThemeCSS: "",
   size: "s",
   hiddenMounts: [],
@@ -380,6 +380,7 @@ const _ICON_MORE = _svgIcon(
 );
 const _ICON_CLOSE = _svgIcon(1.75, `<line x1="2.5" y1="2.5" x2="9.5" y2="9.5"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5"/>`);
 const _ICON_PENCIL = _svgIcon(1.5, `<path d="M9 1.5l1.5 1.5-7 7L1 11l1-2.5 7-7z"/><line x1="8" y1="2.5" x2="9.5" y2="4"/>`);
+const _ICON_PLUS = _svgIcon(1.75, `<line x1="6" y1="2" x2="6" y2="10"/><line x1="2" y1="6" x2="10" y2="6"/>`);
 const _ICON_ARROW_DOWN = _svgIcon(1.5, `<line x1="6" y1="2" x2="6" y2="10"/><polyline points="3,7 6,10 9,7"/>`);
 const _ICON_ARROW_UP = _svgIcon(1.5, `<line x1="6" y1="10" x2="6" y2="2"/><polyline points="3,5 6,2 9,5"/>`);
 // Row display styles: bar / filled dots / hollow dots / number only.

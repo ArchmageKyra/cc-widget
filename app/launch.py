@@ -930,7 +930,7 @@ webview.set_background_color(
 # ============================================================================
 
 win = Gtk.Window()
-win.set_title("CC Monitor")
+win.set_title("CC Widget")
 
 # Restore the saved position before showing the window.
 saved_position = load_window_position()

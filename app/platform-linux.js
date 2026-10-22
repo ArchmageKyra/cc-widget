@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — platform-linux.js
+   CC Widget — platform-linux.js
    The boundary to launch.py (GTK host), the CoolerControl (CC) daemon, and
    the psutil stats launch.py pushes in. Everything outside this file sees only
    the generic devices/channels/temps shape, so porting to another OS/backend

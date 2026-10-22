@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — app-modes.js
+   CC Widget — app-modes.js
    Everything layered on top of the dashboard, plus the app entry point.
    Sections, in file order:
      1. BOOT SCREEN          — splash overlay until the first layout settles
@@ -512,21 +512,21 @@ function initThemeBuilder() {
 
   let bv = {
     "--bg": "#0d0d16",
-    "--txt": "#e2e8f0",
-    "--txt-dim": "#4b6080",
-    "--txt-muted": "#1a2535",
+    "--txt": "#eef5ff",
+    "--txt-dim": "#a5b8d6",
+    "--txt-muted": "#3a4d68",
     "--hot": "#f87171",
-    "--cpu": "#60a5fa",
-    "--gpu": "#34d399",
-    "--fan": "#fb923c",
-    "--ssd": "#818cf8",
-    "--ram": "#a5b4fc",
-    "--net": "#2dd4bf",
-    "--w1": "#4ade80",
-    "--w2": "#a3e635",
-    "--w3": "#fbbf24",
-    "--w4": "#f97316",
-    "--w5": "#ef4444",
+    "--cpu": "#67b0ff",
+    "--gpu": "#46dfaa",
+    "--fan": "#ff9e45",
+    "--ssd": "#8d98ff",
+    "--ram": "#bcc7ff",
+    "--net": "#40dfcb",
+    "--w1": "#52e38c",
+    "--w2": "#b2ec54",
+    "--w3": "#ffc94a",
+    "--w4": "#ff8b38",
+    "--w5": "#ff5454",
     "--r": 10,
   };
 
@@ -770,7 +770,7 @@ function setThemeShuffleOnBoot(on) {
 // CSS of whichever theme is active (a preset's, or the custom one's).
 function currentThemeCSS() {
   const css = cfg.theme === "custom" ? cfg.customThemeCSS : THEMES[cfg.theme]?.css;
-  return css || THEMES["misty-metal"].css;
+  return css || THEMES["deep-space"].css;
 }
 
 function initThemeScreen() {
@@ -979,7 +979,7 @@ function initThemeScreen() {
     applyTheme(_randomThemeKey());
   } else {
     applyTheme(
-      cfg.theme === "custom" ? "custom" : cfg.theme || "misty-metal",
+      cfg.theme === "custom" ? "custom" : cfg.theme || "deep-space",
       cfg.theme === "custom" ? cfg.customThemeCSS : null,
     );
   }

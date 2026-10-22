@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — dashboard.js
+   CC Widget — dashboard.js
    The core of the app: CARD_DEFS, buildCards(), card/row drag-reordering,
    renderDashboard(), and the MultiSpark sparkline renderer feeding each
    card's canvas.

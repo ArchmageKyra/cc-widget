@@ -1,56 +1,61 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — themes.js
+   CC Widget — themes.js
    THEMES catalogue, size presets, applyTheme() and applySize().
    To add a theme, append an entry to THEMES (the in-app Theme Builder's
    generated CSS can be pasted in as the `css` string). Unlisted tokens fall
-   back to the defaults in monitor.css, but a theme should define at least:
+   back to the defaults in monitor.css (which mirror Deep Space, the default
+   theme), but a theme should define at least:
      --bg --txt --txt-dim --txt-muted --hot   --bdr --bhi   --r --rs
-     --cpu --gpu --fan --ssd --ram --net      --w1…--w5
+     --cpu --gpu --fan --ssd --ram --net --accent   --w1…--w5
      --meter --dot-off-warn --dot-off-meter --spark-grid --spark-vtick
      --font-ui --font-num --font-code
+   Optional: --tx-ui / --tx-num (text multipliers for fonts with small glyphs)
+   and surface overrides (--bg-card …); most themes inherit surfaces from
+   monitor.css.
    ════════════════════════════════════════════════════════════════════════════ */
 "use strict";
 
 const THEMES = {
   "deep-space": {
-      name: "Deep Space",
-      swatches: ["#0d0d16", "#67b0ff", "#46dfaa", "#ff9e45", "#bcc7ff"],
-      css: `:root{
-    --bg:#0d0d16;
-    --txt:#eef5ff;
-    --txt-dim:#a5b8d6;
-    --txt-muted:#3a4d68;
-    --hot:#f87171;
+    name: "Deep Space",
+    swatches: ["#0d0d16", "#67b0ff", "#46dfaa", "#ff9e45", "#bcc7ff"],
+    css: `:root{
+  --bg:#0d0d16;
+  --txt:#eef5ff;
+  --txt-dim:#a5b8d6;
+  --txt-muted:#3a4d68;
+  --hot:#f87171;
 
-    --bdr:rgba(255,255,255,.09);
-    --bhi:rgba(255,255,255,.18);
+  --bdr:rgba(255,255,255,.09);
+  --bhi:rgba(255,255,255,.18);
 
-    --r:10px; --rs:6px;
+  --r:10px; --rs:6px;
 
-    --cpu:#67b0ff;
-    --gpu:#46dfaa;
-    --fan:#ff9e45;
-    --ssd:#8d98ff;
-    --ram:#bcc7ff;
-    --net:#40dfcb;
+  --cpu:#67b0ff;
+  --gpu:#46dfaa;
+  --fan:#ff9e45;
+  --ssd:#8d98ff;
+  --ram:#bcc7ff;
+  --net:#40dfcb;
+  --accent:#67b0ff;
 
-    --w1:#52e38c;
-    --w2:#b2ec54;
-    --w3:#ffc94a;
-    --w4:#ff8b38;
-    --w5:#ff5454;
+  --w1:#52e38c;
+  --w2:#b2ec54;
+  --w3:#ffc94a;
+  --w4:#ff8b38;
+  --w5:#ff5454;
 
-    --meter:rgba(180,205,240,.72);
-    --dot-off-warn:rgba(255,255,255,.15);
-    --dot-off-meter:rgba(255,255,255,.10);
-    --spark-grid:rgba(255,255,255,.08);
-    --spark-vtick:rgba(255,255,255,.05);
+  --meter:rgba(180,205,240,.72);
+  --dot-off-warn:rgba(255,255,255,.15);
+  --dot-off-meter:rgba(255,255,255,.10);
+  --spark-grid:rgba(255,255,255,.08);
+  --spark-vtick:rgba(255,255,255,.05);
 
-    --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
-    --font-num:"Share Tech Mono",ui-monospace,monospace;
-    --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
-  }`,
-    },
+  --font-ui:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;
+  --font-num:"Share Tech Mono",ui-monospace,monospace;
+  --font-code:"JetBrains Mono","Fira Code",ui-monospace,monospace;
+}`,
+  },
 
   "misty-metal": {
     name: "Misty Metal",
@@ -526,7 +531,7 @@ const THEMES = {
 let _lastThemeVars = [];
 
 function applyTheme(key, customCSS = null) {
-  const css = customCSS ?? THEMES[key]?.css ?? THEMES["misty-metal"].css;
+  const css = customCSS ?? THEMES[key]?.css ?? THEMES["deep-space"].css;
   const root = document.documentElement;
 
   _lastThemeVars.forEach((v) => root.style.removeProperty(v));

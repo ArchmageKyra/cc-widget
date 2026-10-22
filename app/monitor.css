@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   Theia monitor — monitor.css
+   CC Widget — monitor.css
    § 1 Baseline tokens. Surfaces, borders and alpha overlays are defined ONLY
        here and shared by every theme except Misty Metal, which overrides
        them. Each theme in themes.js sets the palette (--bg, --cpu, --w1…) on
@@ -8,15 +8,19 @@
    § 2 Static ruleset: all component CSS, referencing those tokens.
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* --txt-dim is the floor for anything meant to be READ (labels, captions,
+/* The palette tokens in this block are the Deep Space theme (the default), so
+   the window paints correctly before applyTheme() runs and partial custom CSS
+   falls back to Deep Space. Keep them in sync with THEMES["deep-space"].
+
+   --txt-dim is the floor for anything meant to be READ (labels, captions,
    secondary values). --txt-muted is for decorative fills only (idle dots,
    hairline-adjacent chrome) and isn't legible as text in most themes: never
    use it as a text `color`. */
 :root {
     --bg: #0d0d16;
-    --txt: #e2e8f0;
-    --txt-dim: #4b6080;
-    --txt-muted: #1a2535;
+    --txt: #eef5ff;
+    --txt-dim: #a5b8d6;
+    --txt-muted: #3a4d68;
     --hot: #f87171;
     --bg-bar: rgba(0, 0, 0, 0.3);
     --bg-overlay: rgba(0, 0, 0, 0.25);
@@ -35,26 +39,26 @@
     --bg-danger: color-mix(in srgb, var(--hot) 18%, transparent);
     --bg-err: color-mix(in srgb, var(--hot) 10%, transparent);
     --track-bg: rgba(255, 255, 255, 0.08);
-    --bdr: rgba(255, 255, 255, 0.07);
-    --bhi: rgba(255, 255, 255, 0.13);
+    --bdr: rgba(255, 255, 255, 0.09);
+    --bhi: rgba(255, 255, 255, 0.18);
     --bdr-err: color-mix(in srgb, var(--hot) 25%, transparent);
-    --cpu: #60a5fa;
+    --cpu: #67b0ff;
     --accent: var(--cpu); /* UI chrome colour; themes set their own, custom CSS falls back to --cpu */
-    --gpu: #34d399;
-    --fan: #fb923c;
-    --ssd: #818cf8;
-    --ram: #a5b4fc;
-    --net: #2dd4bf;
-    --w1: #4ade80;
-    --w2: #a3e635;
-    --w3: #fbbf24;
-    --w4: #f97316;
-    --w5: #ef4444;
-    --meter: rgba(148, 163, 184, 0.65);
-    --dot-off-warn: rgba(255, 255, 255, 0.11);
-    --dot-off-meter: rgba(255, 255, 255, 0.08);
-    --spark-grid: rgba(255, 255, 255, 0.06);
-    --spark-vtick: rgba(255, 255, 255, 0.04);
+    --gpu: #46dfaa;
+    --fan: #ff9e45;
+    --ssd: #8d98ff;
+    --ram: #bcc7ff;
+    --net: #40dfcb;
+    --w1: #52e38c;
+    --w2: #b2ec54;
+    --w3: #ffc94a;
+    --w4: #ff8b38;
+    --w5: #ff5454;
+    --meter: rgba(180, 205, 240, 0.72);
+    --dot-off-warn: rgba(255, 255, 255, 0.15);
+    --dot-off-meter: rgba(255, 255, 255, 0.1);
+    --spark-grid: rgba(255, 255, 255, 0.08);
+    --spark-vtick: rgba(255, 255, 255, 0.05);
     --font-ui:
         -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     --font-num: "Share Tech Mono", ui-monospace, monospace;
@@ -215,7 +219,10 @@ html {
     width: 0;
     min-height: 0;
     overflow: hidden;
-    background: var(--bg);
+    /* Transparent, not var(--bg): #app is already var(--bg), and an opaque
+       fill here painted over #app's inset border line along the drawer's top,
+       right and bottom edges. */
+    background: transparent;
     z-index: 5;
     transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
@@ -548,6 +555,15 @@ html {
     border-color: var(--bhi);
     color: var(--txt);
 }
+/* Inside a card, "Add row" is a thin full-width dashed strip with a centred
+   "+" icon (the label is its tooltip), so it stays an easy target without
+   adding a row's worth of height per card. The picker overlay keeps the
+   text version above. */
+.card .picker-add {
+    justify-content: center;
+    margin-top: 0.125rem;
+    padding: 0.1875rem 0;
+}
 .picker-empty {
     padding: 1rem 0.5rem;
     font-size: calc(0.7778rem * var(--tx-ui));
@@ -556,13 +572,11 @@ html {
 }
 
 /* ── Edit mode ─────────────────────────────────────────────── */
-/* Lists the inset border-shadow together with the outer edit-mode ring:
-      they share one box-shadow property, so listing only one would replace
-      the other. */
+/* Edit mode brightens the card's one inset border line. (It used to add an
+   outer ring on top of it; the card's 1px transparent border sat between the
+   two lines, which read as a double border.) */
 .cards.editing .card {
-    box-shadow:
-        inset 0 0 0 1px var(--bdr),
-        0 0 0 1px var(--bhi);
+    box-shadow: inset 0 0 0 1px var(--bhi);
 }
 .sr.assignable {
     cursor: pointer;
